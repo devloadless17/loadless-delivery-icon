@@ -5,6 +5,11 @@ import { phoneSchema } from './common';
 
 const passwordSchema = z.string().min(8, 'Password must be at least 8 characters').max(200);
 
+/** Storage key produced by the upload endpoint: "<purpose>/<cuid>.<ext>" */
+export const fileKeySchema = z
+  .string()
+  .regex(/^[a-z_]+\/[a-z0-9]+\.(jpg|png|webp)$/, 'Invalid file reference');
+
 // ---------- vendors (admin-managed) ----------
 export const createVendorSchema = z.object({
   businessName: z.string().trim().min(2).max(160),
@@ -17,6 +22,7 @@ export const updateVendorSchema = z.object({
   businessName: z.string().trim().min(2).max(160).optional(),
   status: z.enum(ACCOUNT_STATUSES).optional(),
   password: passwordSchema.optional(),
+  logoKey: fileKeySchema.nullish(),
 });
 export type UpdateVendorInput = z.infer<typeof updateVendorSchema>;
 
@@ -43,7 +49,14 @@ export const updateDriverSchema = z.object({
   status: z.enum(ACCOUNT_STATUSES).optional(),
   password: passwordSchema.optional(),
   commissionOverrideBps: commissionBpsSchema.nullish(),
+  facePhotoKey: fileKeySchema.nullish(),
+  bikePhotoKey: fileKeySchema.nullish(),
 });
+
+export const vendorSelfUpdateSchema = z.object({
+  logoKey: fileKeySchema.nullish(),
+});
+export type VendorSelfUpdateInput = z.infer<typeof vendorSelfUpdateSchema>;
 export type UpdateDriverInput = z.infer<typeof updateDriverSchema>;
 
 export const dutySchema = z.object({

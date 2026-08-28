@@ -12,6 +12,12 @@ import { RedisModule } from './redis/redis.module';
 import { RedisService } from './redis/redis.service';
 import { HealthModule } from './health/health.module';
 import { AuthModule } from './auth/auth.module';
+import { UsersModule } from './users/users.module';
+import { AuditModule } from './audit/audit.module';
+import { SettingsModule } from './settings/settings.module';
+import { FilesModule } from './files/files.module';
+import { VendorsModule } from './vendors/vendors.module';
+import { DriversModule } from './drivers/drivers.module';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { OriginCheckGuard } from './auth/origin-check.guard';
 import { RolesGuard } from './auth/roles.guard';
@@ -56,6 +62,12 @@ import { ResponseEnvelopeInterceptor } from './common/response-envelope.intercep
     PrismaModule,
     RedisModule,
     AuthModule,
+    UsersModule,
+    AuditModule,
+    SettingsModule,
+    FilesModule,
+    VendorsModule,
+    DriversModule,
     HealthModule,
   ],
   providers: [

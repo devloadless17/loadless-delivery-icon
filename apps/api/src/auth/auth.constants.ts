@@ -1,5 +1,14 @@
-export const ACCESS_TOKEN_TTL_SECONDS = 15 * 60; // 15 minutes
-export const REFRESH_TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60; // 30 days
+export const ACCESS_TOKEN_TTL_SECONDS = 15 * 60; // 15 minutes (silently refreshed)
+
+/**
+ * Sessions are permanent by product decision: one login per device, never
+ * expired automatically. 400 days is the browser cookie ceiling (Chrome), and
+ * every refresh re-issues cookies + DB expiry, sliding the window forward —
+ * any activity within 400 days keeps the session alive indefinitely. Sessions
+ * end ONLY on explicit sign-out, admin suspension/password change, or
+ * refresh-token theft detection.
+ */
+export const REFRESH_TOKEN_TTL_SECONDS = 400 * 24 * 60 * 60; // 400 days, sliding
 
 export const ACCESS_COOKIE = 'access_token';
 export const REFRESH_COOKIE = 'refresh_token';

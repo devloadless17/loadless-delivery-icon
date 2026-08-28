@@ -44,7 +44,9 @@ export class AllExceptionsFilter implements ExceptionFilter {
       status = exception.getStatus();
       message = exception.message;
       code =
-        status === HttpStatus.UNAUTHORIZED
+        status === HttpStatus.PAYLOAD_TOO_LARGE
+          ? ERROR_CODES.FILE_TOO_LARGE
+          : status === HttpStatus.UNAUTHORIZED
           ? ERROR_CODES.UNAUTHENTICATED
           : status === HttpStatus.FORBIDDEN
             ? ERROR_CODES.FORBIDDEN
