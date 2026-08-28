@@ -19,6 +19,7 @@ import { FilesModule } from './files/files.module';
 import { VendorsModule } from './vendors/vendors.module';
 import { DriversModule } from './drivers/drivers.module';
 import { CustomersModule } from './customers/customers.module';
+import { OrdersModule } from './orders/orders.module';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { OriginCheckGuard } from './auth/origin-check.guard';
 import { RolesGuard } from './auth/roles.guard';
@@ -56,7 +57,7 @@ import { ResponseEnvelopeInterceptor } from './common/response-envelope.intercep
       imports: [RedisModule],
       inject: [RedisService],
       useFactory: (redis: RedisService) => ({
-        throttlers: [{ limit: 100, ttl: 60_000 }],
+        throttlers: [{ limit: Number(process.env.THROTTLE_LIMIT ?? 100), ttl: 60_000 }],
         storage: new ThrottlerStorageRedisService(redis.client),
       }),
     }),
@@ -70,6 +71,7 @@ import { ResponseEnvelopeInterceptor } from './common/response-envelope.intercep
     VendorsModule,
     DriversModule,
     CustomersModule,
+    OrdersModule,
     HealthModule,
   ],
   providers: [
