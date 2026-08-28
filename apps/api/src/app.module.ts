@@ -18,6 +18,7 @@ import { SettingsModule } from './settings/settings.module';
 import { FilesModule } from './files/files.module';
 import { VendorsModule } from './vendors/vendors.module';
 import { DriversModule } from './drivers/drivers.module';
+import { CustomersModule } from './customers/customers.module';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { OriginCheckGuard } from './auth/origin-check.guard';
 import { RolesGuard } from './auth/roles.guard';
@@ -68,6 +69,7 @@ import { ResponseEnvelopeInterceptor } from './common/response-envelope.intercep
     FilesModule,
     VendorsModule,
     DriversModule,
+    CustomersModule,
     HealthModule,
   ],
   providers: [
