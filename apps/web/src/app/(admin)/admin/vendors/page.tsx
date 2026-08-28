@@ -15,7 +15,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Pagination } from '@/components/pagination';
-import { displayDate, displayPhone, fileUrl } from '@/lib/format';
+import { displayDate, fileUrl } from '@/lib/format';
 import { useDebouncedValue } from '@/lib/use-debounced-value';
 import { useVendors, type AdminVendor } from '@/features/admin/vendors/api';
 import { VendorFormDialog } from '@/features/admin/vendors/vendor-form-dialog';
@@ -53,7 +53,7 @@ export default function AdminVendorsPage() {
       <div className="relative max-w-sm">
         <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input
-          placeholder="Search by name or phone"
+          placeholder="Search by name or email"
           className="pl-9"
           value={search}
           onChange={(e) => {
@@ -75,7 +75,7 @@ export default function AdminVendorsPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Business</TableHead>
-                <TableHead>Phone</TableHead>
+                <TableHead>Login email</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Created</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
@@ -100,7 +100,7 @@ export default function AdminVendorsPage() {
                       <span className="font-medium">{vendor.businessName}</span>
                     </div>
                   </TableCell>
-                  <TableCell className="data-mono">{displayPhone(vendor.user.normalizedPhone)}</TableCell>
+                  <TableCell className="text-muted-foreground">{vendor.user.email}</TableCell>
                   <TableCell>
                     <Badge variant={vendor.status === 'ACTIVE' ? 'success' : 'destructive'}>
                       {vendor.status === 'ACTIVE' ? 'Active' : 'Suspended'}

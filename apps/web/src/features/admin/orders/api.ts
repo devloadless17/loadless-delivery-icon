@@ -1,0 +1,101 @@
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { Currency, OrderStatus } from '@loadless/shared';
+import { api } from '@/lib/api-client';
+import type { OrderTimelineEntry } from '@/features/orders/api';
+
+export interface AdminOrderRow {
+  id: string;
+  orderNumber: string;
+  status: OrderStatus;
+  deliveryCharge: string;
+  currency: Currency;
+  platformCommissionAmount: string | null;
+  driverEarnings: string | null;
+  createdAt: string;
+  vendor: { id: string; businessName: string };
+  driver: { id: string; fullName: string } | null;
+  customer: { name: string; normalizedPhone: string };
+}
+
+export interface AdminOrderDetail extends AdminOrderRow {
+  deliveryAddressText: string;
+  deliveryLat: number | null;
+  deliveryLng: number | null;
+  commissionBps: number | null;
+  notes: string | null;
+  deliveryInstructions: string | null;
+  cancellationReason: string | null;
+  failureReason: string | null;
+  cancelledByType: string | null;
+  assignedAt: string | null;
+  pickedUpAt: string | null;
+  deliveredAt: string | null;
+  cancelledAt: string | null;
+  customer: { id: string; name: string; normalizedPhone: string };
+  driver: { id: string; fullName: string; contactPhone: string } | null;
+  statusHistory: OrderTimelineEntry[];
+}
+
+export interface AdminOrderFilters {
+  status?: OrderStatus;
+  from?: string;
+  to?: string;
+}
+
+export function buildAdminOrderParams(filters: AdminOrderFilters): URLSearchParams {
+  const params = new URLSearchParams();
+  if (filters.status) params.set('status', filters.status);
+  if (filters.from) params.set('from', filters.from);
+  if (filters.to) params.set('to', `${filters.to}T23:59:59`);
+  return params;
+}
+
+export function useAdminOrders(filters: AdminOrderFilters) {
+  return useInfiniteQuery({
+    queryKey: ['admin', 'orders', filters],
+    queryFn: async ({ pageParam, signal }) => {
+      const params = buildAdminOrderParams(filters);
+      params.set('limit', '25');
+      if (pageParam) params.set('cursor', pageParam);
+      const res = await fetch(`/api/v1/admin/orders?${params}`, { signal });
+      if (!res.ok) throw new Error('Failed to load orders');
+      return (await res.json()) as { data: AdminOrderRow[]; meta: { nextCursor: string | null } };
+    },
+    initialPageParam: '',
+    getNextPageParam: (last) => last.meta.nextCursor ?? undefined,
+  });
+}
+
+export function useAdminOrder(id: string) {
+  return useQuery({
+    queryKey: ['admin', 'orders', 'detail', id],
+    queryFn: () => api.get<AdminOrderDetail>(`/admin/orders/${id}`),
+  });
+}
+
+export function useAdminCancelOrder() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
+      api.post<AdminOrderDetail>(`/admin/orders/${id}/cancel`, { reason }),
+    onSettled: () => qc.invalidateQueries({ queryKey: ['admin', 'orders'] }),
+  });
+}
+
+export function useAdminAssignOrder() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, driverId }: { id: string; driverId: string }) =>
+      api.post<AdminOrderDetail>(`/admin/orders/${id}/assign`, { driverId }),
+    onSettled: () => qc.invalidateQueries({ queryKey: ['admin', 'orders'] }),
+  });
+}
+
+export function useAdminReassignOrder() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, driverId, reason }: { id: string; driverId: string; reason: string }) =>
+      api.post<AdminOrderDetail>(`/admin/orders/${id}/reassign`, { driverId, reason }),
+    onSettled: () => qc.invalidateQueries({ queryKey: ['admin', 'orders'] }),
+  });
+}

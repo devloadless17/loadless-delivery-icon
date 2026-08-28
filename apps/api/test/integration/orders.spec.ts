@@ -50,14 +50,17 @@ describe('orders (integration)', () => {
 
     const hash = await AuthService.hashPassword('password123');
 
-    const mk = async (phone: string, role: 'ADMIN' | 'VENDOR' | 'DRIVER') =>
-      prisma.user.create({ data: { normalizedPhone: phone, passwordHash: hash, role } });
+    // Identity split by role: admins/vendors use email, drivers use phone.
+    const mkEmail = async (email: string, role: 'ADMIN' | 'VENDOR') =>
+      prisma.user.create({ data: { email, passwordHash: hash, role } });
+    const mkPhone = async (phone: string) =>
+      prisma.user.create({ data: { normalizedPhone: phone, passwordHash: hash, role: 'DRIVER' } });
 
-    const adminUser = await mk('+9613000001', 'ADMIN');
-    const vendorAUser = await mk('+96170000001', 'VENDOR');
-    const vendorBUser = await mk('+96170000002', 'VENDOR');
-    const driverAUser = await mk('+96171000001', 'DRIVER');
-    const driverBUser = await mk('+96171000002', 'DRIVER');
+    const adminUser = await mkEmail('admin@test.local', 'ADMIN');
+    const vendorAUser = await mkEmail('vendor-a@test.local', 'VENDOR');
+    const vendorBUser = await mkEmail('vendor-b@test.local', 'VENDOR');
+    const driverAUser = await mkPhone('+96171000001');
+    const driverBUser = await mkPhone('+96171000002');
 
     const vendorA = await prisma.vendor.create({
       data: { userId: vendorAUser.id, businessName: 'Vendor A' },

@@ -19,7 +19,7 @@ const VENDOR_LIST_SELECT = {
   logoKey: true,
   status: true,
   createdAt: true,
-  user: { select: { normalizedPhone: true } },
+  user: { select: { email: true } },
 } as const;
 
 @Injectable()
@@ -33,7 +33,7 @@ export class VendorsService {
 
   async create(input: CreateVendorInput, actor: AuthUser) {
     const vendor = await this.prisma.$transaction(async (tx) => {
-      const user = await this.users.createUser(tx, input.phone, input.password, 'VENDOR');
+      const user = await this.users.createUser(tx, { email: input.email }, input.password, 'VENDOR');
       return tx.vendor.create({
         data: { userId: user.id, businessName: input.businessName },
         select: VENDOR_LIST_SELECT,
@@ -54,7 +54,7 @@ export class VendorsService {
       ? {
           OR: [
             { businessName: { contains: search, mode: 'insensitive' as const } },
-            { user: { normalizedPhone: { contains: search.replace(/\s/g, '') } } },
+            { user: { email: { contains: search.toLowerCase() } } },
           ],
         }
       : {};

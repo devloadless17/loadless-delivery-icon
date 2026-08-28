@@ -29,7 +29,7 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const session = await this.auth.login(body.phone, body.password, {
+    const session = await this.auth.login(body.identifier, body.password, {
       userAgent: req.headers['user-agent'],
       ip: req.ip,
     });
@@ -71,6 +71,7 @@ export class AuthController {
       where: { id: user.userId },
       select: {
         id: true,
+        email: true,
         normalizedPhone: true,
         role: true,
         vendor: { select: { id: true, businessName: true, logoKey: true, status: true } },

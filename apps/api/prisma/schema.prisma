@@ -66,7 +66,10 @@ enum FilePurpose {
 
 model User {
   id              String   @id @default(cuid())
-  normalizedPhone String   @unique @map("normalized_phone")
+  /// Login identity: DRIVER -> normalizedPhone, ADMIN/VENDOR -> email
+  /// (enforced by the user_identity_by_role CHECK).
+  email           String?  @unique
+  normalizedPhone String?  @unique @map("normalized_phone")
   passwordHash    String   @map("password_hash")
   role            Role
   isActive        Boolean  @default(true) @map("is_active")

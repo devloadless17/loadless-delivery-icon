@@ -9,7 +9,7 @@ export interface AdminVendor {
   logoKey: string | null;
   status: 'ACTIVE' | 'SUSPENDED';
   createdAt: string;
-  user: { normalizedPhone: string };
+  user: { email: string };
 }
 
 async function fetchVendors(page: number, q: string) {

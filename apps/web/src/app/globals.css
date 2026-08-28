@@ -39,6 +39,12 @@
   --status-delivered: #16a34a;
   --status-cancelled: #64748b;
   --status-failed: #dc2626;
+
+  /* Chart series — CVD-validated per mode (dataviz skill), order: delivered, created, failed */
+  --chart-delivered: #16a34a;
+  --chart-created: #2563eb;
+  --chart-failed: #dc2626;
+  --chart-grid: rgba(16, 24, 40, 0.08);
 }
 
 .dark {
@@ -70,6 +76,11 @@
   --status-delivered: #4ade80;
   --status-cancelled: #7c8aa0;
   --status-failed: #ef4444;
+
+  --chart-delivered: #059669;
+  --chart-created: #5b8bf7;
+  --chart-failed: #ef4444;
+  --chart-grid: rgba(230, 234, 242, 0.08);
 }
 
 @theme inline {

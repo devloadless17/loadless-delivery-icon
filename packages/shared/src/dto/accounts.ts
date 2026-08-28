@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { ACCOUNT_STATUSES, DUTY_STATUSES } from '../enums';
 import { MAX_COMMISSION_BPS } from '../money';
-import { phoneSchema } from './common';
+import { emailSchema, phoneSchema } from './common';
 
 const passwordSchema = z.string().min(8, 'Password must be at least 8 characters').max(200);
 
@@ -10,10 +10,10 @@ export const fileKeySchema = z
   .string()
   .regex(/^[a-z_]+\/[a-z0-9]+\.(jpg|png|webp)$/, 'Invalid file reference');
 
-// ---------- vendors (admin-managed) ----------
+// ---------- vendors (admin-managed, email login) ----------
 export const createVendorSchema = z.object({
   businessName: z.string().trim().min(2).max(160),
-  phone: phoneSchema,
+  email: emailSchema,
   password: passwordSchema,
 });
 export type CreateVendorInput = z.infer<typeof createVendorSchema>;

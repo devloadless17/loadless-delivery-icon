@@ -30,7 +30,7 @@ import { useCreateVendor, useUpdateVendor, type AdminVendor } from './api';
 /** One form for create + edit; password is required on create, optional reset on edit. */
 const formSchema = z.object({
   businessName: createVendorSchema.shape.businessName,
-  phone: z.string(),
+  email: z.string(),
   password: z.string(),
   status: z.enum(['ACTIVE', 'SUSPENDED']),
   logoKey: z.string().nullable(),
@@ -52,7 +52,7 @@ export function VendorFormDialog({
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
-    defaultValues: { businessName: '', phone: '', password: '', status: 'ACTIVE', logoKey: null },
+    defaultValues: { businessName: '', email: '', password: '', status: 'ACTIVE', logoKey: null },
   });
 
   useEffect(() => {
@@ -61,12 +61,12 @@ export function VendorFormDialog({
         vendor
           ? {
               businessName: vendor.businessName,
-              phone: vendor.user.normalizedPhone,
+              email: vendor.user.email,
               password: '',
               status: vendor.status,
               logoKey: vendor.logoKey,
             }
-          : { businessName: '', phone: '', password: '', status: 'ACTIVE', logoKey: null },
+          : { businessName: '', email: '', password: '', status: 'ACTIVE', logoKey: null },
       );
     }
   }, [open, vendor, form]);
@@ -113,7 +113,7 @@ export function VendorFormDialog({
           <DialogDescription>
             {isEdit
               ? 'Update the business details or suspend the account.'
-              : 'The vendor signs in with this phone number and password.'}
+              : 'The vendor signs in with this email and password.'}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={onSubmit} className="space-y-4" noValidate>
@@ -125,17 +125,16 @@ export function VendorFormDialog({
             )}
           </div>
           <div className="space-y-2">
-            <Label htmlFor="v-phone">Phone number</Label>
+            <Label htmlFor="v-email">Login email</Label>
             <Input
-              id="v-phone"
-              type="tel"
-              className="data-mono"
-              placeholder="70 123 456"
+              id="v-email"
+              type="email"
+              placeholder="owner@business.com"
               disabled={isEdit}
-              {...form.register('phone')}
-              aria-invalid={!!errors.phone}
+              {...form.register('email')}
+              aria-invalid={!!errors.email}
             />
-            {errors.phone && <p className="text-sm text-destructive">{errors.phone.message}</p>}
+            {errors.email && <p className="text-sm text-destructive">{errors.email.message}</p>}
           </div>
           <div className="space-y-2">
             <Label htmlFor="v-password">{isEdit ? 'Reset password (optional)' : 'Password'}</Label>

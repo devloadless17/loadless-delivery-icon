@@ -25,13 +25,13 @@ export function LoginForm() {
 
   const form = useForm<LoginInput>({
     resolver: zodResolver(loginSchema),
-    defaultValues: { phone: '', password: '' } as unknown as LoginInput,
+    defaultValues: { identifier: '', password: '' } as unknown as LoginInput,
   });
 
   const onSubmit = form.handleSubmit(async (values) => {
     setServerError(null);
     try {
-      const { user } = await login(values.phone, values.password);
+      const { user } = await login(values.identifier, values.password);
       router.replace(ROLE_HOME[user.role]);
       router.refresh();
     } catch (err) {
@@ -50,20 +50,18 @@ export function LoginForm() {
       <CardContent className="pt-6">
         <form onSubmit={onSubmit} className="space-y-5" noValidate>
           <div className="space-y-2">
-            <Label htmlFor="phone">Phone number</Label>
+            <Label htmlFor="identifier">Email or phone number</Label>
             <Input
-              id="phone"
-              type="tel"
-              inputMode="tel"
+              id="identifier"
+              type="text"
               autoComplete="username"
-              placeholder="03 123 456"
-              aria-invalid={!!errors.phone}
-              className="data-mono"
-              {...form.register('phone')}
+              placeholder="you@business.com — drivers use 03 123 456"
+              aria-invalid={!!errors.identifier}
+              {...form.register('identifier')}
             />
-            {errors.phone && (
+            {errors.identifier && (
               <p className="text-sm text-destructive" role="alert">
-                {errors.phone.message}
+                {errors.identifier.message}
               </p>
             )}
           </div>

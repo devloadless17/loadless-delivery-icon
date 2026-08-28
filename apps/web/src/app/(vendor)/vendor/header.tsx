@@ -13,6 +13,7 @@ const TABS = [
   { href: '/vendor', label: 'Orders', exact: true },
   { href: '/vendor/orders/new', label: 'New order' },
   { href: '/vendor/customers', label: 'Customers' },
+  { href: '/vendor/stats', label: 'Stats' },
 ];
 
 export function VendorHeader() {

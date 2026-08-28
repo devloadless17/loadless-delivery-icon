@@ -57,9 +57,10 @@ export class AuthService {
     return argon2.hash(password, ARGON2_OPTIONS);
   }
 
-  async login(normalizedPhone: string, password: string, ctx: ClientContext): Promise<AuthSession> {
+  /** identifier: email (admins/vendors) or normalized phone (drivers) — pre-normalized by the DTO. */
+  async login(identifier: string, password: string, ctx: ClientContext): Promise<AuthSession> {
     const user = await this.prisma.user.findUnique({
-      where: { normalizedPhone },
+      where: identifier.includes('@') ? { email: identifier } : { normalizedPhone: identifier },
       include: { vendor: { select: { id: true, status: true } }, driver: { select: { id: true, status: true } } },
     });
 

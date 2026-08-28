@@ -11,7 +11,8 @@ export interface SessionUser {
 export interface MeResponse {
   user: {
     id: string;
-    normalizedPhone: string;
+    email: string | null;
+    normalizedPhone: string | null;
     role: Role;
     vendor: { id: string; businessName: string; logoKey: string | null; status: string } | null;
     driver: {
@@ -30,8 +31,12 @@ export const ROLE_HOME: Record<Role, string> = {
   DRIVER: '/driver',
 };
 
-export function login(phone: string, password: string) {
-  return api.post<{ user: SessionUser }>('/auth/login', { phone, password }, { skipRefresh: true });
+export function login(identifier: string, password: string) {
+  return api.post<{ user: SessionUser }>(
+    '/auth/login',
+    { identifier, password },
+    { skipRefresh: true },
+  );
 }
 
 export function logout() {

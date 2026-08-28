@@ -34,7 +34,7 @@ export class DriversService {
 
   async create(input: CreateDriverInput, actor: AuthUser) {
     const driver = await this.prisma.$transaction(async (tx) => {
-      const user = await this.users.createUser(tx, input.phone, input.password, 'DRIVER');
+      const user = await this.users.createUser(tx, { normalizedPhone: input.phone }, input.password, 'DRIVER');
       return tx.driver.create({
         data: {
           userId: user.id,
