@@ -1,0 +1,35 @@
+# Dev infrastructure only — the apps run natively (pnpm dev) for fast HMR.
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: loadless-postgres
+    environment:
+      POSTGRES_USER: loadless
+      POSTGRES_PASSWORD: loadless
+      POSTGRES_DB: loadless
+    ports:
+      - '127.0.0.1:5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U loadless -d loadless']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: loadless-redis
+    ports:
+      - '127.0.0.1:6379:6379'
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  postgres_data:
+  redis_data:

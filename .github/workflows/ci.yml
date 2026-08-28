@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: loadless
+          POSTGRES_PASSWORD: loadless
+          POSTGRES_DB: loadless_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U loadless"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://loadless:loadless@localhost:5432/loadless_test?schema=public
+      REDIS_URL: redis://localhost:6379
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm -r lint
+
+      - name: Build shared package
+        run: pnpm --filter @loadless/shared build
+
+      - name: Generate Prisma client
+        run: pnpm --filter @loadless/api prisma:generate
+
+      - name: Typecheck
+        run: pnpm -r typecheck
+
+      - name: Validate migrations against a clean database
+        run: pnpm --filter @loadless/api prisma:deploy
+
+      - name: Unit tests
+        run: pnpm -r test
+
+      - name: Build apps
+        run: pnpm --filter @loadless/api build && pnpm --filter @loadless/web build

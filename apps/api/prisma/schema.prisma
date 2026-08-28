@@ -1,0 +1,300 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum Role {
+  ADMIN
+  VENDOR
+  DRIVER
+}
+
+enum AccountStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum DutyStatus {
+  ON_DUTY
+  OFF_DUTY
+}
+
+enum Currency {
+  LBP
+  USD
+}
+
+enum OrderStatus {
+  PENDING
+  DRIVER_ASSIGNED
+  PICKED_UP
+  DELIVERED
+  CANCELLED
+  FAILED
+}
+
+enum AddressLabel {
+  HOME
+  WORK
+  OTHER
+}
+
+enum ActorType {
+  ADMIN
+  VENDOR
+  DRIVER
+  SYSTEM
+}
+
+enum FilePurpose {
+  VENDOR_LOGO
+  DRIVER_FACE
+  DRIVER_BIKE
+}
+
+// ---------------------------------------------------------------------------
+// Auth identity
+// ---------------------------------------------------------------------------
+
+model User {
+  id              String   @id @default(cuid())
+  normalizedPhone String   @unique @map("normalized_phone")
+  passwordHash    String   @map("password_hash")
+  role            Role
+  isActive        Boolean  @default(true) @map("is_active")
+  tokenVersion    Int      @default(0) @map("token_version")
+  failedLogins    Int      @default(0) @map("failed_logins")
+  lockedUntil     DateTime? @map("locked_until")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  vendor        Vendor?
+  driver        Driver?
+  refreshTokens RefreshToken[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String    @id @default(cuid())
+  userId    String    @map("user_id")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique @map("token_hash")
+  familyId  String    @map("family_id")
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  revokedAt DateTime? @map("revoked_at")
+  userAgent String?   @map("user_agent")
+  ip        String?
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@index([familyId])
+  @@index([userId, expiresAt])
+  @@map("refresh_tokens")
+}
+
+// ---------------------------------------------------------------------------
+// Profiles
+// ---------------------------------------------------------------------------
+
+model Vendor {
+  id           String        @id @default(cuid())
+  userId       String        @unique @map("user_id")
+  user         User          @relation(fields: [userId], references: [id])
+  businessName String        @map("business_name")
+  logoKey      String?       @map("logo_key")
+  status       AccountStatus @default(ACTIVE)
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+
+  orders           Order[]
+  createdCustomers Customer[] @relation("CustomerCreator")
+
+  @@map("vendors")
+}
+
+model Driver {
+  id                    String        @id @default(cuid())
+  userId                String        @unique @map("user_id")
+  user                  User          @relation(fields: [userId], references: [id])
+  fullName              String        @map("full_name")
+  contactPhone          String        @map("contact_phone")
+  facePhotoKey          String?       @map("face_photo_key")
+  bikePhotoKey          String?       @map("bike_photo_key")
+  status                AccountStatus @default(ACTIVE)
+  dutyStatus            DutyStatus    @default(OFF_DUTY) @map("duty_status")
+  commissionOverrideBps Int?          @map("commission_override_bps")
+  createdAt             DateTime      @default(now()) @map("created_at")
+  updatedAt             DateTime      @updatedAt @map("updated_at")
+
+  orders Order[]
+
+  @@index([dutyStatus, status])
+  @@map("drivers")
+}
+
+// ---------------------------------------------------------------------------
+// Customers — GLOBAL, shared across all vendors
+// ---------------------------------------------------------------------------
+
+model Customer {
+  id                String   @id @default(cuid())
+  normalizedPhone   String   @unique @map("normalized_phone")
+  name              String
+  createdByVendorId String?  @map("created_by_vendor_id")
+  createdByVendor   Vendor?  @relation("CustomerCreator", fields: [createdByVendorId], references: [id])
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  addresses     CustomerAddress[]
+  orders        Order[]
+  changeHistory CustomerChangeHistory[]
+
+  @@map("customers")
+}
+
+model CustomerAddress {
+  id                String       @id @default(cuid())
+  customerId        String       @map("customer_id")
+  customer          Customer     @relation(fields: [customerId], references: [id])
+  label             AddressLabel @default(OTHER)
+  addressText       String       @map("address_text")
+  lat               Float?
+  lng               Float?
+  isArchived        Boolean      @default(false) @map("is_archived")
+  createdByVendorId String?      @map("created_by_vendor_id")
+  createdAt         DateTime     @default(now()) @map("created_at")
+  updatedAt         DateTime     @updatedAt @map("updated_at")
+
+  @@index([customerId, isArchived])
+  @@map("customer_addresses")
+}
+
+model CustomerChangeHistory {
+  id              String    @id @default(cuid())
+  customerId      String    @map("customer_id")
+  customer        Customer  @relation(fields: [customerId], references: [id])
+  changedByUserId String    @map("changed_by_user_id")
+  actorType       ActorType @map("actor_type")
+  changes         Json
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  @@index([customerId, createdAt])
+  @@map("customer_change_history")
+}
+
+// ---------------------------------------------------------------------------
+// Orders
+// ---------------------------------------------------------------------------
+
+model Order {
+  id          String      @id @default(cuid())
+  orderNumber String      @unique @map("order_number")
+  vendorId    String      @map("vendor_id")
+  vendor      Vendor      @relation(fields: [vendorId], references: [id])
+  customerId  String      @map("customer_id")
+  customer    Customer    @relation(fields: [customerId], references: [id])
+  driverId    String?     @map("driver_id")
+  driver      Driver?     @relation(fields: [driverId], references: [id])
+  status      OrderStatus @default(PENDING)
+
+  // Delivery snapshot — frozen copy; never mutates the customer profile
+  deliveryAddressText String @map("delivery_address_text")
+  deliveryLat         Float? @map("delivery_lat")
+  deliveryLng         Float? @map("delivery_lng")
+
+  notes                String?
+  deliveryInstructions String?    @map("delivery_instructions")
+  cancellationReason   String?    @map("cancellation_reason")
+  cancelledByType      ActorType? @map("cancelled_by_type")
+  cancelledByUserId    String?    @map("cancelled_by_user_id")
+  failureReason        String?    @map("failure_reason")
+
+  // Financial snapshot — charge/currency at creation; commission fields
+  // computed atomically at driver acceptance (per-driver rate), cleared on release
+  deliveryCharge           BigInt   @map("delivery_charge")
+  currency                 Currency @default(LBP)
+  commissionBps            Int?     @map("commission_bps")
+  platformCommissionAmount BigInt?  @map("platform_commission_amount")
+  driverEarnings           BigInt?  @map("driver_earnings")
+
+  assignedAt  DateTime? @map("assigned_at")
+  pickedUpAt  DateTime? @map("picked_up_at")
+  deliveredAt DateTime? @map("delivered_at")
+  cancelledAt DateTime? @map("cancelled_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  statusHistory OrderStatusHistory[]
+
+  @@index([vendorId, status, createdAt])
+  @@index([driverId, status])
+  @@index([customerId, createdAt])
+  // Partial index for the PENDING feed lives in raw SQL (see constraints migration)
+  @@map("orders")
+}
+
+model OrderStatusHistory {
+  id          String       @id @default(cuid())
+  orderId     String       @map("order_id")
+  order       Order        @relation(fields: [orderId], references: [id])
+  fromStatus  OrderStatus? @map("from_status")
+  toStatus    OrderStatus  @map("to_status")
+  actorType   ActorType    @map("actor_type")
+  actorUserId String?      @map("actor_user_id")
+  reason      String?
+  metadata    Json?
+  createdAt   DateTime     @default(now()) @map("created_at")
+
+  @@index([orderId, createdAt])
+  @@map("order_status_history")
+}
+
+// ---------------------------------------------------------------------------
+// Platform
+// ---------------------------------------------------------------------------
+
+model PlatformSetting {
+  id                   String   @id @default("singleton")
+  defaultCommissionBps Int      @default(3000) @map("default_commission_bps")
+  settings             Json     @default("{}")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  @@map("platform_settings")
+}
+
+model AuditLog {
+  id          String    @id @default(cuid())
+  actorUserId String    @map("actor_user_id")
+  actorType   ActorType @map("actor_type")
+  action      String
+  entityType  String    @map("entity_type")
+  entityId    String    @map("entity_id")
+  metadata    Json?
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@index([entityType, entityId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@map("audit_logs")
+}
+
+model FileObject {
+  id          String      @id @default(cuid())
+  key         String      @unique
+  purpose     FilePurpose
+  ownerUserId String      @map("owner_user_id")
+  contentType String      @map("content_type")
+  sizeBytes   Int         @map("size_bytes")
+  createdAt   DateTime    @default(now()) @map("created_at")
+
+  @@map("file_objects")
+}

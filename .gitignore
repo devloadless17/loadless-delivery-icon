@@ -1,0 +1,33 @@
+# dependencies
+node_modules/
+
+# builds
+dist/
+.next/
+out/
+build/
+*.tsbuildinfo
+
+# env — never commit secrets
+.env
+.env.*
+!.env.example
+
+# test & coverage
+coverage/
+playwright-report/
+test-results/
+
+# runtime data
+uploads/
+*.log
+
+# tooling
+.turbo/
+.serwist/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json

@@ -1,0 +1,133 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@custom-variant dark (&:is(.dark *));
+
+/* ---------------------------------------------------------------------------
+   Loadless design tokens — "dispatch board" system.
+   Light = daytime counter work; dark = night dispatch (driver-first).
+   Orange is reserved for live/in-motion moments only.
+--------------------------------------------------------------------------- */
+:root {
+  --background: #f7f8fa;
+  --foreground: #101828;
+  --card: #ffffff;
+  --card-foreground: #101828;
+  --popover: #ffffff;
+  --popover-foreground: #101828;
+  --primary: #2563eb;
+  --primary-foreground: #ffffff;
+  --secondary: #eef2f9;
+  --secondary-foreground: #1e3a8a;
+  --muted: #eef1f5;
+  --muted-foreground: #5b6472;
+  --accent: #ea580c;
+  --accent-foreground: #ffffff;
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+  --success: #16a34a;
+  --warning: #d97706;
+  --border: #e3e8ef;
+  --input: #d6dce6;
+  --ring: #2563eb;
+  --radius: 0.5rem;
+
+  /* Order lifecycle — the product's core vocabulary */
+  --status-pending: #d97706; /* waiting for a driver */
+  --status-assigned: #2563eb; /* claimed */
+  --status-picked-up: #ea580c; /* in motion */
+  --status-delivered: #16a34a;
+  --status-cancelled: #64748b;
+  --status-failed: #dc2626;
+}
+
+.dark {
+  --background: #0b1220;
+  --foreground: #e6eaf2;
+  --card: #111a2c;
+  --card-foreground: #e6eaf2;
+  --popover: #131d31;
+  --popover-foreground: #e6eaf2;
+  --primary: #5b8bf7;
+  --primary-foreground: #081020;
+  --secondary: #18233a;
+  --secondary-foreground: #c6d4f0;
+  --muted: #162034;
+  --muted-foreground: #94a3b8;
+  --accent: #f97316;
+  --accent-foreground: #180a02;
+  --destructive: #ef4444;
+  --destructive-foreground: #1a0505;
+  --success: #4ade80;
+  --warning: #fbbf24;
+  --border: #1f2a3f;
+  --input: #263450;
+  --ring: #5b8bf7;
+
+  --status-pending: #fbbf24;
+  --status-assigned: #5b8bf7;
+  --status-picked-up: #f97316;
+  --status-delivered: #4ade80;
+  --status-cancelled: #7c8aa0;
+  --status-failed: #ef4444;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-status-pending: var(--status-pending);
+  --color-status-assigned: var(--status-assigned);
+  --color-status-picked-up: var(--status-picked-up);
+  --color-status-delivered: var(--status-delivered);
+  --color-status-cancelled: var(--status-cancelled);
+  --color-status-failed: var(--status-failed);
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-space-grotesk), var(--font-inter), ui-sans-serif, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, 'SFMono-Regular', monospace;
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    @apply antialiased;
+  }
+  body {
+    @apply bg-background text-foreground font-sans;
+  }
+  h1,
+  h2,
+  h3 {
+    @apply font-display tracking-tight;
+  }
+  /* Order numbers, money, phone numbers — dispatch-ticket data */
+  .data-mono {
+    @apply font-mono tabular-nums tracking-tight;
+  }
+}
