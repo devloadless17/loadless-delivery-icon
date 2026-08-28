@@ -5,12 +5,19 @@ import helmet from 'helmet';
 import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module';
 import { AppConfigService } from './config/config.service';
+import { RedisIoAdapter } from './realtime/redis-io.adapter';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { bufferLogs: true });
   app.useLogger(app.get(Logger));
 
   const config = app.get(AppConfigService);
+
+  const ioAdapter = new RedisIoAdapter(app);
+  if (config.env.SOCKET_REDIS_ADAPTER) {
+    await ioAdapter.connectToRedis(config.env.REDIS_URL);
+  }
+  app.useWebSocketAdapter(ioAdapter);
 
   app.setGlobalPrefix('api/v1');
   app.set('trust proxy', config.env.TRUSTED_PROXY_HOPS);

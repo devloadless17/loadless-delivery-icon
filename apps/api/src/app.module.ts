@@ -20,6 +20,7 @@ import { VendorsModule } from './vendors/vendors.module';
 import { DriversModule } from './drivers/drivers.module';
 import { CustomersModule } from './customers/customers.module';
 import { OrdersModule } from './orders/orders.module';
+import { RealtimeModule } from './realtime/realtime.module';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { OriginCheckGuard } from './auth/origin-check.guard';
 import { RolesGuard } from './auth/roles.guard';
@@ -72,6 +73,7 @@ import { ResponseEnvelopeInterceptor } from './common/response-envelope.intercep
     DriversModule,
     CustomersModule,
     OrdersModule,
+    RealtimeModule,
     HealthModule,
   ],
   providers: [

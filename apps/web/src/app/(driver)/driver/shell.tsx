@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { BrandMark } from '@/components/brand';
+import { DutyToggle } from '@/features/driver/duty-toggle';
 import { cn } from '@/lib/utils';
 
 const TABS = [
@@ -29,7 +30,7 @@ export function DriverShell({ children }: { children: ReactNode }) {
         style={{ paddingTop: 'env(safe-area-inset-top)' }}
       >
         <BrandMark className="size-7" />
-        <div id="driver-header-slot" className="flex items-center gap-2" />
+        <DutyToggle />
       </header>
 
       <main className="flex-1 px-4 py-4 pb-24">{children}</main>

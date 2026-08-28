@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import type { CreateDriverInput, OffsetPagination, UpdateDriverInput } from '@loadless/shared';
 import { AppException } from '../common/app.exception';
 import { offsetArgs, offsetMeta } from '../common/pagination';
@@ -28,6 +29,7 @@ export class DriversService {
     private readonly users: UsersService,
     private readonly auth: AuthService,
     private readonly audit: AuditService,
+    private readonly events: EventEmitter2,
   ) {}
 
   async create(input: CreateDriverInput, actor: AuthUser) {
@@ -134,6 +136,20 @@ export class DriversService {
       },
     });
     return updated;
+  }
+
+  async setDuty(driverId: string, dutyStatus: 'ON_DUTY' | 'OFF_DUTY') {
+    const driver = await this.prisma.driver.update({
+      where: { id: driverId },
+      data: { dutyStatus },
+      select: { id: true, dutyStatus: true, status: true },
+    });
+    this.events.emit('driver.duty_changed', {
+      driverId: driver.id,
+      dutyStatus: driver.dutyStatus,
+      at: new Date(),
+    });
+    return driver;
   }
 
   async selfGet(driverId: string) {

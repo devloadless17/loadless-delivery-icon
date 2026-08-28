@@ -4,9 +4,11 @@ import {
   DUTY_STATUSES,
   offsetPaginationSchema,
   updateDriverSchema,
+  dutySchema,
   type CreateDriverInput,
   type OffsetPagination,
   type UpdateDriverInput,
+  type DutyInput,
 } from '@loadless/shared';
 import { z } from 'zod';
 import { CurrentUser, Roles } from '../auth/decorators';
@@ -63,5 +65,19 @@ export class DriverProfileController {
   @Get()
   get(@CurrentUser() user: AuthUser) {
     return this.drivers.selfGet(user.driverId as string);
+  }
+}
+
+@Controller('driver/duty')
+@Roles('DRIVER')
+export class DriverDutyController {
+  constructor(private readonly drivers: DriversService) {}
+
+  @Patch()
+  setDuty(
+    @Body(new ZodValidationPipe(dutySchema)) body: DutyInput,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.drivers.setDuty(user.driverId as string, body.dutyStatus);
   }
 }

@@ -1,9 +1,9 @@
 import { Module } from '@nestjs/common';
-import { AdminDriversController, DriverProfileController } from './drivers.controller';
+import { AdminDriversController, DriverDutyController, DriverProfileController } from './drivers.controller';
 import { DriversService } from './drivers.service';
 
 @Module({
-  controllers: [AdminDriversController, DriverProfileController],
+  controllers: [AdminDriversController, DriverProfileController, DriverDutyController],
   providers: [DriversService],
   exports: [DriversService],
 })
