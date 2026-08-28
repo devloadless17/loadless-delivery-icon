@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { BrandMark } from '@/components/brand';
+import { InstallBanner } from '@/components/install-banner';
 import { DutyToggle } from '@/features/driver/duty-toggle';
 import { cn } from '@/lib/utils';
 
@@ -33,7 +34,10 @@ export function DriverShell({ children }: { children: ReactNode }) {
         <DutyToggle />
       </header>
 
-      <main className="flex-1 px-4 py-4 pb-24">{children}</main>
+      <div className="pt-2">
+        <InstallBanner />
+      </div>
+      <main className="flex-1 px-4 py-2 pb-24">{children}</main>
 
       <nav
         aria-label="Driver"

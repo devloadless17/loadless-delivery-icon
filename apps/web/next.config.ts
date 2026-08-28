@@ -1,6 +1,13 @@
+import withSerwistInit from '@serwist/next';
 import type { NextConfig } from 'next';
 
 const API_ORIGIN = process.env.API_ORIGIN ?? 'http://localhost:4100';
+
+const withSerwist = withSerwistInit({
+  swSrc: 'src/sw.ts',
+  swDest: 'public/sw.js',
+  disable: process.env.NODE_ENV !== 'production',
+});
 
 const nextConfig: NextConfig = {
   output: 'standalone',
@@ -14,4 +21,4 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+export default withSerwist(nextConfig);

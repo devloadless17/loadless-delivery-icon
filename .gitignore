@@ -31,3 +31,7 @@ uploads/
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# generated service worker
+apps/web/public/sw.js
+apps/web/public/swe-worker*.js

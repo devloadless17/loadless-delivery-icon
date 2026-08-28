@@ -10,6 +10,15 @@ export const metadata: Metadata = {
     template: '%s · Loadless',
   },
   description: 'Delivery operations platform',
+  applicationName: 'Loadless',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'default',
+    title: 'Loadless',
+  },
+  icons: {
+    apple: '/icons/apple-touch-icon.png',
+  },
 };
 
 export const viewport: Viewport = {
