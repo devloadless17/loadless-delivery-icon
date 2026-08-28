@@ -55,7 +55,7 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
       {degraded && (
         <div
           role="status"
-          className="fixed inset-x-0 top-0 z-50 flex items-center justify-center gap-2 bg-warning/90 px-3 py-1.5 text-xs font-medium text-black"
+          className="pointer-events-none fixed inset-x-0 top-0 z-50 flex items-center justify-center gap-2 bg-warning/90 px-3 py-1.5 text-xs font-medium text-black"
         >
           <WifiOff className="size-3.5" aria-hidden /> Reconnecting — live updates paused
         </div>

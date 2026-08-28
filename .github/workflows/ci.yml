@@ -3,12 +3,12 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, production]
   workflow_dispatch:
 
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   verify:
@@ -76,3 +76,191 @@ jobs:
 
       - name: Build apps
         run: pnpm --filter @loadless/api build && pnpm --filter @loadless/web build
+
+      - name: Install Playwright browser
+        run: pnpm --filter @loadless/web exec playwright install --with-deps chromium
+
+      - name: E2E golden path (real API + DB + sockets)
+        env:
+          E2E_DATABASE_URL: postgresql://loadless:loadless@localhost:5432/loadless_test?schema=public
+        run: |
+          bash apps/web/e2e/prepare.sh
+          pnpm --filter @loadless/web e2e
+
+  deploy:
+    needs: verify
+    if: github.ref == 'refs/heads/production'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate required secrets
+        env:
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          DOCKER_SECRET: ${{ secrets.DOCKER_SECRET }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY_B64: ${{ secrets.VPS_SSH_KEY_B64 }}
+          FRONTEND_DOMAIN: ${{ secrets.FRONTEND_DOMAIN }}
+          ACME_EMAIL: ${{ secrets.ACME_EMAIL }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: |
+          missing=""
+          for name in DOCKER_USERNAME DOCKER_SECRET VPS_HOST VPS_USER VPS_SSH_KEY_B64 \
+                      FRONTEND_DOMAIN ACME_EMAIL JWT_SECRET POSTGRES_PASSWORD \
+                      R2_ACCOUNT_ID R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_BUCKET; do
+            [ -z "$(eval echo \"\$$name\")" ] && missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then echo "Missing secrets:$missing" >&2; exit 1; fi
+          echo "All required secrets present."
+
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_SECRET }}
+
+      - name: Build and push API image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/loadless-api:latest
+            ${{ secrets.DOCKER_USERNAME }}/loadless-api:${{ github.sha }}
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,mode=max,scope=api
+
+      - name: Build and push web image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/loadless-web:latest
+            ${{ secrets.DOCKER_USERNAME }}/loadless-web:${{ github.sha }}
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,mode=max,scope=web
+
+      - name: Prepare SSH key
+        env:
+          VPS_SSH_KEY_B64: ${{ secrets.VPS_SSH_KEY_B64 }}
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          echo "$VPS_SSH_KEY_B64" | base64 -d > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          head -1 ~/.ssh/deploy_key | grep -q "BEGIN OPENSSH PRIVATE KEY" \
+            || { echo "VPS_SSH_KEY_B64 does not decode to an OpenSSH key" >&2; exit 1; }
+
+      - name: Wait for SSH reachability (Hostinger edge can drop runner IPs)
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT || '22' }}
+        run: |
+          for i in $(seq 1 7); do
+            if timeout 8 bash -c "</dev/tcp/$VPS_HOST/$VPS_PORT" 2>/dev/null; then
+              echo "SSH port reachable"; exit 0
+            fi
+            echo "attempt $i failed; retrying in 8s"; sleep 8
+          done
+          echo "VPS unreachable — rerun the job (a rerun draws a fresh runner IP)" >&2
+          exit 1
+
+      - name: Render production .env
+        env:
+          FRONTEND_DOMAIN: ${{ secrets.FRONTEND_DOMAIN }}
+          ACME_EMAIL: ${{ secrets.ACME_EMAIL }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+        run: |
+          # Single-quote every value — compose's env parser expands $ in
+          # unquoted values and chokes on < / spaces. Compose is NOT a shell:
+          # there is no escape for a single quote inside single quotes, so a
+          # value containing one fails LOUDLY here instead of corrupting.
+          put() {
+            case "$2" in *"'"*) echo "Value of $1 contains a single quote — regenerate it without one" >&2; exit 1;; esac
+            printf "%s='%s'\n" "$1" "$2"
+          }
+          {
+            put NODE_ENV production
+            put PORT 4100
+            put DATABASE_URL "postgresql://loadless:${POSTGRES_PASSWORD}@postgres:5432/loadless?schema=public"
+            put REDIS_URL "redis://redis:6379"
+            put JWT_SECRET "$JWT_SECRET"
+            put APP_ORIGIN "https://${FRONTEND_DOMAIN}"
+            put SOCKET_REDIS_ADAPTER false
+            put STORAGE_DRIVER r2
+            put R2_ACCOUNT_ID "$R2_ACCOUNT_ID"
+            put R2_ACCESS_KEY_ID "$R2_ACCESS_KEY_ID"
+            put R2_SECRET_ACCESS_KEY "$R2_SECRET_ACCESS_KEY"
+            put R2_BUCKET "$R2_BUCKET"
+            put TRUSTED_PROXY_HOPS 1
+            put POSTGRES_USER loadless
+            put POSTGRES_PASSWORD "$POSTGRES_PASSWORD"
+            put POSTGRES_DB loadless
+            put FRONTEND_DOMAIN "$FRONTEND_DOMAIN"
+            put ACME_EMAIL "$ACME_EMAIL"
+            put DOCKER_USERNAME "$DOCKER_USERNAME"
+            put IMAGE_TAG "${{ github.sha }}"
+          } > prod.env
+          chmod 600 prod.env
+
+      - name: Ship files to VPS
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_PORT: ${{ secrets.VPS_PORT || '22' }}
+        run: |
+          SSH="ssh -i ~/.ssh/deploy_key -p $VPS_PORT -o StrictHostKeyChecking=accept-new $VPS_USER@$VPS_HOST"
+          $SSH 'mkdir -p ~/loadless'
+          scp -i ~/.ssh/deploy_key -P "$VPS_PORT" -o StrictHostKeyChecking=accept-new \
+            docker-compose.prod.yml Caddyfile "$VPS_USER@$VPS_HOST:~/loadless/"
+          scp -i ~/.ssh/deploy_key -P "$VPS_PORT" -o StrictHostKeyChecking=accept-new \
+            prod.env "$VPS_USER@$VPS_HOST:~/loadless/.env"
+          $SSH 'chmod 600 ~/loadless/.env'
+
+      - name: Deploy on VPS (pull, migrate, up, health gate)
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_PORT: ${{ secrets.VPS_PORT || '22' }}
+        run: |
+          ssh -i ~/.ssh/deploy_key -p "$VPS_PORT" -o StrictHostKeyChecking=accept-new \
+            "$VPS_USER@$VPS_HOST" bash -s <<'REMOTE'
+          set -euo pipefail
+          cd ~/loadless
+          docker compose -f docker-compose.prod.yml pull
+          # Start data services first so migrate has a database
+          docker compose -f docker-compose.prod.yml up -d postgres redis
+          for i in $(seq 1 20); do
+            [ "$(docker compose -f docker-compose.prod.yml ps --format '{{.Health}}' postgres)" = "healthy" ] && break
+            sleep 3
+          done
+          # Migrations run from the freshly pulled api image (prisma CLI is a prod dep)
+          docker compose -f docker-compose.prod.yml run --rm api npx prisma migrate deploy </dev/null
+          docker compose -f docker-compose.prod.yml up -d
+          # Health gate: fail loudly with logs on timeout
+          for i in $(seq 1 30); do
+            api_h="$(docker compose -f docker-compose.prod.yml ps --format '{{.Health}}' api)"
+            web_h="$(docker compose -f docker-compose.prod.yml ps --format '{{.Health}}' web)"
+            echo "api=$api_h web=$web_h"
+            [ "$api_h" = "healthy" ] && [ "$web_h" = "healthy" ] && { echo "DEPLOY OK"; exit 0; }
+            sleep 5
+          done
+          echo "Health gate FAILED — recent logs:" >&2
+          docker compose -f docker-compose.prod.yml logs --tail 80 api web >&2
+          exit 1
+          REMOTE

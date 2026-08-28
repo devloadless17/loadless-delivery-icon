@@ -1,7 +1,10 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "rootDir": "src"
+    "rootDir": "src",
+    // deleteOutDir wipes dist while the buildinfo claims files exist — the two
+    // are incompatible and silently produce partial builds.
+    "incremental": false
   },
   "include": ["src"],
   "exclude": ["node_modules", "test", "dist"]

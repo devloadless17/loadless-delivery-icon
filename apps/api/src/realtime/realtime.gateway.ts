@@ -29,7 +29,9 @@ interface SocketAuth {
  * never mutate over the socket. Business services emit domain events after
  * commit; this gateway maps them to rooms. Zero business logic lives here.
  */
-@WebSocketGateway({ transports: ['websocket', 'polling'] })
+// addTrailingSlash:false — proxies (Next rewrites) forward "/socket.io" without
+// the trailing slash; engine.io must accept both spellings.
+@WebSocketGateway({ transports: ['websocket', 'polling'], addTrailingSlash: false })
 export class RealtimeGateway implements OnGatewayConnection {
   private readonly logger = new Logger(RealtimeGateway.name);
 

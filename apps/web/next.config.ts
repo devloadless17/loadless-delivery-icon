@@ -10,7 +10,11 @@ const withSerwist = withSerwistInit({
 });
 
 const nextConfig: NextConfig = {
-  output: 'standalone',
+  // standalone only for the Docker image; `next start` (e2e, ad-hoc) needs default output
+  output: process.env.STANDALONE_OUTPUT ? 'standalone' : undefined,
+  // Socket.IO handshakes hit /socket.io/?EIO=4 — Next's trailing-slash 308
+  // would break them before the rewrite proxy runs.
+  skipTrailingSlashRedirect: true,
   async rewrites() {
     // Dev + prod parity: the browser always talks same-origin; /api and
     // /socket.io are proxied (Next in dev, Caddy in prod handles it upstream).
