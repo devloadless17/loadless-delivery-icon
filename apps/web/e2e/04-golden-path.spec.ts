@@ -37,7 +37,7 @@ test('vendor creates order → driver delivers it → money is right', async ({ 
   await vendor.getByLabel('Amount').fill('100000');
   await vendor.getByRole('button', { name: 'Create order' }).click();
 
-  await vendor.waitForURL('**/vendor/orders/**');
+  await vendor.waitForURL((url) => /\/vendor\/orders\/[a-z0-9]{20,}$/.test(url.pathname));
   await expect(vendor.getByText('Waiting for driver').first()).toBeVisible();
   const orderNumber = (await vendor.locator('h1').innerText()).trim();
   expect(orderNumber).toMatch(/^ORD-\d{4}-\d{6}$/);

@@ -14,6 +14,8 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Pagination, type PageMeta } from '@/components/pagination';
+import { Button } from '@/components/ui/button';
+import { CustomerManageDialog } from '@/features/admin/customers/manage-dialog';
 import { displayDate, displayPhone } from '@/lib/format';
 import { useDebouncedValue } from '@/lib/use-debounced-value';
 
@@ -43,6 +45,7 @@ function useAdminCustomers(page: number, q: string) {
 export default function AdminCustomersPage() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
+  const [managingId, setManagingId] = useState<string | null>(null);
   const q = useDebouncedValue(search, 300);
   const { data, isPending } = useAdminCustomers(page, q);
 
@@ -85,6 +88,7 @@ export default function AdminCustomersPage() {
                 <TableHead>Addresses</TableHead>
                 <TableHead>Added by</TableHead>
                 <TableHead>Added</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -98,6 +102,11 @@ export default function AdminCustomersPage() {
                     {customer.createdByVendor?.businessName ?? 'Admin'}
                   </TableCell>
                   <TableCell className="text-muted-foreground">{displayDate(customer.createdAt)}</TableCell>
+                  <TableCell className="text-right">
+                    <Button variant="ghost" size="sm" onClick={() => setManagingId(customer.id)}>
+                      Manage
+                    </Button>
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -113,6 +122,10 @@ export default function AdminCustomersPage() {
           </p>
         </div>
       )}
+      <CustomerManageDialog
+        customerId={managingId}
+        onOpenChange={(open) => !open && setManagingId(null)}
+      />
     </div>
   );
 }

@@ -1,6 +1,8 @@
 import { Body, Controller, Get, HttpCode, Param, Patch, Post, Query } from '@nestjs/common';
 import {
   addCustomerAddressSchema,
+  adminUpdateCustomerSchema,
+  type AdminUpdateCustomerInput,
   createCustomerSchema,
   customerSearchSchema,
   offsetPaginationSchema,
@@ -86,5 +88,19 @@ export class AdminCustomersController {
     @Query(new ZodValidationPipe(adminListSchema)) query: OffsetPagination & { q?: string },
   ) {
     return this.customers.adminList(query, query.q);
+  }
+
+  @Get(':id')
+  get(@Param('id') id: string) {
+    return this.customers.get(id);
+  }
+
+  @Patch(':id')
+  update(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(adminUpdateCustomerSchema)) body: AdminUpdateCustomerInput,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.customers.adminUpdate(id, body, user);
   }
 }

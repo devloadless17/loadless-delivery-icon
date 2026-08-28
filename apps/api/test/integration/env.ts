@@ -7,5 +7,6 @@ process.env.JWT_SECRET = 'integration-test-secret-at-least-32-chars-long';
 process.env.APP_ORIGIN = 'http://localhost:3100';
 process.env.NODE_ENV = 'test';
 process.env.THROTTLE_LIMIT = '100000';
+process.env.THROTTLE_DISABLE = '1';
 process.env.STORAGE_DRIVER = 'local';
 process.env.LOCAL_STORAGE_DIR = '/tmp/loadless-itest-uploads';

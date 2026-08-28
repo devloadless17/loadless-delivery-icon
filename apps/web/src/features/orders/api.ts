@@ -21,6 +21,7 @@ export interface VendorOrder {
   orderNumber: string;
   status: OrderStatus;
   deliveryAddressText: string;
+  deliveryMapsUrl: string | null;
   deliveryLat: number | null;
   deliveryLng: number | null;
   deliveryCharge: string;

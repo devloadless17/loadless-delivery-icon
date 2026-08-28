@@ -1,10 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import { HttpStatus, Injectable } from '@nestjs/common';
 import type {
   CreateCustomerInput,
   CustomerAddressInput,
   OffsetPagination,
   UpdateCustomerInput,
 } from '@loadless/shared';
+import { ERROR_CODES } from '@loadless/shared';
 import { Prisma } from '@prisma/client';
 import { AppException } from '../common/app.exception';
 import { offsetArgs, offsetMeta } from '../common/pagination';
@@ -22,7 +23,7 @@ const CUSTOMER_SELECT = {
   addresses: {
     where: { isArchived: false },
     orderBy: { createdAt: 'asc' as const },
-    select: { id: true, label: true, addressText: true, lat: true, lng: true },
+    select: { id: true, label: true, addressText: true, mapsUrl: true, lat: true, lng: true },
   },
 } as const;
 
@@ -77,6 +78,7 @@ export class CustomersService {
               create: {
                 label: input.address.label,
                 addressText: input.address.addressText,
+                mapsUrl: input.address.mapsUrl,
                 lat: input.address.lat,
                 lng: input.address.lng,
                 createdByVendorId: actor.vendorId ?? null,
@@ -142,11 +144,12 @@ export class CustomersService {
           customerId,
           label: input.label,
           addressText: input.addressText,
+          mapsUrl: input.mapsUrl,
           lat: input.lat,
           lng: input.lng,
           createdByVendorId: actor.vendorId ?? null,
         },
-        select: { id: true, label: true, addressText: true, lat: true, lng: true },
+        select: { id: true, label: true, addressText: true, mapsUrl: true, lat: true, lng: true },
       }),
       this.prisma.customerChangeHistory.create({
         data: {
@@ -174,6 +177,54 @@ export class CustomersService {
         changes: { addressArchived: { old: addressId } },
       },
     });
+  }
+
+  /** Admin-only: correct name and/or the identity phone (uniqueness-safe). */
+  async adminUpdate(
+    id: string,
+    input: { name?: string; phone?: string },
+    actor: AuthUser,
+  ) {
+    const existing = await this.get(id);
+    const changes: Record<string, { old: unknown; new: unknown }> = {};
+    if (input.name && input.name !== existing.name) {
+      changes.name = { old: existing.name, new: input.name };
+    }
+    if (input.phone && input.phone !== existing.normalizedPhone) {
+      changes.normalizedPhone = { old: existing.normalizedPhone, new: input.phone };
+    }
+    if (Object.keys(changes).length === 0) return existing;
+
+    try {
+      const [updated] = await this.prisma.$transaction([
+        this.prisma.customer.update({
+          where: { id },
+          data: {
+            ...(changes.name ? { name: input.name } : {}),
+            ...(changes.normalizedPhone ? { normalizedPhone: input.phone } : {}),
+          },
+          select: CUSTOMER_SELECT,
+        }),
+        this.prisma.customerChangeHistory.create({
+          data: {
+            customerId: id,
+            changedByUserId: actor.userId,
+            actorType: actor.role,
+            changes: changes as never,
+          },
+        }),
+      ]);
+      return updated;
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        throw new AppException(
+          ERROR_CODES.PHONE_ALREADY_EXISTS,
+          'Another customer already has this phone number',
+          HttpStatus.CONFLICT,
+        );
+      }
+      throw err;
+    }
   }
 
   /** Admin browsing — vendors never get bulk listing (search is exact-phone only). */

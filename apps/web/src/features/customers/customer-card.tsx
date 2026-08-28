@@ -1,6 +1,6 @@
 'use client';
 
-import { Briefcase, Home, MapPin, Pencil, Plus, Trash2 } from 'lucide-react';
+import { Briefcase, ExternalLink, Home, MapPin, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { ApiError } from '@/lib/api-client';
@@ -17,6 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { MapsLinkField } from '@/components/maps-link';
 import {
   useAddAddress,
   useArchiveAddress,
@@ -32,6 +33,7 @@ export function CustomerCard({ customer }: { customer: Customer }) {
   const [name, setName] = useState(customer.name);
   const [addingAddress, setAddingAddress] = useState(false);
   const [addressText, setAddressText] = useState('');
+  const [mapsUrl, setMapsUrl] = useState('');
   const [label, setLabel] = useState<'HOME' | 'WORK' | 'OTHER'>('HOME');
 
   const updateName = useUpdateCustomerName();
@@ -58,9 +60,14 @@ export function CustomerCard({ customer }: { customer: Customer }) {
     try {
       await addAddress.mutateAsync({
         customerId: customer.id,
-        input: { label, addressText: addressText.trim() },
+        input: {
+          label,
+          addressText: addressText.trim(),
+          ...(mapsUrl.trim() ? { mapsUrl: mapsUrl.trim() } : {}),
+        },
       });
       setAddressText('');
+      setMapsUrl('');
       setAddingAddress(false);
       toast.success('Address saved');
     } catch (err) {
@@ -134,6 +141,16 @@ export function CustomerCard({ customer }: { customer: Customer }) {
                         {LABEL_TEXT[address.label]}
                       </p>
                       <p className="text-sm">{address.addressText}</p>
+                      {address.mapsUrl && (
+                        <a
+                          href={address.mapsUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="mt-0.5 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                        >
+                          <ExternalLink className="size-3" aria-hidden /> Open in Google Maps
+                        </a>
+                      )}
                     </div>
                   </div>
                   <button
@@ -190,6 +207,7 @@ export function CustomerCard({ customer }: { customer: Customer }) {
                 />
               </div>
             </div>
+            <MapsLinkField id="new-address-maps" value={mapsUrl} onChange={setMapsUrl} />
             <div className="flex justify-end gap-2">
               <Button type="button" size="sm" variant="ghost" onClick={() => setAddingAddress(false)}>
                 Cancel

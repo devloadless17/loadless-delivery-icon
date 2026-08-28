@@ -11,6 +11,7 @@ export interface FeedOrder {
   id: string;
   orderNumber: string;
   deliveryAddressText: string;
+  deliveryMapsUrl: string | null;
   deliveryLat: number | null;
   deliveryLng: number | null;
   deliveryCharge: string;

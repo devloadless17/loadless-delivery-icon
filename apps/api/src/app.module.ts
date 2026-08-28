@@ -61,6 +61,9 @@ import { ResponseEnvelopeInterceptor } from './common/response-envelope.intercep
       useFactory: (redis: RedisService) => ({
         throttlers: [{ limit: Number(process.env.THROTTLE_LIMIT ?? 100), ttl: 60_000 }],
         storage: new ThrottlerStorageRedisService(redis.client),
+        // Test-only escape hatch: e2e/integration suites hammer login far past
+        // the human 5/min limit. Never set in production.
+        skipIf: () => process.env.THROTTLE_DISABLE === '1',
       }),
     }),
     PrismaModule,

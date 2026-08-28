@@ -7,7 +7,6 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 import { ApiError } from '@/lib/api-client';
 import { displayMoney, displayPhone } from '@/lib/format';
-import { MapView } from '@/lib/map';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import {
@@ -51,8 +50,6 @@ export default function DriverOrderDetailPage() {
     );
   }
   if (!order) return null;
-
-  const hasPin = order.deliveryLat != null && order.deliveryLng != null;
 
   async function act(action: 'pickup' | 'deliver') {
     try {
@@ -104,15 +101,6 @@ export default function DriverOrderDetailPage() {
         <OrderStatusBadge status={order.status} />
       </div>
 
-      {hasPin && (
-        <div className="overflow-hidden rounded-lg border">
-          <MapView
-            position={{ lat: order.deliveryLat as number, lng: order.deliveryLng as number }}
-            className="h-56 w-full"
-          />
-        </div>
-      )}
-
       <Card>
         <CardContent className="space-y-4 pt-5">
           <div className="flex items-center justify-between gap-3">
@@ -141,19 +129,15 @@ export default function DriverOrderDetailPage() {
                 <Phone /> Call
               </Button>
             </a>
-            {hasPin ? (
-              <a
-                href={`https://www.google.com/maps/dir/?api=1&destination=${order.deliveryLat},${order.deliveryLng}`}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
+            {order.deliveryMapsUrl ? (
+              <a href={order.deliveryMapsUrl} target="_blank" rel="noopener noreferrer">
                 <Button variant="outline" className="w-full">
                   <Navigation /> Navigate
                 </Button>
               </a>
             ) : (
               <Button variant="outline" disabled className="w-full">
-                <Navigation /> No pin
+                <Navigation /> No location link
               </Button>
             )}
           </div>

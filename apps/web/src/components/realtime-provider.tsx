@@ -18,6 +18,16 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const socket: Socket = io({ withCredentials: true });
+    // Grace period: transient blips during page load must not flash the banner.
+    let degradeTimer: ReturnType<typeof setTimeout> | null = null;
+    const markDegraded = () => {
+      degradeTimer ??= setTimeout(() => setDegraded(true), 2500);
+    };
+    const markHealthy = () => {
+      if (degradeTimer) clearTimeout(degradeTimer);
+      degradeTimer = null;
+      setDegraded(false);
+    };
 
     const invalidateOrders = () => {
       void queryClient.invalidateQueries({ queryKey: ['driver'] });
@@ -27,12 +37,12 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
     };
 
     socket.on('connect', () => {
-      setDegraded(false);
+      markHealthy();
       // Refetch everything visible — we may have missed events while away.
       void queryClient.invalidateQueries({ refetchType: 'active' });
     });
-    socket.on('disconnect', () => setDegraded(true));
-    socket.io.on('reconnect_attempt', () => setDegraded(true));
+    socket.on('disconnect', markDegraded);
+    socket.io.on('reconnect_attempt', markDegraded);
 
     for (const event of Object.values(SOCKET_EVENTS)) {
       if (event === SOCKET_EVENTS.SESSION_REVOKED) continue;
@@ -46,6 +56,7 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
     });
 
     return () => {
+      if (degradeTimer) clearTimeout(degradeTimer);
       socket.disconnect();
     };
   }, [queryClient]);

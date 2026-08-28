@@ -46,7 +46,7 @@ export function LoginForm() {
   const { errors, isSubmitting } = form.formState;
 
   return (
-    <Card>
+    <Card className="shadow-float">
       <CardContent className="pt-6">
         <form onSubmit={onSubmit} className="space-y-5" noValidate>
           <div className="space-y-2">

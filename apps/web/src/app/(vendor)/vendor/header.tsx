@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { BrandMark } from '@/components/brand';
+import { fileUrl } from '@/lib/format';
 import { SignOutButton } from '@/components/sign-out-button';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -25,7 +26,15 @@ export function VendorHeader() {
     <header className="sticky top-0 z-20 border-b bg-card/95 backdrop-blur">
       <div className="mx-auto flex h-14 w-full max-w-5xl items-center justify-between gap-3 px-4">
         <div className="flex min-w-0 items-center gap-2.5">
-          <BrandMark className="size-7 shrink-0" />
+          {data?.user.vendor?.logoKey ? (
+            <img
+              src={fileUrl(data.user.vendor.logoKey)}
+              alt=""
+              className="size-8 shrink-0 rounded-lg border object-cover shadow-card"
+            />
+          ) : (
+            <BrandMark className="size-7 shrink-0" />
+          )}
           {isPending ? (
             <Skeleton className="h-4 w-32" />
           ) : (

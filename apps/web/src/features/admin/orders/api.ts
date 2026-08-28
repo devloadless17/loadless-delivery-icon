@@ -19,6 +19,7 @@ export interface AdminOrderRow {
 
 export interface AdminOrderDetail extends AdminOrderRow {
   deliveryAddressText: string;
+  deliveryMapsUrl: string | null;
   deliveryLat: number | null;
   deliveryLng: number | null;
   commissionBps: number | null;

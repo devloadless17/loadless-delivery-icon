@@ -7,7 +7,7 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 import { ApiError } from '@/lib/api-client';
 import { displayPhone } from '@/lib/format';
-import { MapPicker } from '@/lib/map';
+import { MapsLinkField } from '@/components/maps-link';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -33,7 +33,7 @@ export default function NewOrderPage() {
 
   const [customerName, setCustomerName] = useState('');
   const [addressText, setAddressText] = useState('');
-  const [pin, setPin] = useState<{ lat: number; lng: number } | null>(null);
+  const [mapsUrl, setMapsUrl] = useState('');
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
   const [saveAddress, setSaveAddress] = useState(false);
   const [charge, setCharge] = useState('');
@@ -50,7 +50,7 @@ export default function NewOrderPage() {
     if (!address) return;
     setSelectedAddressId(id);
     setAddressText(address.addressText);
-    setPin(address.lat != null && address.lng != null ? { lat: address.lat, lng: address.lng } : null);
+    setMapsUrl(address.mapsUrl ?? '');
     setSaveAddress(false);
   }
 
@@ -64,7 +64,7 @@ export default function NewOrderPage() {
       ...(isNewCustomer ? { customerName: customerName.trim() } : {}),
       saveAddressToCustomer: saveAddress && selectedAddressId === null,
       deliveryAddressText: addressText.trim(),
-      ...(pin ? { deliveryLat: pin.lat, deliveryLng: pin.lng } : {}),
+      ...(mapsUrl.trim() ? { deliveryMapsUrl: mapsUrl.trim() } : {}),
       currency,
       deliveryCharge: charge.trim(),
       ...(notes.trim() ? { notes: notes.trim() } : {}),
@@ -169,18 +169,20 @@ export default function NewOrderPage() {
                 setAddressText(e.target.value);
                 setSelectedAddressId(null);
               }}
-              placeholder="Building, street, area"
+              placeholder="Street, building, floor — e.g. Hamra st, Salame bldg, 3rd"
             />
             <p className="text-xs text-muted-foreground">
               Changing it here never touches the customer&apos;s saved addresses.
             </p>
           </div>
-          <div className="overflow-hidden rounded-md border">
-            <MapPicker value={pin} onChange={(p) => { setPin(p); setSelectedAddressId(null); }} className="h-60 w-full" />
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Tap the map to drop the pin, or drag it to adjust.
-          </p>
+          <MapsLinkField
+            id="no-maps-link"
+            value={mapsUrl}
+            onChange={(v) => {
+              setMapsUrl(v);
+              setSelectedAddressId(null);
+            }}
+          />
           {selectedAddressId === null && addressText.trim().length >= 3 && (
             <label className="flex cursor-pointer items-center gap-2 text-sm">
               <input

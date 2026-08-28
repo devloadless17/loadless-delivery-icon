@@ -170,6 +170,8 @@ model CustomerAddress {
   customer          Customer     @relation(fields: [customerId], references: [id])
   label             AddressLabel @default(OTHER)
   addressText       String       @map("address_text")
+  /// Google Maps link the customer shared (the way locations travel in Lebanon)
+  mapsUrl           String?      @map("maps_url")
   lat               Float?
   lng               Float?
   isArchived        Boolean      @default(false) @map("is_archived")
@@ -210,9 +212,11 @@ model Order {
   status      OrderStatus @default(PENDING)
 
   // Delivery snapshot — frozen copy; never mutates the customer profile
-  deliveryAddressText String @map("delivery_address_text")
-  deliveryLat         Float? @map("delivery_lat")
-  deliveryLng         Float? @map("delivery_lng")
+  deliveryAddressText String  @map("delivery_address_text")
+  /// Google Maps link for THIS delivery — what the driver actually navigates by
+  deliveryMapsUrl     String? @map("delivery_maps_url")
+  deliveryLat         Float?  @map("delivery_lat")
+  deliveryLng         Float?  @map("delivery_lng")
 
   notes                String?
   deliveryInstructions String?    @map("delivery_instructions")

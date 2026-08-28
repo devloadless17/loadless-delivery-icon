@@ -3,14 +3,14 @@ import { cn } from '@/lib/utils';
 
 function Table({ className, ...props }: React.HTMLAttributes<HTMLTableElement>) {
   return (
-    <div className="w-full overflow-x-auto rounded-lg border bg-card">
+    <div className="w-full overflow-x-auto rounded-xl border bg-card shadow-card">
       <table className={cn('w-full caption-bottom text-sm', className)} {...props} />
     </div>
   );
 }
 
 function TableHeader({ className, ...props }: React.HTMLAttributes<HTMLTableSectionElement>) {
-  return <thead className={cn('border-b bg-muted/50', className)} {...props} />;
+  return <thead className={cn('border-b bg-muted/40', className)} {...props} />;
 }
 
 function TableBody({ className, ...props }: React.HTMLAttributes<HTMLTableSectionElement>) {

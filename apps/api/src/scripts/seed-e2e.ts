@@ -53,6 +53,22 @@ async function main(): Promise<void> {
       update: { dutyStatus: 'OFF_DUTY' },
     });
 
+    const driver2User = await prisma.user.upsert({
+      where: { normalizedPhone: '+96171999777' },
+      create: { normalizedPhone: '+96171999777', passwordHash: hash, role: 'DRIVER' },
+      update: {},
+    });
+    await prisma.driver.upsert({
+      where: { userId: driver2User.id },
+      create: {
+        userId: driver2User.id,
+        fullName: 'E2E Driver Two',
+        contactPhone: '+96171999777',
+        commissionOverrideBps: null, // platform default 30%
+      },
+      update: { dutyStatus: 'OFF_DUTY' },
+    });
+
     console.log('e2e fixtures ready');
   } finally {
     await prisma.$disconnect();

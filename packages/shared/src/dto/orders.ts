@@ -7,7 +7,7 @@ import {
   phoneSchema,
   reasonSchema,
 } from './common';
-import { customerAddressInputSchema, latitudeSchema, longitudeSchema } from './customers';
+import { customerAddressInputSchema, latitudeSchema, longitudeSchema, mapsUrlSchema } from './customers';
 
 /**
  * Vendor order creation. The customer is referenced by normalized phone —
@@ -22,6 +22,8 @@ export const createOrderSchema = z.object({
   saveAddressToCustomer: z.boolean().default(false),
 
   deliveryAddressText: z.string().trim().min(3).max(500),
+  /** The Google Maps link the customer sent for THIS delivery. */
+  deliveryMapsUrl: mapsUrlSchema.optional(),
   deliveryLat: latitudeSchema.optional(),
   deliveryLng: longitudeSchema.optional(),
 

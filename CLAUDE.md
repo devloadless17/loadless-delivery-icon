@@ -17,6 +17,8 @@ Full architecture plan: `~/.claude/plans/delivery-platform-squishy-wall.md`.
 - **Concurrency**: all order transitions are conditional atomic `updateMany` with the full guard in the WHERE clause (status + driverId + ownership), inside a transaction that also writes `order_status_history`. `count === 0` ⇒ 409 with a stable code. Never fetch-then-update. Socket events emit only AFTER commit.
 - **State machine**: transition table lives in `packages/shared/src/order-transitions.ts`. Vendor cancels ONLY while PENDING. Driver release only before pickup. DB CHECK constraints back all of this (see `constraints_and_guards` migration).
 - **Phones**: normalize via shared `normalizeLebanesePhone` everywhere; stored as `+961…`; DB CHECK regex backstops it.
+- **Locations are Google Maps LINKS, not map pins** (product decision): the customer shares a maps link on WhatsApp, the vendor pastes it (`Order.deliveryMapsUrl`, `CustomerAddress.mapsUrl`), the driver taps Navigate to open it. There is NO map-picker UI and no Leaflet dependency; lat/lng columns exist but are unused v1.
+- **Admin manages everything**: customers (name + identity phone — phone change is admin-only — plus address book) via `/admin/customers/:id`; drivers/vendors CRUD; orders assign/reassign/cancel.
 - **Login identity is split by role** (product decision): DRIVERS sign in with phone + password; ADMINS and VENDORS sign in with email + password. `users.email` / `users.normalized_phone` are nullable uniques with a role-identity DB CHECK. One login form accepts both (anything with "@" = email).
 - **Sessions are permanent** (product decision): one login per device, never auto-expired — 400-day sliding refresh window, re-extended on every use. Sessions end only on explicit sign-out, admin suspension/password change, or refresh-token theft detection. Never add idle timeouts or forced re-login.
 - **Authorization**: ownership via query scoping (`vendorId: user.vendorId` in the WHERE), never fetch-then-compare; foreign resources are 404. No scattered `role === 'ADMIN'` — use PolicyService.
@@ -30,7 +32,8 @@ Full architecture plan: `~/.claude/plans/delivery-platform-squishy-wall.md`.
 
 ## Workflow
 
-- `docker compose -f docker-compose.dev.yml up -d` then `pnpm dev`.
-- Verify with `pnpm -r lint && pnpm -r typecheck && pnpm -r test` before finishing any task.
+- `docker compose -f docker-compose.dev.yml up -d` then `pnpm dev`. Dev accounts: admin `admin@gmail.com`, vendor `vendor@gmail.com`, driver `70 123 456` — all password `loadless`.
+- Verify with `pnpm -r lint && pnpm -r typecheck && pnpm -r test` before finishing any task. Integration: `pnpm --filter @loadless/api test:integration`. Browser e2e: `bash apps/web/e2e/prepare.sh && (cd apps/web && pnpm e2e)` — 32 tests covering every flow; specs live in `apps/web/e2e/`.
+- The reusable design system lives in the tokens in `apps/web/src/app/globals.css` (shadows, status colors, `surface-brand`); UI primitives in `src/components/ui/` are restyled on those tokens — never introduce raw hex in components.
 - Migrations: run from `apps/api` with `DATABASE_URL` from `.env`.
 - Deployment follows `~/playbooks/DEPLOY-PLAYBOOK.md` (Hostinger VPS, Caddy path-routing one hostname, only Caddy publishes ports).

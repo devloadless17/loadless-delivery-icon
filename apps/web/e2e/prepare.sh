@@ -6,6 +6,9 @@ cd "$(dirname "$0")/../../.."
 E2E_DB_URL="${E2E_DATABASE_URL:-postgresql://loadless:loadless@localhost:5432/loadless_e2e?schema=public}"
 DB_NAME=$(basename "${E2E_DB_URL%%\?*}")
 
+# Deterministic runs: recreate the e2e database from scratch (no-op in CI
+# where the service container provides a fresh DB per run).
+docker exec loadless-postgres dropdb -U loadless --if-exists "$DB_NAME" 2>/dev/null || true
 docker exec loadless-postgres createdb -U loadless "$DB_NAME" 2>/dev/null || true
 
 pnpm --filter @loadless/shared build

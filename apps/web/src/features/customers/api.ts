@@ -6,6 +6,7 @@ export interface CustomerAddress {
   id: string;
   label: 'HOME' | 'WORK' | 'OTHER';
   addressText: string;
+  mapsUrl: string | null;
   lat: number | null;
   lng: number | null;
 }

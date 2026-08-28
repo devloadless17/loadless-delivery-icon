@@ -9,28 +9,37 @@
    Orange is reserved for live/in-motion moments only.
 --------------------------------------------------------------------------- */
 :root {
-  --background: #f7f8fa;
-  --foreground: #101828;
+  --background: #f4f6fa;
+  --foreground: #0f1729;
   --card: #ffffff;
-  --card-foreground: #101828;
+  --card-foreground: #0f1729;
   --popover: #ffffff;
-  --popover-foreground: #101828;
+  --popover-foreground: #0f1729;
   --primary: #2563eb;
   --primary-foreground: #ffffff;
-  --secondary: #eef2f9;
+  --primary-deep: #1d4ed8;
+  --secondary: #edf1f9;
   --secondary-foreground: #1e3a8a;
-  --muted: #eef1f5;
-  --muted-foreground: #5b6472;
+  --muted: #eef1f6;
+  --muted-foreground: #5b6577;
   --accent: #ea580c;
   --accent-foreground: #ffffff;
   --destructive: #dc2626;
   --destructive-foreground: #ffffff;
   --success: #16a34a;
   --warning: #d97706;
-  --border: #e3e8ef;
-  --input: #d6dce6;
+  --border: #e2e7f0;
+  --input: #d3dae6;
   --ring: #2563eb;
-  --radius: 0.5rem;
+  --radius: 0.625rem;
+
+  /* Elevation — layered, soft, never muddy */
+  --shadow-xs: 0 1px 2px rgba(15, 23, 41, 0.05);
+  --shadow-sm: 0 1px 2px rgba(15, 23, 41, 0.04), 0 2px 8px rgba(15, 23, 41, 0.05);
+  --shadow-md: 0 2px 4px rgba(15, 23, 41, 0.04), 0 8px 24px rgba(15, 23, 41, 0.08);
+  --shadow-lg: 0 4px 8px rgba(15, 23, 41, 0.05), 0 16px 48px rgba(15, 23, 41, 0.12);
+  --shadow-brand: 0 4px 14px rgba(37, 99, 235, 0.28);
+  --shadow-live: 0 4px 14px rgba(234, 88, 12, 0.3);
 
   /* Order lifecycle — the product's core vocabulary */
   --status-pending: #d97706; /* waiting for a driver */
@@ -44,31 +53,39 @@
   --chart-delivered: #16a34a;
   --chart-created: #2563eb;
   --chart-failed: #dc2626;
-  --chart-grid: rgba(16, 24, 40, 0.08);
+  --chart-grid: rgba(15, 23, 41, 0.08);
 }
 
 .dark {
-  --background: #0b1220;
-  --foreground: #e6eaf2;
-  --card: #111a2c;
-  --card-foreground: #e6eaf2;
-  --popover: #131d31;
-  --popover-foreground: #e6eaf2;
+  --background: #0a101e;
+  --foreground: #e8edf6;
+  --card: #101828;
+  --card-foreground: #e8edf6;
+  --popover: #131c30;
+  --popover-foreground: #e8edf6;
   --primary: #5b8bf7;
   --primary-foreground: #081020;
-  --secondary: #18233a;
+  --primary-deep: #3b6ee8;
+  --secondary: #172238;
   --secondary-foreground: #c6d4f0;
-  --muted: #162034;
-  --muted-foreground: #94a3b8;
+  --muted: #151f33;
+  --muted-foreground: #8e9cb3;
   --accent: #f97316;
   --accent-foreground: #180a02;
   --destructive: #ef4444;
   --destructive-foreground: #1a0505;
   --success: #4ade80;
   --warning: #fbbf24;
-  --border: #1f2a3f;
-  --input: #263450;
+  --border: #1e2a40;
+  --input: #26334d;
   --ring: #5b8bf7;
+
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.35), 0 2px 10px rgba(0, 0, 0, 0.25);
+  --shadow-md: 0 2px 6px rgba(0, 0, 0, 0.35), 0 10px 28px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 4px 10px rgba(0, 0, 0, 0.4), 0 20px 56px rgba(0, 0, 0, 0.45);
+  --shadow-brand: 0 4px 16px rgba(91, 139, 247, 0.35);
+  --shadow-live: 0 4px 16px rgba(249, 115, 22, 0.35);
 
   --status-pending: #fbbf24;
   --status-assigned: #5b8bf7;
@@ -80,7 +97,7 @@
   --chart-delivered: #059669;
   --chart-created: #5b8bf7;
   --chart-failed: #ef4444;
-  --chart-grid: rgba(230, 234, 242, 0.08);
+  --chart-grid: rgba(232, 237, 246, 0.08);
 }
 
 @theme inline {
@@ -92,6 +109,7 @@
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-primary-deep: var(--primary-deep);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
@@ -119,7 +137,12 @@
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  --radius-xl: calc(var(--radius) + 6px);
+
+  --shadow-xs: var(--shadow-xs);
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
 }
 
 @layer base {
@@ -140,5 +163,37 @@
   /* Order numbers, money, phone numbers — dispatch-ticket data */
   .data-mono {
     @apply font-mono tabular-nums tracking-tight;
+  }
+
+  ::selection {
+    background: color-mix(in oklab, var(--primary) 22%, transparent);
+  }
+
+  /* Slim, theme-aware scrollbars */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklab, var(--muted-foreground) 35%, transparent) transparent;
+  }
+}
+
+@layer utilities {
+  /* The brand surface: deep dispatch-board gradient (login panel, hero areas) */
+  .surface-brand {
+    background:
+      radial-gradient(1200px 600px at 85% -10%, rgba(234, 88, 12, 0.18), transparent 55%),
+      radial-gradient(900px 500px at -10% 110%, rgba(37, 99, 235, 0.35), transparent 60%),
+      linear-gradient(160deg, #0b1220 0%, #101f3f 55%, #0b1220 100%);
+  }
+  .shadow-card {
+    box-shadow: var(--shadow-sm);
+  }
+  .shadow-float {
+    box-shadow: var(--shadow-md);
+  }
+  .shadow-brand {
+    box-shadow: var(--shadow-brand);
+  }
+  .shadow-live {
+    box-shadow: var(--shadow-live);
   }
 }

@@ -7,7 +7,7 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 import { ApiError } from '@/lib/api-client';
 import { displayDateTime, displayMoney, displayPhone } from '@/lib/format';
-import { MapView } from '@/lib/map';
+import { MapsLinkButton } from '@/components/maps-link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -97,11 +97,7 @@ export default function VendorOrderDetailPage() {
               {displayMoney(order.deliveryCharge, order.currency)}
             </p>
           </div>
-          {order.deliveryLat != null && order.deliveryLng != null && (
-            <div className="overflow-hidden rounded-md border">
-              <MapView position={{ lat: order.deliveryLat, lng: order.deliveryLng }} className="h-52 w-full" />
-            </div>
-          )}
+          {order.deliveryMapsUrl && <MapsLinkButton url={order.deliveryMapsUrl} size="sm" />}
         </CardContent>
       </Card>
 

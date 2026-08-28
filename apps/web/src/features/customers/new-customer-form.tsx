@@ -9,12 +9,14 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { MapsLinkField } from '@/components/maps-link';
 import { useCreateCustomer } from './api';
 
 /** Shown when a valid phone has no match — creates the global customer inline. */
 export function NewCustomerForm({ normalizedPhone }: { normalizedPhone: string }) {
   const [name, setName] = useState('');
   const [addressText, setAddressText] = useState('');
+  const [mapsUrl, setMapsUrl] = useState('');
   const createCustomer = useCreateCustomer();
 
   async function submit() {
@@ -27,12 +29,19 @@ export function NewCustomerForm({ normalizedPhone }: { normalizedPhone: string }
         phone: normalizedPhone,
         name: name.trim(),
         ...(addressText.trim().length >= 3
-          ? { address: { label: 'HOME' as const, addressText: addressText.trim() } }
+          ? {
+              address: {
+                label: 'HOME' as const,
+                addressText: addressText.trim(),
+                ...(mapsUrl.trim() ? { mapsUrl: mapsUrl.trim() } : {}),
+              },
+            }
           : {}),
       });
       toast.success('Customer created');
       setName('');
       setAddressText('');
+      setMapsUrl('');
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Could not create the customer.');
     }
@@ -74,9 +83,12 @@ export function NewCustomerForm({ normalizedPhone }: { normalizedPhone: string }
               id="nc-address"
               value={addressText}
               onChange={(e) => setAddressText(e.target.value)}
-              placeholder="Building, street, area"
+              placeholder="Street, building, floor"
             />
           </div>
+          {addressText.trim().length >= 3 && (
+            <MapsLinkField id="nc-maps" value={mapsUrl} onChange={setMapsUrl} />
+          )}
           <Button type="submit" loading={createCustomer.isPending}>
             Create customer
           </Button>

@@ -19,6 +19,7 @@ const apiEnv = {
   STORAGE_DRIVER: 'local',
   LOCAL_STORAGE_DIR: '/tmp/loadless-e2e-uploads',
   THROTTLE_LIMIT: '100000',
+  THROTTLE_DISABLE: '1',
   SOCKET_REDIS_ADAPTER: 'false',
   TRUSTED_PROXY_HOPS: '0',
 };
@@ -39,14 +40,14 @@ export default defineConfig({
     {
       command: 'node ../api/dist/main.js',
       url: 'http://localhost:4190/api/v1/health',
-      reuseExistingServer: false,
+      reuseExistingServer: !process.env.CI,
       timeout: 30_000,
       env: apiEnv,
     },
     {
       command: 'pnpm exec next start -p 3190',
       url: 'http://localhost:3190/login',
-      reuseExistingServer: false,
+      reuseExistingServer: !process.env.CI,
       timeout: 60_000,
       env: { API_ORIGIN: 'http://localhost:4190', PORT: '3190' },
     },

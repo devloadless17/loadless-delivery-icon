@@ -53,11 +53,18 @@ export function DriverShell({ children }: { children: ReactNode }) {
                 href={href}
                 aria-current={active ? 'page' : undefined}
                 className={cn(
-                  'flex min-h-14 flex-col items-center justify-center gap-0.5 text-xs font-medium transition-colors duration-150',
+                  'group flex min-h-14 flex-col items-center justify-center gap-0.5 text-[11px] font-medium transition-colors duration-150',
                   active ? 'text-primary' : 'text-muted-foreground hover:text-foreground',
                 )}
               >
-                <Icon className={cn('size-5', active && 'stroke-[2.25]')} aria-hidden />
+                <span
+                  className={cn(
+                    'flex h-7 w-12 items-center justify-center rounded-full transition-colors duration-150',
+                    active && 'bg-primary/12',
+                  )}
+                >
+                  <Icon className={cn('size-5', active && 'stroke-[2.25]')} aria-hidden />
+                </span>
                 {label}
               </Link>
             );

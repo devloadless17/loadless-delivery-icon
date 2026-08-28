@@ -33,13 +33,19 @@ export function AdminNav() {
             href={href}
             aria-current={active ? 'page' : undefined}
             className={cn(
-              'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors duration-150',
+              'relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150',
               active
-                ? 'bg-primary/10 text-primary'
+                ? 'bg-primary/10 text-primary shadow-none'
                 : 'text-muted-foreground hover:bg-muted hover:text-foreground',
             )}
           >
-            <Icon className="size-4.5" aria-hidden />
+            {active && (
+              <span
+                className="absolute -left-3 h-5 w-1 rounded-r-full bg-primary"
+                aria-hidden
+              />
+            )}
+            <Icon className={cn('size-4.5', active && 'stroke-[2.25]')} aria-hidden />
             {label}
           </Link>
         );

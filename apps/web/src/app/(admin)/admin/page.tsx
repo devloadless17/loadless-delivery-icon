@@ -36,15 +36,21 @@ function StatTile({
   accent?: boolean;
 }) {
   return (
-    <Card>
+    <Card className="relative overflow-hidden transition-shadow duration-200 hover:shadow-float">
+      <span
+        className={`absolute inset-x-0 top-0 h-0.5 ${accent ? 'bg-accent' : 'bg-primary'}`}
+        aria-hidden
+      />
       <CardContent className="flex items-center justify-between p-5">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
-          <p className="data-mono mt-1 text-3xl font-bold">{value}</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+            {label}
+          </p>
+          <p className="data-mono mt-1.5 text-3xl font-bold leading-none">{value}</p>
         </div>
         <div
-          className={`flex size-10 items-center justify-center rounded-lg ${
-            accent ? 'bg-accent/15 text-accent' : 'bg-primary/10 text-primary'
+          className={`flex size-11 items-center justify-center rounded-xl ${
+            accent ? 'bg-accent/12 text-accent' : 'bg-primary/10 text-primary'
           }`}
         >
           <Icon className="size-5" aria-hidden />
