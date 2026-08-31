@@ -68,3 +68,18 @@ export function formatBps(bps: number): string {
   const pct = bps / 100;
   return `${Number.isInteger(pct) ? pct : pct.toFixed(pct * 10 === Math.floor(pct * 10) ? 1 : 2)}%`;
 }
+
+/**
+ * Inverse of toMinorUnits — renders stored minor units back into the plain
+ * major-unit string an amount input expects (no grouping separators, no
+ * currency code). 150000n LBP -> "150000"; 1250n USD -> "12.50".
+ */
+export function fromMinorUnits(amountMinor: bigint | string, currency: Currency): string {
+  const amount = typeof amountMinor === 'string' ? BigInt(amountMinor) : amountMinor;
+  const exponent = CURRENCY_EXPONENT[currency];
+  const negative = amount < 0n;
+  const abs = negative ? -amount : amount;
+  if (exponent === 0) return `${negative ? '-' : ''}${abs.toString()}`;
+  const digits = abs.toString().padStart(exponent + 1, '0');
+  return `${negative ? '-' : ''}${digits.slice(0, -exponent)}.${digits.slice(-exponent)}`;
+}

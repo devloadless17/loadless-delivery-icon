@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  fromMinorUnits,
   calcCommission,
   calcDriverEarnings,
   formatBps,
@@ -91,5 +92,33 @@ describe('formatBps', () => {
   it('formats whole and fractional percentages', () => {
     expect(formatBps(3000)).toBe('30%');
     expect(formatBps(2750)).toBe('27.5%');
+  });
+});
+
+describe('fromMinorUnits', () => {
+  it.each([
+    [150_000n, 'LBP', '150000'],
+    [0n, 'LBP', '0'],
+    [1_250n, 'USD', '12.50'],
+    [5n, 'USD', '0.05'],
+    [100n, 'USD', '1.00'],
+  ] as const)('renders %s %s as %s', (minor, currency, expected) => {
+    expect(fromMinorUnits(minor, currency)).toBe(expected);
+  });
+
+  it('accepts the string form that crosses the wire', () => {
+    expect(fromMinorUnits('2000000', 'LBP')).toBe('2000000');
+  });
+
+  it('round-trips with toMinorUnits — the repeat-order path depends on this', () => {
+    for (const [minor, currency] of [
+      [150_000n, 'LBP'],
+      [1n, 'LBP'],
+      [1_250n, 'USD'],
+      [5n, 'USD'],
+      [99_999n, 'USD'],
+    ] as const) {
+      expect(toMinorUnits(fromMinorUnits(minor, currency), currency)).toBe(minor);
+    }
   });
 });

@@ -1,6 +1,7 @@
 export * from './enums';
 export * from './money';
 export * from './phone';
+export * from './address';
 export * from './order-transitions';
 export * from './socket-events';
 export * from './error-codes';

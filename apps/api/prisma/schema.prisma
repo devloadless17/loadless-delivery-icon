@@ -246,6 +246,9 @@ model Order {
   @@index([vendorId, status, createdAt])
   @@index([driverId, status])
   @@index([customerId, createdAt])
+  // Customer 360: the vendor-scoped slice of one customer's history — the
+  // hottest read in the vendor UI (fires on every phone lookup mid-call).
+  @@index([customerId, vendorId, createdAt])
   // Partial index for the PENDING feed lives in raw SQL (see constraints migration)
   @@map("orders")
 }

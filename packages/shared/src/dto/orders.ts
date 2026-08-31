@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { CURRENCIES, DEFAULT_CURRENCY, toMinorUnits } from '../money';
-import { ORDER_STATUSES } from '../enums';
+import { ADDRESS_LABELS, ORDER_STATUSES } from '../enums';
 import {
   cuidSchema,
   cursorPaginationSchema,
@@ -20,6 +20,8 @@ export const createOrderSchema = z.object({
   customerName: z.string().trim().min(2).max(120).optional(),
   /** Optionally persist the delivery location to the customer's saved addresses. */
   saveAddressToCustomer: z.boolean().default(false),
+  /** Label for the saved copy; omitted -> HOME for a first address, else OTHER. */
+  saveAddressLabel: z.enum(ADDRESS_LABELS).optional(),
 
   deliveryAddressText: z.string().trim().min(3).max(500),
   /** The Google Maps link the customer sent for THIS delivery. */

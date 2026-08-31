@@ -3,29 +3,19 @@ import type {
   CreateCustomerInput,
   CustomerAddressInput,
   OffsetPagination,
+  UpdateCustomerAddressInput,
   UpdateCustomerInput,
 } from '@loadless/shared';
-import { ERROR_CODES } from '@loadless/shared';
-import { Prisma } from '@prisma/client';
+import { ERROR_CODES, normalizeAddressKey } from '@loadless/shared';
+import { Prisma, type AddressLabel } from '@prisma/client';
 import { AppException } from '../common/app.exception';
 import { offsetArgs, offsetMeta } from '../common/pagination';
 import { PrismaService } from '../prisma/prisma.service';
 import type { AuthUser } from '../auth/auth.types';
+import { ADDRESS_SELECT, CUSTOMER_SELECT } from './customer.select';
 
 type Tx = Prisma.TransactionClient;
 
-const CUSTOMER_SELECT = {
-  id: true,
-  normalizedPhone: true,
-  name: true,
-  createdByVendorId: true,
-  createdAt: true,
-  addresses: {
-    where: { isArchived: false },
-    orderBy: { createdAt: 'asc' as const },
-    select: { id: true, label: true, addressText: true, mapsUrl: true, lat: true, lng: true },
-  },
-} as const;
 
 /**
  * Customers are GLOBAL: shared across all vendors, keyed by normalized phone.
@@ -63,32 +53,34 @@ export class CustomersService {
     if (existing) {
       if (input.address) {
         await this.addAddress(existing.id, input.address, actor);
-        return { customer: await this.get(existing.id), created: false };
       }
-      return { customer: existing, created: false };
+      return { customerId: existing.id, created: false };
     }
 
-    const customer = await this.prisma.customer.create({
-      data: {
-        normalizedPhone: input.phone,
-        name: input.name,
-        createdByVendorId: actor.vendorId ?? null,
-        addresses: input.address
-          ? {
-              create: {
-                label: input.address.label,
-                addressText: input.address.addressText,
-                mapsUrl: input.address.mapsUrl,
-                lat: input.address.lat,
-                lng: input.address.lng,
-                createdByVendorId: actor.vendorId ?? null,
-              },
-            }
-          : undefined,
-      },
-      select: CUSTOMER_SELECT,
+    const customerId = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.customer.create({
+        data: {
+          normalizedPhone: input.phone,
+          name: input.name,
+          createdByVendorId: actor.vendorId ?? null,
+        },
+        select: { id: true },
+      });
+      // Birth event, so the change history starts at the beginning of the story.
+      await tx.customerChangeHistory.create({
+        data: {
+          customerId: created.id,
+          changedByUserId: actor.userId,
+          actorType: actor.role,
+          changes: { created: { new: { name: input.name, phone: input.phone } } } as never,
+        },
+      });
+      if (input.address) {
+        await this.saveAddressInTx(tx, created.id, input.address, actor);
+      }
+      return created.id;
     });
-    return { customer, created: true };
+    return { customerId, created: true };
   }
 
   /** Used inside the order-creation transaction. */
@@ -136,31 +128,176 @@ export class CustomersService {
     return updated;
   }
 
-  async addAddress(customerId: string, input: CustomerAddressInput, actor: AuthUser) {
-    await this.get(customerId); // 404 guard
-    const [address] = await this.prisma.$transaction([
-      this.prisma.customerAddress.create({
-        data: {
+  /**
+   * Save a delivery location to the address book, idempotently.
+   *
+   * Match order: same maps link (definitive), else same normalized address
+   * text. On a match we never overwrite the stored text — the older spelling is
+   * usually the better one — but we DO backfill a missing maps link, which is a
+   * strict improvement for the driver.
+   *
+   * The partial unique index customer_address_dedupe_uniq is the backstop for
+   * the case this cannot see: two concurrent orders for the same place.
+   */
+  async saveAddressInTx(
+    tx: Tx,
+    customerId: string,
+    input: {
+      addressText: string;
+      mapsUrl?: string | null;
+      lat?: number | null;
+      lng?: number | null;
+      label?: AddressLabel;
+    },
+    actor: AuthUser,
+  ): Promise<{ id: string; created: boolean }> {
+    const existing = await tx.customerAddress.findMany({
+      where: { customerId, isArchived: false }, // index [customerId, isArchived]
+      select: { id: true, addressText: true, mapsUrl: true },
+    });
+
+    const key = normalizeAddressKey(input.addressText);
+    const link = input.mapsUrl?.trim() || null;
+    const match =
+      (link ? existing.find((a) => a.mapsUrl?.trim() === link) : undefined) ??
+      existing.find((a) => normalizeAddressKey(a.addressText) === key);
+
+    if (match) {
+      if (link && !match.mapsUrl) {
+        await tx.customerAddress.update({ where: { id: match.id }, data: { mapsUrl: link } });
+        await tx.customerChangeHistory.create({
+          data: {
+            customerId,
+            changedByUserId: actor.userId,
+            actorType: actor.role,
+            changes: {
+              addressEnriched: { addressId: match.id, mapsUrl: { old: null, new: link } },
+            } as never,
+          },
+        });
+      }
+      return { id: match.id, created: false };
+    }
+
+    // A customer's first saved address is almost always home; the rest default
+    // to OTHER unless the caller says otherwise.
+    const label: AddressLabel = input.label ?? (existing.length === 0 ? 'HOME' : 'OTHER');
+
+    // ON CONFLICT DO NOTHING rather than catch-P2002: a unique violation
+    // inside an interactive transaction ABORTS it, so the recovery read would
+    // fail too. This way the loser of a race simply inserts nothing and then
+    // reads the winner's row in a still-healthy transaction.
+    const inserted = await tx.customerAddress.createMany({
+      data: [
+        {
           customerId,
-          label: input.label,
-          addressText: input.addressText,
-          mapsUrl: input.mapsUrl,
-          lat: input.lat,
-          lng: input.lng,
+          label,
+          addressText: input.addressText.trim(),
+          mapsUrl: link,
+          lat: input.lat ?? null,
+          lng: input.lng ?? null,
           createdByVendorId: actor.vendorId ?? null,
         },
-        select: { id: true, label: true, addressText: true, mapsUrl: true, lat: true, lng: true },
-      }),
-      this.prisma.customerChangeHistory.create({
-        data: {
-          customerId,
-          changedByUserId: actor.userId,
-          actorType: actor.role,
-          changes: { addressAdded: { new: input.addressText } },
-        },
-      }),
-    ]);
-    return address;
+      ],
+      skipDuplicates: true,
+    });
+
+    if (inserted.count === 0) {
+      // A concurrent write got there first — which is exactly what we wanted.
+      const rows = await tx.customerAddress.findMany({
+        where: { customerId, isArchived: false },
+        select: { id: true, addressText: true },
+      });
+      const winner = rows.find((a) => normalizeAddressKey(a.addressText) === key);
+      if (!winner) throw AppException.notFound('Address not found');
+      return { id: winner.id, created: false };
+    }
+
+    const created = await tx.customerAddress.findFirstOrThrow({
+      where: { customerId, isArchived: false, addressText: input.addressText.trim() },
+      select: { id: true },
+      orderBy: { createdAt: 'desc' },
+    });
+    await tx.customerChangeHistory.create({
+      data: {
+        customerId,
+        changedByUserId: actor.userId,
+        actorType: actor.role,
+        changes: { addressAdded: { addressId: created.id, new: input.addressText } } as never,
+      },
+    });
+    return { id: created.id, created: true };
+  }
+
+  /** Explicit "add address" — same dedupe rule as the order path. */
+  async addAddress(customerId: string, input: CustomerAddressInput, actor: AuthUser) {
+    await this.get(customerId); // 404 guard
+    const { id } = await this.prisma.$transaction((tx) =>
+      this.saveAddressInTx(tx, customerId, input, actor),
+    );
+    return this.prisma.customerAddress.findUniqueOrThrow({
+      where: { id },
+      select: ADDRESS_SELECT,
+    });
+  }
+
+  /** Correct a saved address in place — the gap that forced archive-and-re-add. */
+  async updateAddress(
+    customerId: string,
+    addressId: string,
+    input: UpdateCustomerAddressInput,
+    actor: AuthUser,
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      // Scoping in the WHERE: an address on another customer, or an archived
+      // one, is NOT FOUND — never "forbidden", so nothing leaks existence.
+      const existing = await tx.customerAddress.findFirst({
+        where: { id: addressId, customerId, isArchived: false },
+        select: ADDRESS_SELECT,
+      });
+      if (!existing) throw AppException.notFound('Address not found');
+
+      const diff: Record<string, { old: unknown; new: unknown }> = {};
+      for (const key of ['label', 'addressText', 'mapsUrl'] as const) {
+        const next = input[key];
+        if (next !== undefined && next !== existing[key]) {
+          diff[key] = { old: existing[key], new: next };
+        }
+      }
+      if (Object.keys(diff).length === 0) return existing; // no-op writes no history
+
+      try {
+        const updated = await tx.customerAddress.update({
+          where: { id: addressId },
+          data: {
+            ...(diff.label ? { label: input.label } : {}),
+            ...(diff.addressText ? { addressText: input.addressText?.trim() } : {}),
+            ...(diff.mapsUrl ? { mapsUrl: input.mapsUrl?.trim() || null } : {}),
+          },
+          select: ADDRESS_SELECT,
+        });
+        await tx.customerChangeHistory.create({
+          data: {
+            customerId,
+            changedByUserId: actor.userId,
+            actorType: actor.role,
+            changes: { addressUpdated: { addressId, ...diff } } as never,
+          },
+        });
+        return updated;
+      } catch (err) {
+        if (err instanceof Prisma.PrismaClientKnownRequestError) {
+          if (err.code === 'P2025') throw AppException.notFound('Address not found');
+          if (err.code === 'P2002') {
+            throw AppException.conflict(
+              ERROR_CODES.CONFLICT,
+              'This address is already saved for this customer',
+            );
+          }
+        }
+        throw err;
+      }
+    });
   }
 
   async archiveAddress(customerId: string, addressId: string, actor: AuthUser) {

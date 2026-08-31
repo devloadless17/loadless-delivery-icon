@@ -3,6 +3,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { toMinorUnits, type AdminOrderListFilter, type CreateOrderInput, type OrderListFilter } from '@loadless/shared';
 import type { Prisma } from '@prisma/client';
 import { AppException } from '../common/app.exception';
+import { cursorArgs, cursorResult } from '../common/pagination';
 import { PrismaService } from '../prisma/prisma.service';
 import { CustomersService } from '../customers/customers.service';
 import type { AuthUser } from '../auth/auth.types';
@@ -88,25 +89,6 @@ const ADMIN_ORDER_SELECT = {
   },
 } as const;
 
-interface CursorPage {
-  cursor?: string;
-  limit: number;
-}
-
-function cursorArgs(page: CursorPage) {
-  return {
-    take: page.limit + 1,
-    ...(page.cursor ? { cursor: { id: page.cursor }, skip: 1 } : {}),
-    orderBy: [{ createdAt: 'desc' as const }, { id: 'desc' as const }],
-  };
-}
-
-function cursorResult<T extends { id: string }>(rows: T[], limit: number) {
-  const hasMore = rows.length > limit;
-  const items = hasMore ? rows.slice(0, limit) : rows;
-  return { data: items, meta: { nextCursor: hasMore ? items[items.length - 1]?.id : null } };
-}
-
 @Injectable()
 export class OrdersService {
   constructor(
@@ -127,17 +109,20 @@ export class OrdersService {
       const customer = await this.customers.upsertInTx(tx, input.customerPhone, input.customerName, actor);
 
       if (input.saveAddressToCustomer) {
-        await tx.customerAddress.create({
-          data: {
-            customerId: customer.id,
-            label: 'OTHER',
+        // One write path for both the explicit "add address" route and this
+        // one: deduped, labelled, and change-history logged.
+        await this.customers.saveAddressInTx(
+          tx,
+          customer.id,
+          {
             addressText: input.deliveryAddressText,
             mapsUrl: input.deliveryMapsUrl,
             lat: input.deliveryLat,
             lng: input.deliveryLng,
-            createdByVendorId: vendorId,
+            label: input.saveAddressLabel,
           },
-        });
+          actor,
+        );
       }
 
       const [{ nextval }] = await tx.$queryRaw<[{ nextval: bigint }]>`SELECT nextval('order_number_seq')`;
