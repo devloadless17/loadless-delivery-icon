@@ -7,6 +7,7 @@ import { useCustomerSearch } from '@/features/customers/api';
 import { CustomerCreateDialog } from '@/features/customers/customer-create-dialog';
 import { CustomerProfilePanel } from '@/features/customers/customer-profile-panel';
 import { MyCustomersList } from '@/features/customers/my-customers-list';
+import { PlatformMatches } from '@/features/customers/platform-matches';
 import { NewCustomerForm } from '@/features/customers/new-customer-form';
 import { CustomerProfileSkeleton } from '@/features/customers/profile/profile-skeleton';
 import { PhoneSearchInput, usePhoneSearch } from '@/features/customers/phone-search';
@@ -41,9 +42,14 @@ export default function VendorCustomersPage() {
       </div>
 
       {!showResult ? (
-        /* Results narrow with every keystroke; the moment the text becomes a
-           complete number this gives way to the profile. */
-        <MyCustomersList q={debounced.trim()} onSelect={setRaw} />
+        <>
+          {/* Results narrow with every keystroke; the moment the text becomes a
+              complete number this gives way to the profile. */}
+          <MyCustomersList q={debounced.trim()} onSelect={setRaw} />
+          {/* …and once enough digits exist, who else on the platform it could
+              be — so an unfinished number still finds the person. */}
+          <PlatformMatches typed={debounced} onSelect={setRaw} />
+        </>
       ) : search.isPending ? (
         <CustomerProfileSkeleton />
       ) : search.isError ? (

@@ -1,5 +1,11 @@
 import { Injectable } from '@nestjs/common';
-import { phoneSearchDigits, type MyCustomersFilter } from '@loadless/shared';
+import {
+  phoneSearchDigits,
+  PLATFORM_LOOKUP_LIMIT,
+  PLATFORM_LOOKUP_MIN_DIGITS,
+  type MyCustomersFilter,
+  type PlatformCustomerMatch,
+} from '@loadless/shared';
 import { Prisma } from '@prisma/client';
 import { offsetMeta } from '../common/pagination';
 import { PrismaService } from '../prisma/prisma.service';
@@ -139,6 +145,58 @@ export class CustomerDirectoryService {
         string,
         unknown
       >,
+    };
+  }
+
+  /**
+   * Who else on the platform has a number starting with these digits.
+   *
+   * This is the one read that deliberately crosses the vendor boundary, so
+   * every limit on it is load-bearing:
+   *
+   *   - PHONE ONLY. `q` is reduced to digits and anything else is ignored, so
+   *     a name can never reach past the caller's own customers.
+   *   - A PREFIX of at least PLATFORM_LOOKUP_MIN_DIGITS. Fewer digits would
+   *     turn this into a directory you can walk a bucket at a time.
+   *   - IDENTITY ONLY. Name and number — precisely what typing the complete
+   *     number already returns, and nothing the vendor could not get that way.
+   *     No address, no order, no stat, no hint of who else serves them.
+   *
+   * The route is throttled harder than the rest of the API for the same reason.
+   */
+  async platformLookup(
+    q: string,
+    actor: AuthUser,
+  ): Promise<{ matches: PlatformCustomerMatch[]; hasMore: boolean }> {
+    // ADMIN has the full directory already; VENDOR is the case this exists for.
+    // Anyone else (a driver reaching this by mistake) gets nothing.
+    if (actor.role !== 'VENDOR' && actor.role !== 'ADMIN') {
+      return { matches: [], hasMore: false };
+    }
+
+    const digits = phoneSearchDigits(q);
+    if (digits.length < PLATFORM_LOOKUP_MIN_DIGITS) return { matches: [], hasMore: false };
+
+    // Prefix scan on the unique index over normalized_phone, minus the
+    // caller's own customers — those are already listed above with their real
+    // context, and repeating them here as bare names would read as two
+    // different people.
+    // One past the cap, so the UI can say "keep typing" instead of quietly
+    // hiding the person the vendor is actually looking for.
+    const rows = await this.prisma.customer.findMany({
+      where: {
+        normalizedPhone: { startsWith: `+961${digits}` },
+        ...(actor.role === 'VENDOR' && actor.vendorId
+          ? { NOT: { vendorLinks: { some: { vendorId: actor.vendorId } } } }
+          : {}),
+      },
+      select: { id: true, name: true, normalizedPhone: true },
+      orderBy: { normalizedPhone: 'asc' },
+      take: PLATFORM_LOOKUP_LIMIT + 1,
+    });
+    return {
+      matches: rows.slice(0, PLATFORM_LOOKUP_LIMIT),
+      hasMore: rows.length > PLATFORM_LOOKUP_LIMIT,
     };
   }
 }

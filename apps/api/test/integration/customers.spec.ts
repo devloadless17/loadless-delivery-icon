@@ -775,6 +775,63 @@ describe('customers (integration)', () => {
     });
   });
 
+  describe('platform lookup — the one read that crosses the boundary', () => {
+    it('finds a stranger from a partial number, identity ONLY', async () => {
+      // vendor B created this one; vendor A has never served them.
+      const res = await request(server)
+        .get('/api/v1/customers/lookup?q=03%20100%2010')
+        .set(auth(vendorAToken))
+        .expect(200);
+
+      const match = res.body.data.matches.find(
+        (m: { normalizedPhone: string }) => m.normalizedPhone === '+9613100100',
+      );
+      expect(match).toBeDefined();
+      expect(Object.keys(match).sort()).toEqual(['id', 'name', 'normalizedPhone']);
+
+      // Nothing that would describe the competitor's trade may ride along.
+      const blob = JSON.stringify(res.body);
+      for (const leak of ['addresses', 'stats', 'recentOrders', 'ordersCount', 'Vendor B Shop']) {
+        expect(blob).not.toContain(leak);
+      }
+    });
+
+    it('refuses to be a directory: too few digits, and letters, return nothing', async () => {
+      // '03 100 1' is only five NSN digits — one short of the floor.
+      for (const q of ['03 1', '0310', '31001', '03 100 1', 'Findable', 'Findable Person', '%']) {
+        const res = await request(server)
+          .get(`/api/v1/customers/lookup?q=${encodeURIComponent(q)}`)
+          .set(auth(vendorAToken))
+          .expect(200);
+        expect(res.body.data.matches).toEqual([]);
+      }
+    });
+
+    it('caps the page so a bucket can never be walked in one call', async () => {
+      const res = await request(server)
+        .get('/api/v1/customers/lookup?q=03%20100%2010')
+        .set(auth(vendorAToken))
+        .expect(200);
+      expect(res.body.data.matches.length).toBeLessThanOrEqual(10);
+    });
+
+    it('omits the caller\'s OWN customers — those are listed with real context', async () => {
+      const res = await request(server)
+        .get('/api/v1/customers/lookup?q=03%20100%2010')
+        .set(auth(vendorAToken))
+        .expect(200);
+      const phones = res.body.data.matches.map((m: { normalizedPhone: string }) => m.normalizedPhone);
+      expect(phones).not.toContain('+9613100101'); // vendor A created this one
+    });
+
+    it('drivers cannot reach it at all', async () => {
+      await request(server)
+        .get('/api/v1/customers/lookup?q=03%20100%2010')
+        .set(auth(driverToken))
+        .expect(403);
+    });
+  });
+
   describe('names — global vs mine', () => {
     it('only the vendor who added them may rewrite the shared name', async () => {
       const customer = await makeCustomer('+9613100120', 'Original Name', vendorAId);

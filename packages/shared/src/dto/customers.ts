@@ -74,6 +74,34 @@ export const updateCustomerAddressSchema = z
 export type UpdateCustomerAddressInput = z.infer<typeof updateCustomerAddressSchema>;
 
 /**
+ * Platform phone lookup while a number is still being typed.
+ *
+ * The ONE way a vendor reaches someone they have never served without knowing
+ * the whole number. Deliberately narrow:
+ *   - phone digits only — a name never searches beyond your own customers,
+ *     because a name-searchable directory IS a competitor's client list;
+ *   - at least PLATFORM_LOOKUP_MIN_DIGITS of them, so a bucket stays tiny and
+ *     sweeping the number space stays infeasible under the route's throttle;
+ *   - identity only in the response (name + phone) — never an address, an
+ *     order, or a stat. Exactly what typing the full number already gives.
+ */
+export const PLATFORM_LOOKUP_MIN_DIGITS = 6;
+/** Never widen without re-reading the enumeration note above. */
+export const PLATFORM_LOOKUP_LIMIT = 10;
+
+export const platformLookupSchema = z.object({
+  q: z.string().trim().min(1).max(40),
+});
+export type PlatformLookupInput = z.infer<typeof platformLookupSchema>;
+
+/** Identity and nothing else. */
+export interface PlatformCustomerMatch {
+  id: string;
+  name: string;
+  normalizedPhone: string;
+}
+
+/**
  * A vendor's PRIVATE name for a customer. Setting it changes nothing for any
  * other vendor; clearing it (DELETE) returns to following the global name.
  */

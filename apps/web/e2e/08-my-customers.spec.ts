@@ -3,6 +3,7 @@ import {
   ADMIN,
   createOrderUI,
   CUSTOMER_SEARCH,
+  displayedPhone,
   loginAs,
   ORDER_PHONE,
   uniquePhone,
@@ -28,8 +29,13 @@ async function openMyCustomers(page: Page) {
   await expect(page.getByRole('region', { name: 'My customers' })).toBeVisible();
 }
 
-function row(page: Page, name: string) {
-  return page.getByRole('row').filter({ hasText: name });
+/**
+ * A row keyed on the customer's PHONE, not their name: names are fixed strings
+ * in these specs and would collide if the database already holds a previous
+ * run's data. The phone comes from uniquePhone() and never repeats.
+ */
+function row(page: Page, phone: string) {
+  return page.getByRole('row').filter({ hasText: displayedPhone(phone) });
 }
 
 test.describe('my customers', () => {
@@ -44,7 +50,7 @@ test.describe('my customers', () => {
     });
 
     await openMyCustomers(vendorA);
-    const mine = row(vendorA, 'Relationship Customer');
+    const mine = row(vendorA, customerPhone);
     await expect(mine).toBeVisible();
     await expect(mine.getByText('Added by you')).toBeVisible();
     // Third cell is the order count — a bare toContainText('1') would also
@@ -55,9 +61,9 @@ test.describe('my customers', () => {
     // without finishing it — and so does a piece of the name.
     const search = vendorA.getByPlaceholder(CUSTOMER_SEARCH);
     await search.fill(customerPhone.slice(0, 6));
-    await expect(row(vendorA, 'Relationship Customer')).toBeVisible();
+    await expect(row(vendorA, customerPhone)).toBeVisible();
     await search.fill('lationship');
-    await expect(row(vendorA, 'Relationship Customer')).toBeVisible();
+    await expect(row(vendorA, customerPhone)).toBeVisible();
     await search.fill('');
 
     // Clicking a row loads the SAME inline profile the phone search renders.
@@ -79,6 +85,53 @@ test.describe('my customers', () => {
     // The full number still reaches them — that is the ONLY way in.
     await vendorB.getByPlaceholder(CUSTOMER_SEARCH).fill(customerPhone);
     await expect(vendorB.getByRole('heading', { name: /Relationship Customer/ })).toBeVisible();
+
+    await ctxA.close();
+    await ctxB.close();
+  });
+
+  test('an unfinished number finds a stranger; their NAME never does', async ({ browser }) => {
+    const ctxA = await browser.newContext();
+    const vendorA = await ctxA.newPage();
+    await loginAs(vendorA, VENDOR, '/vendor');
+    const { customerPhone } = await createOrderUI(vendorA, {
+      charge: '65000',
+      customerName: 'Partial Lookup Customer',
+    });
+
+    const ctxB = await browser.newContext();
+    const vendorB = await ctxB.newPage();
+    await loginAs(vendorB, VENDOR2, '/vendor');
+    await openMyCustomers(vendorB);
+    const search = vendorB.getByPlaceholder(CUSTOMER_SEARCH);
+
+    // One digit short of the whole number: the person still surfaces, under a
+    // heading that says plainly they are not this vendor's customer.
+    await search.fill(customerPhone.slice(0, 7));
+    const platform = vendorB.getByRole('region', { name: 'On the platform' });
+    await expect(platform).toBeVisible();
+    await expect(platform.getByText('Partial Lookup Customer')).toBeVisible();
+    // Identity only. Naming the exact things that must never appear beats a
+    // catch-all regex, which matches incidental copy and teaches nothing.
+    await expect(platform.getByText('E2E Burger House')).toHaveCount(0); // the other shop
+    await expect(platform.getByText('Added by you')).toHaveCount(0);
+    await expect(platform.getByText('Badaro, Sami el Solh Ave, Bldg 4')).toHaveCount(0);
+
+    // Their NAME is not a way in. This is the line the product holds.
+    await search.fill('Partial Lookup');
+    await expect(vendorB.getByText('No match among your customers')).toBeVisible();
+    await expect(vendorB.getByRole('region', { name: 'On the platform' })).toHaveCount(0);
+
+    // Too few digits is not a way in either.
+    await search.fill(customerPhone.slice(0, 4));
+    await expect(vendorB.getByRole('region', { name: 'On the platform' })).toHaveCount(0);
+
+    // Picking a candidate opens the ordinary profile.
+    await search.fill(customerPhone.slice(0, 7));
+    await platform.getByText('Partial Lookup Customer').click();
+    await expect(
+      vendorB.getByRole('heading', { name: /Partial Lookup Customer/ }),
+    ).toBeVisible();
 
     await ctxA.close();
     await ctxB.close();
@@ -111,14 +164,14 @@ test.describe('my customers', () => {
     await vendorB.waitForURL((url) => /\/vendor\/orders\/[a-z0-9]{20,}$/.test(url.pathname));
 
     await openMyCustomers(vendorB);
-    const theirRow = row(vendorB, 'Two Shop Customer');
+    const theirRow = row(vendorB, customerPhone);
     await expect(theirRow).toBeVisible();
     // Theirs now — but they did not ADD them, so no badge.
     await expect(theirRow.getByText('Added by you')).toHaveCount(0);
 
     // …and vendor A still has them, with their own separate order count.
     await openMyCustomers(vendorA);
-    await expect(row(vendorA, 'Two Shop Customer').getByText('Added by you')).toBeVisible();
+    await expect(row(vendorA, customerPhone).getByText('Added by you')).toBeVisible();
 
     await ctxA.close();
     await ctxB.close();
@@ -232,14 +285,11 @@ test.describe('my customers', () => {
     const admin = await adminCtx.newPage();
     await loginAs(admin, ADMIN, '/admin');
     await admin.goto('/admin/customers');
-    await admin.getByPlaceholder('Search by name or phone').fill(customerPhone.replace(/\D/g, ''));
-    await expect(admin.getByRole('cell', { name: 'Admin Visible Customer' })).toBeVisible();
-
-    await admin
-      .getByRole('row')
-      .filter({ hasText: 'Admin Visible Customer' })
-      .getByRole('button', { name: 'Manage' })
-      .click();
+    await admin.getByPlaceholder('Search by name or phone').fill(customerPhone);
+    // Keyed on the phone for the same reason as row() above.
+    const adminRow = admin.getByRole('row').filter({ hasText: displayedPhone(customerPhone) });
+    await expect(adminRow).toBeVisible();
+    await adminRow.getByRole('button', { name: 'Manage' }).click();
     const dialog = admin.getByRole('dialog');
     await expect(dialog.getByText('Vendors')).toBeVisible();
     await expect(dialog.getByText('E2E Burger House')).toBeVisible();

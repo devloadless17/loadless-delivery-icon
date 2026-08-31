@@ -20,6 +20,7 @@ import {
 import { useCustomerSearch } from '@/features/customers/api';
 import { CustomerProfilePanel } from '@/features/customers/customer-profile-panel';
 import { CustomerProfileSkeleton } from '@/features/customers/profile/profile-skeleton';
+import { PlatformMatches } from '@/features/customers/platform-matches';
 import { PhoneSearchInput, usePhoneSearch } from '@/features/customers/phone-search';
 import { useCreateOrder } from '@/features/orders/api';
 import {
@@ -31,7 +32,7 @@ import {
 function NewOrderForm() {
   const router = useRouter();
   const params = useSearchParams();
-  const { raw, setRaw, normalized, isTyping } = usePhoneSearch();
+  const { raw, setRaw, debounced, normalized, isTyping } = usePhoneSearch();
   const search = useCustomerSearch(normalized);
   const createOrder = useCreateOrder();
 
@@ -160,6 +161,10 @@ function NewOrderForm() {
         </CardHeader>
         <CardContent className="space-y-3">
           <PhoneSearchInput value={raw} onChange={setRaw} autoFocus />
+          {/* Half a number offers who it could be. Without this a mistyped
+              digit silently lands on "new customer" and creates a duplicate of
+              someone who is already on the platform. */}
+          {!phoneReady && <PlatformMatches typed={debounced} onSelect={setRaw} />}
           {phoneReady &&
             (search.isPending ? (
               <CustomerProfileSkeleton variant="compact" />

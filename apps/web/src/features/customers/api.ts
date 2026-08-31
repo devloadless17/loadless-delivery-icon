@@ -13,7 +13,9 @@ import type {
   CustomerStatsView,
   UpdateCustomerAddressInput,
   VendorCustomerRow,
+  PlatformCustomerMatch,
 } from '@loadless/shared';
+import { phoneSearchDigits, PLATFORM_LOOKUP_MIN_DIGITS } from '@loadless/shared';
 import { api } from '@/lib/api-client';
 
 export type CustomerAddress = CustomerProfileView['addresses'][number];
@@ -76,6 +78,25 @@ export function useCustomerSearch(normalizedPhone: string | null) {
     enabled: normalizedPhone !== null,
     staleTime: 15_000,
     gcTime: 5 * 60_000,
+  });
+}
+
+/**
+ * Candidates for a number still being typed — the one lookup that reaches past
+ * the vendor's own customers. Enabled only once enough digits exist to make it
+ * a lookup rather than a listing; letters never reach it.
+ */
+export function usePlatformLookup(typed: string) {
+  const digits = phoneSearchDigits(typed);
+  const enabled = digits.length >= PLATFORM_LOOKUP_MIN_DIGITS;
+  return useQuery({
+    queryKey: ['customers', 'lookup', digits],
+    queryFn: () =>
+      api.get<{ matches: PlatformCustomerMatch[]; hasMore: boolean }>(
+        `/customers/lookup?q=${encodeURIComponent(digits)}`,
+      ),
+    enabled,
+    staleTime: 30_000,
   });
 }
 

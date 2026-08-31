@@ -24,7 +24,9 @@ import {
   offsetPaginationSchema,
   updateCustomerSchema,
   myCustomersFilterSchema,
+  platformLookupSchema,
   setCustomerDisplayNameSchema,
+  type PlatformLookupInput,
   type MyCustomersFilter,
   type SetCustomerDisplayNameInput,
   type CreateCustomerInput,
@@ -47,6 +49,7 @@ export class CustomersController {
   constructor(
     private readonly customers: CustomersService,
     private readonly profiles: CustomerProfileService,
+    private readonly directory: CustomerDirectoryService,
   ) {}
 
   /**
@@ -63,6 +66,23 @@ export class CustomersController {
   ) {
     const customer = await this.profiles.byPhone(query.phone, user);
     return { customer }; // null when unknown — a valid answer, not a 404
+  }
+
+  /**
+   * Candidates for a phone number the vendor has not finished typing.
+   *
+   * Throttled tighter than the profile lookup above: this is the only route
+   * that answers about people the caller has never served, so it is the one an
+   * enumeration attempt would reach for. It returns identity only — see
+   * CustomerDirectoryService.platformLookup for why each limit is there.
+   */
+  @Get('lookup')
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
+  async lookup(
+    @Query(new ZodValidationPipe(platformLookupSchema)) query: PlatformLookupInput,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.directory.platformLookup(query.q, user);
   }
 
   @Post()
