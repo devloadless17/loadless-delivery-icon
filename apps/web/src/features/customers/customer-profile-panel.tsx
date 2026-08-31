@@ -75,9 +75,7 @@ export function CustomerProfilePanel({
               } with you${
                 profile.stats.lastOrderAt ? ` · last ${displayRelative(profile.stats.lastOrderAt)}` : ''
               }`
-            : profile.stats.totalOrdersPlatform > 0
-              ? `First order with you — ${profile.stats.totalOrdersPlatform} on the platform`
-              : 'First order on the platform'}
+            : 'First order with you'}
         </p>
       </div>
     );

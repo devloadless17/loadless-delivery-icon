@@ -183,9 +183,15 @@ export interface CustomerTopAddressView {
 
 export interface CustomerStatsView {
   scope: CustomerProfileScope;
-  /** Platform-wide count — the ONLY cross-vendor value. A bare integer. */
-  totalOrdersPlatform: number;
-  /** Orders with the CALLING vendor (equals totalOrdersPlatform for ADMIN). */
+  /**
+   * Orders within the CALLER's scope — their own trade for a vendor, the whole
+   * platform for an admin.
+   *
+   * There is deliberately no cross-vendor number beside it. A "3 on platform"
+   * caption told a vendor that two other shops serve this customer, which is
+   * the competitor's business, not theirs. A vendor sees their own trade and
+   * nothing else.
+   */
   ordersInScope: number;
   firstOrderAt: string | null;
   lastOrderAt: string | null;

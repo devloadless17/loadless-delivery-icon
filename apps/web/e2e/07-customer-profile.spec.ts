@@ -193,8 +193,10 @@ test.describe('customer profile', () => {
     await expect(vendorB.getByText('No orders with you yet')).toHaveCount(0);
     await vendorB.getByRole('tab', { name: /Orders/ }).click();
     await expect(vendorB.getByText('No orders with you yet')).toBeVisible();
-    // The one deliberate cross-vendor signal: a bare count, no vendor named.
-    await expect(vendorB.getByText(/They.ve ordered \d+ times? on the platform/)).toBeVisible();
+    // …and no cross-vendor number stands in for it either. A count of orders
+    // elsewhere would still tell this vendor another shop serves the customer.
+    await expect(vendorB.getByText(/ordered \d+ times? on the platform/)).toHaveCount(0);
+    await expect(vendorB.getByText(/\d+ on platform/)).toHaveCount(0);
 
     await ctxA.close();
     await ctxB.close();

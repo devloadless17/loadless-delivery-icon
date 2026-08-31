@@ -28,16 +28,10 @@ function Cell({
 
 /** The credibility read: is this a regular, and how much do they spend with us? */
 export function StatStrip({ stats }: { stats: CustomerStats }) {
-  const platformOnly = stats.totalOrdersPlatform - stats.ordersInScope;
   return (
     <div className="grid grid-cols-2 divide-x divide-y border-y bg-muted/30 sm:grid-cols-4 sm:divide-y-0">
       <Cell id="orders" label={stats.scope === 'PLATFORM' ? 'Orders' : 'Orders with you'}>
         <p className="data-mono text-xl font-bold leading-none">{stats.ordersInScope}</p>
-        {stats.scope === 'VENDOR' && platformOnly > 0 && (
-          <p className="mt-1 text-xs text-muted-foreground">
-            {stats.totalOrdersPlatform} on platform
-          </p>
-        )}
       </Cell>
       <Cell id="last-order" label="Last order">
         <p className="text-sm font-semibold leading-none">

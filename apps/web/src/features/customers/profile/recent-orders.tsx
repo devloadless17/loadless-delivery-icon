@@ -23,11 +23,9 @@ export function RecentOrders({ customer }: { customer: CustomerProfile }) {
       <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed py-8 text-center">
         <PackageSearch className="size-7 text-muted-foreground" aria-hidden />
         <p className="text-sm font-medium">No orders with you yet</p>
-        {customer.stats.totalOrdersPlatform > 0 && (
-          <p className="text-sm text-muted-foreground">
-            They&apos;ve ordered {customer.stats.totalOrdersPlatform} times on the platform.
-          </p>
-        )}
+        <p className="text-sm text-muted-foreground">
+          Their orders with other vendors are not yours to see.
+        </p>
       </div>
     );
   }

@@ -175,8 +175,12 @@ describe('customers (integration)', () => {
       expect(asB.body.data.customer.stats.topAddress).toBeNull();
       expect(asA.body.data.customer.stats.topAddress.orderCount).toBe(2);
 
-      // The one deliberate cross-vendor signal, asserted against its own pair.
-      expect(asB.body.data.customer.stats.totalOrdersPlatform).toBe(2);
+      // No cross-vendor number reaches a vendor AT ALL — not even a bare count
+      // of orders elsewhere, which would still tell them another shop serves
+      // this customer.
+      expect(asB.body.data.customer.stats.totalOrdersPlatform).toBeUndefined();
+      expect(asA.body.data.customer.stats.totalOrdersPlatform).toBeUndefined();
+      expect(JSON.stringify(asB.body)).not.toContain('totalOrdersPlatform');
       expect(asB.body.data.customer.stats.scope).toBe('VENDOR');
     });
 
@@ -772,6 +776,184 @@ describe('customers (integration)', () => {
         where: { customerId_vendorId: { customerId: customer.id, vendorId: vendorAId } },
       });
       expect(link.ordersCount).toBe(1);
+    });
+  });
+
+  /**
+   * THE TRUTH TABLE. Customer data lives in four layers and it must always be
+   * obvious which one a write lands in. These tests are the specification:
+   *
+   *   1. the GLOBAL record      customers.name / normalized_phone
+   *   2. MY overlay             customer_vendors.display_name
+   *   3. the SHARED address book customer_addresses (one row per place, owned)
+   *   4. THIS ORDER's snapshot   orders.delivery_* (frozen at creation)
+   */
+  describe('what each write actually touches', () => {
+    it('ordering for a known customer NEVER renames them, even with a different name', async () => {
+      const customer = await makeCustomer('+9613100200', 'Real Name', vendorAId);
+
+      await request(server)
+        .post('/api/v1/vendor/orders')
+        .set(auth(vendorBToken))
+        .send({
+          customerPhone: '03100200',
+          customerName: 'Whatever Vendor B Typed',
+          deliveryAddressText: 'Somewhere, Bldg 1',
+          deliveryCharge: '100000',
+          currency: 'LBP',
+        })
+        .expect(201);
+
+      const after = await prisma.customer.findUniqueOrThrow({ where: { id: customer.id } });
+      expect(after.name).toBe('Real Name');
+      expect(after.createdByVendorId).toBe(vendorAId); // attribution never moves
+    });
+
+    it('an order does NOT touch the address book unless asked', async () => {
+      const customer = await makeCustomer('+9613100201', 'No Save', vendorAId);
+      await request(server)
+        .post('/api/v1/vendor/orders')
+        .set(auth(vendorAToken))
+        .send({
+          customerPhone: '03100201',
+          deliveryAddressText: 'One off place, Bldg 9',
+          deliveryCharge: '100000',
+          currency: 'LBP',
+        })
+        .expect(201);
+
+      expect(await prisma.customerAddress.count({ where: { customerId: customer.id } })).toBe(0);
+    });
+
+    it('saveAddressToCustomer adds ONE row, owned by the ordering vendor', async () => {
+      const customer = await makeCustomer('+9613100202', 'Save It', vendorAId);
+      await request(server)
+        .post('/api/v1/vendor/orders')
+        .set(auth(vendorBToken))
+        .send({
+          customerPhone: '03100202',
+          deliveryAddressText: 'Saved place, Bldg 3',
+          saveAddressToCustomer: true,
+          saveAddressLabel: 'WORK',
+          deliveryCharge: '100000',
+          currency: 'LBP',
+        })
+        .expect(201);
+
+      const rows = await prisma.customerAddress.findMany({ where: { customerId: customer.id } });
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!.createdByVendorId).toBe(vendorBId); // whoever saved it owns it
+      expect(rows[0]!.label).toBe('WORK');
+    });
+
+    it("THIS ORDER's address is frozen — later profile edits never rewrite history", async () => {
+      const customer = await makeCustomer('+9613100203', 'Frozen', vendorAId);
+      const created = await request(server)
+        .post('/api/v1/vendor/orders')
+        .set(auth(vendorAToken))
+        .send({
+          customerPhone: '03100203',
+          deliveryAddressText: 'Old spelling, Bldg 2',
+          saveAddressToCustomer: true,
+          deliveryCharge: '100000',
+          currency: 'LBP',
+        })
+        .expect(201);
+
+      const address = await prisma.customerAddress.findFirstOrThrow({
+        where: { customerId: customer.id },
+      });
+      await request(server)
+        .patch(`/api/v1/customers/${customer.id}/addresses/${address.id}`)
+        .set(auth(vendorAToken))
+        .send({ addressText: 'Corrected spelling, Bldg 2' })
+        .expect(200);
+
+      const order = await prisma.order.findUniqueOrThrow({ where: { id: created.body.data.id } });
+      expect(order.deliveryAddressText).toBe('Old spelling, Bldg 2');
+    });
+
+    it('a private alias reaches NOBODY else — not the other vendor, not the driver, not admin', async () => {
+      const customer = await makeCustomer('+9613100204', 'Base Person', vendorAId);
+      const order = await seedOrder({
+        vendorId: vendorAId,
+        customerId: customer.id,
+        addressText: 'Alias street',
+      });
+      await request(server)
+        .put(`/api/v1/customers/${customer.id}/display-name`)
+        .set(auth(vendorAToken))
+        .send({ displayName: 'A private label' })
+        .expect(200);
+
+      // The vendor who set it sees it on their own order list.
+      const mine = await request(server)
+        .get('/api/v1/vendor/orders?limit=50')
+        .set(auth(vendorAToken))
+        .expect(200);
+      const row = mine.body.data.find((o: { id: string }) => o.id === order.id);
+      expect(row.customer.name).toBe('A private label');
+
+      // The driver knocking on the door must hear the name the customer
+      // answers to, never one shop's nickname for them.
+      const asDriver = await request(server)
+        .get(`/api/v1/driver/orders/${order.id}`)
+        .set(auth(driverToken))
+        .expect(200);
+      expect(asDriver.body.data.customer.name).toBe('Base Person');
+
+      const asAdmin = await request(server)
+        .get(`/api/v1/admin/orders/${order.id}`)
+        .set(auth(adminToken))
+        .expect(200);
+      expect(asAdmin.body.data.customer.name).toBe('Base Person');
+
+      const asB = await request(server)
+        .get(`/api/v1/customers/${customer.id}`)
+        .set(auth(vendorBToken))
+        .expect(200);
+      expect(asB.body.data.name).toBe('Base Person');
+    });
+
+    it('THE ONE EXCEPTION: a missing maps link gets filled in, and it is logged', async () => {
+      // The address book holds ONE row per place per customer (the dedupe
+      // index is not scoped by vendor), so a second vendor cannot keep a
+      // private copy of the same address. When they have the maps link that
+      // row is missing, filling it is strictly additive — it never overwrites
+      // text and it is the only way the link can be recorded at all.
+      const customer = await makeCustomer('+9613100205', 'Enrich Me', vendorAId);
+      const address = await prisma.customerAddress.create({
+        data: {
+          customerId: customer.id,
+          label: 'HOME',
+          addressText: 'Link me street, Bldg 5',
+          createdByVendorId: vendorAId,
+        },
+      });
+      expect(address.mapsUrl).toBeNull();
+
+      await request(server)
+        .post(`/api/v1/customers/${customer.id}/addresses`)
+        .set(auth(vendorBToken))
+        .send({
+          label: 'HOME',
+          addressText: 'Link me street, Bldg 5',
+          mapsUrl: 'https://maps.app.goo.gl/enriched',
+        })
+        .expect(201);
+
+      const after = await prisma.customerAddress.findUniqueOrThrow({ where: { id: address.id } });
+      expect(after.mapsUrl).toBe('https://maps.app.goo.gl/enriched');
+      expect(after.addressText).toBe('Link me street, Bldg 5'); // text untouched
+      expect(after.createdByVendorId).toBe(vendorAId); // ownership untouched
+      expect(await prisma.customerAddress.count({ where: { customerId: customer.id } })).toBe(1);
+
+      // Additive or not, it changed a row someone else owns — so it is on the
+      // record with who did it.
+      const history = await prisma.customerChangeHistory.findMany({
+        where: { customerId: customer.id },
+      });
+      expect(JSON.stringify(history)).toContain('addressEnriched');
     });
   });
 

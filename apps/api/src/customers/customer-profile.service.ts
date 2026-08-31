@@ -30,10 +30,10 @@ interface TopAddressRow {
  * needs mid-phone-call, assembled in ONE round trip so the panel paints without
  * a spinner. Writes and change-history stay in CustomersService.
  *
- * Every order-derived number is scoped through customerOrderScope() — a vendor
- * sees only their own trade with this customer. The single exception is
- * totalOrdersPlatform, a bare integer that tells the vendor the customer is
- * established without revealing anything about who else serves them.
+ * EVERY order-derived number is scoped through customerOrderScope(): a vendor
+ * sees their own trade with this customer and nothing else. There is no
+ * cross-vendor figure at all — not even a bare count, which would still say
+ * "other shops serve this person" about a competitor's business.
  */
 @Injectable()
 export class CustomerProfileService {
@@ -64,8 +64,6 @@ export class CustomerProfileService {
       where: { id: customerId },
       select: CUSTOMER_SELECT,
     });
-    // Establishedness across the platform: a count, and nothing else.
-    const platformCountQuery = this.prisma.order.count({ where: { customerId } });
     // Status counts + first/last order in one pass (max 6 rows back).
     const byStatusQuery = this.prisma.order.groupBy({
       by: ['status'],
@@ -121,10 +119,9 @@ export class CustomerProfileService {
 
     // One round trip, one snapshot — so the platform count and the scoped
     // counts can never disagree with each other.
-    const [customer, totalOrdersPlatform, byStatus, spend, links, recentRows, topAddressRows] =
+    const [customer, byStatus, spend, links, recentRows, topAddressRows] =
       await this.prisma.$transaction([
         customerQuery,
-        platformCountQuery,
         byStatusQuery,
         spendQuery,
         linksQuery,
@@ -168,7 +165,6 @@ export class CustomerProfileService {
         : {}),
       stats: {
         scope: platform ? ('PLATFORM' as const) : ('VENDOR' as const),
-        totalOrdersPlatform,
         ordersInScope: byStatus.reduce((sum, row) => sum + row._count._all, 0),
         firstOrderAt: pickDate('_min'),
         lastOrderAt: pickDate('_max'),
