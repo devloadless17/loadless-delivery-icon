@@ -181,22 +181,36 @@ export class CustomerDirectoryService {
     // caller's own customers — those are already listed above with their real
     // context, and repeating them here as bare names would read as two
     // different people.
+    // The caller's OWN customers are included and flagged, not filtered out
+    // here. Which of them to show is a question about the screen, not about
+    // the data: the customers page already lists them above and drops them,
+    // while the order form has no such list — filtering there would hide the
+    // very people the vendor deals with most.
+    const vendorId = actor.role === 'VENDOR' ? actor.vendorId : null;
+
     // One past the cap, so the UI can say "keep typing" instead of quietly
     // hiding the person the vendor is actually looking for.
     const rows = await this.prisma.customer.findMany({
-      where: {
-        normalizedPhone: { startsWith: `+961${digits}` },
-        ...(actor.role === 'VENDOR' && actor.vendorId
-          ? { NOT: { vendorLinks: { some: { vendorId: actor.vendorId } } } }
+      where: { normalizedPhone: { startsWith: `+961${digits}` } },
+      select: {
+        id: true,
+        name: true,
+        normalizedPhone: true,
+        // Only ever the CALLER's own link — never a hint of anyone else's.
+        ...(vendorId
+          ? { vendorLinks: { where: { vendorId }, select: { vendorId: true }, take: 1 } }
           : {}),
       },
-      select: { id: true, name: true, normalizedPhone: true },
       orderBy: { normalizedPhone: 'asc' },
       take: PLATFORM_LOOKUP_LIMIT + 1,
     });
-    return {
-      matches: rows.slice(0, PLATFORM_LOOKUP_LIMIT),
-      hasMore: rows.length > PLATFORM_LOOKUP_LIMIT,
-    };
+
+    const matches = rows.slice(0, PLATFORM_LOOKUP_LIMIT).map((row) => {
+      const { vendorLinks, ...identity } = row as typeof row & {
+        vendorLinks?: Array<{ vendorId: string }>;
+      };
+      return { ...identity, isYours: (vendorLinks?.length ?? 0) > 0 };
+    });
+    return { matches, hasMore: rows.length > PLATFORM_LOOKUP_LIMIT };
   }
 }

@@ -5,7 +5,7 @@ import { formatMoney, type Currency, type OrderStatus } from '@loadless/shared';
 import { useState } from 'react';
 import { api } from '@/lib/api-client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
+import { DateField } from '@/components/ui/date-field';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { STATUS_META } from '@/features/orders/order-status';
@@ -52,11 +52,11 @@ export default function VendorStatsPage() {
       <div className="flex flex-wrap items-end gap-3">
         <div className="space-y-1.5">
           <Label htmlFor="stats-from">From</Label>
-          <Input id="stats-from" type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="h-10 w-40" />
+          <DateField id="stats-from" className="w-44" value={from} onValueChange={setFrom} clearLabel="from date" />
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="stats-to">To</Label>
-          <Input id="stats-to" type="date" value={to} onChange={(e) => setTo(e.target.value)} className="h-10 w-40" />
+          <DateField id="stats-to" className="w-44" value={to} onValueChange={setTo} clearLabel="to date" />
         </div>
       </div>
 
@@ -81,7 +81,10 @@ export default function VendorStatsPage() {
               </CardHeader>
               <CardContent>
                 {data.delivered.length === 0 ? (
-                  <p className="data-mono text-3xl font-bold text-muted-foreground">0</p>
+                  // An em dash, not "0": a bare zero under a money label reads
+                  // as zero of no currency. Matches StatStrip on the customer
+                  // panel, which already renders empty money this way.
+                  <p className="data-mono text-3xl font-bold text-muted-foreground">—</p>
                 ) : (
                   data.delivered.map((row) => (
                     <p key={row.currency} className="data-mono text-xl font-bold leading-tight">

@@ -5,7 +5,7 @@ import { Download, PackageSearch } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { DateField } from '@/components/ui/date-field';
 import { Label } from '@/components/ui/label';
 import {
   Select,
@@ -80,11 +80,11 @@ export default function AdminOrdersPage() {
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="ao-from">From</Label>
-          <Input id="ao-from" type="date" className="h-10 w-40" value={from} onChange={(e) => setFrom(e.target.value)} />
+          <DateField id="ao-from" className="w-44" value={from} onValueChange={setFrom} clearLabel="from date" />
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="ao-to">To</Label>
-          <Input id="ao-to" type="date" className="h-10 w-40" value={to} onChange={(e) => setTo(e.target.value)} />
+          <DateField id="ao-to" className="w-44" value={to} onValueChange={setTo} clearLabel="to date" />
         </div>
       </div>
 

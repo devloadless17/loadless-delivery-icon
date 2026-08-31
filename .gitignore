@@ -35,3 +35,6 @@ uploads/
 # generated service worker
 apps/web/public/sw.js
 apps/web/public/swe-worker*.js
+
+# Screen-sweep output (regenerate with apps/web/audit)
+apps/web/audit/shots/

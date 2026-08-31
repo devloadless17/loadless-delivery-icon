@@ -31,15 +31,22 @@ function EarningsCard({ title, rows }: { title: string; rows: EarningsRow[] }) {
       </CardHeader>
       <CardContent>
         {rows.length === 0 ? (
-          <p className="data-mono text-2xl font-bold text-muted-foreground">0</p>
+          // An em dash, not "0" — a bare zero under a money label reads as
+          // zero of no currency.
+          <p className="data-mono text-2xl font-bold text-muted-foreground">—</p>
         ) : (
-          <div className="space-y-1">
+          <div className="space-y-2">
             {rows.map((row) => (
-              <div key={row.currency} className="flex items-baseline justify-between">
-                <p className="data-mono text-2xl font-bold text-accent">
+              // Stacked, not a justified row: side by side, "75,000 LBP" and
+              // the count fight for ~170px on a 390px phone and the amount
+              // wraps into the caption. A driver reads this one-handed.
+              <div key={row.currency}>
+                <p className="data-mono whitespace-nowrap text-2xl font-bold text-accent">
                   {formatMoney(row.earnings, row.currency)}
                 </p>
-                <p className="text-xs text-muted-foreground">{row.deliveries} deliveries</p>
+                <p className="text-xs text-muted-foreground">
+                  {row.deliveries} {row.deliveries === 1 ? 'delivery' : 'deliveries'}
+                </p>
               </div>
             ))}
           </div>

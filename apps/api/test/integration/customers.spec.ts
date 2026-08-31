@@ -787,7 +787,7 @@ describe('customers (integration)', () => {
         (m: { normalizedPhone: string }) => m.normalizedPhone === '+9613100100',
       );
       expect(match).toBeDefined();
-      expect(Object.keys(match).sort()).toEqual(['id', 'name', 'normalizedPhone']);
+      expect(Object.keys(match).sort()).toEqual(['id', 'isYours', 'name', 'normalizedPhone']);
 
       // Nothing that would describe the competitor's trade may ride along.
       const blob = JSON.stringify(res.body);
@@ -815,13 +815,27 @@ describe('customers (integration)', () => {
       expect(res.body.data.matches.length).toBeLessThanOrEqual(10);
     });
 
-    it('omits the caller\'s OWN customers — those are listed with real context', async () => {
+    it('FLAGS the caller\'s own customers rather than hiding them', async () => {
+      // Hiding them server-side broke the order form, which has no "your
+      // customers" list above it — a vendor typing a regular's number saw
+      // nothing at all. Which ones to show is the screen's decision; the API
+      // only reports whether the relationship is the CALLER's own.
       const res = await request(server)
         .get('/api/v1/customers/lookup?q=03%20100%2010')
         .set(auth(vendorAToken))
         .expect(200);
-      const phones = res.body.data.matches.map((m: { normalizedPhone: string }) => m.normalizedPhone);
-      expect(phones).not.toContain('+9613100101'); // vendor A created this one
+
+      const byPhone = new Map<string, { isYours: boolean }>(
+        res.body.data.matches.map((m: { normalizedPhone: string; isYours: boolean }) => [
+          m.normalizedPhone,
+          m,
+        ]),
+      );
+      expect(byPhone.get('+9613100101')?.isYours).toBe(true); // vendor A created them
+      expect(byPhone.get('+9613100100')?.isYours).toBe(false); // vendor B's
+
+      // Still no sign of whose customer the other one is.
+      expect(JSON.stringify(res.body)).not.toContain('Vendor B Shop');
     });
 
     it('drivers cannot reach it at all', async () => {

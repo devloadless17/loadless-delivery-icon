@@ -94,11 +94,17 @@ export const platformLookupSchema = z.object({
 });
 export type PlatformLookupInput = z.infer<typeof platformLookupSchema>;
 
-/** Identity and nothing else. */
+/** Identity and nothing else — plus whether they are already yours. */
 export interface PlatformCustomerMatch {
   id: string;
   name: string;
   normalizedPhone: string;
+  /**
+   * Is this already one of MY customers? A fact about the caller's own
+   * relationship, never about anyone else's — a screen that already lists the
+   * caller's customers can drop these, and one that doesn't can label them.
+   */
+  isYours: boolean;
 }
 
 /**

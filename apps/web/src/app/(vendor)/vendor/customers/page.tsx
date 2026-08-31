@@ -46,9 +46,10 @@ export default function VendorCustomersPage() {
           {/* Results narrow with every keystroke; the moment the text becomes a
               complete number this gives way to the profile. */}
           <MyCustomersList q={debounced.trim()} onSelect={setRaw} />
-          {/* …and once enough digits exist, who else on the platform it could
-              be — so an unfinished number still finds the person. */}
-          <PlatformMatches typed={debounced} onSelect={setRaw} />
+          {/* …and once enough digits exist, who ELSE on the platform it could
+              be. omitYours: the vendor's own matches are already in the list
+              above with their real context. */}
+          <PlatformMatches typed={debounced} omitYours onSelect={setRaw} />
         </>
       ) : search.isPending ? (
         <CustomerProfileSkeleton />
