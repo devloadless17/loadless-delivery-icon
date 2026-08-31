@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { Search, Users } from 'lucide-react';
+import { Search, UserPlus, Users } from 'lucide-react';
 import { useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -16,6 +16,7 @@ import {
 import { Pagination, type PageMeta } from '@/components/pagination';
 import { Button } from '@/components/ui/button';
 import { CustomerManageDialog } from '@/features/admin/customers/manage-dialog';
+import { CustomerCreateDialog } from '@/features/customers/customer-create-dialog';
 import { displayDate, displayPhone } from '@/lib/format';
 import { useDebouncedValue } from '@/lib/use-debounced-value';
 
@@ -46,16 +47,22 @@ export default function AdminCustomersPage() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [managingId, setManagingId] = useState<string | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
   const q = useDebouncedValue(search, 300);
   const { data, isPending } = useAdminCustomers(page, q);
 
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="text-2xl font-semibold">Customers</h1>
-        <p className="text-sm text-muted-foreground">
-          The shared customer directory — one record per phone number, reused by every vendor.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold">Customers</h1>
+          <p className="text-sm text-muted-foreground">
+            The shared customer directory — one record per phone number, reused by every vendor.
+          </p>
+        </div>
+        <Button onClick={() => setCreateOpen(true)}>
+          <UserPlus /> New customer
+        </Button>
       </div>
 
       <div className="relative max-w-sm">
@@ -118,13 +125,18 @@ export default function AdminCustomersPage() {
           <Users className="size-8 text-muted-foreground" aria-hidden />
           <p className="font-medium">{q ? 'No customers match your search' : 'No customers yet'}</p>
           <p className="text-sm text-muted-foreground">
-            Customers are created by vendors during order entry.
+            Vendors create customers during order entry — or add one here.
           </p>
         </div>
       )}
       <CustomerManageDialog
         customerId={managingId}
         onOpenChange={(open) => !open && setManagingId(null)}
+      />
+      <CustomerCreateDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onCreated={(customer) => setManagingId(customer.id)}
       />
     </div>
   );

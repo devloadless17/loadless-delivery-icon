@@ -1,14 +1,11 @@
 'use client';
 
 import { createOrderSchema, CURRENCIES, type Currency } from '@loadless/shared';
-import { Banknote, MapPin, StickyNote, UserRound } from 'lucide-react';
-import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { Banknote, RotateCcw, StickyNote, TriangleAlert, UserRound } from 'lucide-react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { ApiError } from '@/lib/api-client';
-import { displayPhone } from '@/lib/format';
-import { MapsLinkField } from '@/components/maps-link';
-import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -20,38 +17,112 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Skeleton } from '@/components/ui/skeleton';
 import { useCustomerSearch } from '@/features/customers/api';
+import { CustomerProfilePanel } from '@/features/customers/customer-profile-panel';
+import { CustomerProfileSkeleton } from '@/features/customers/profile/profile-skeleton';
 import { PhoneSearchInput, usePhoneSearch } from '@/features/customers/phone-search';
 import { useCreateOrder } from '@/features/orders/api';
+import {
+  DeliverToStep,
+  initialDeliverState,
+  type DeliverState,
+} from '@/features/orders/new-order/deliver-to-step';
+import { takeOrderDraft, type OrderDraft } from '@/features/orders/order-draft';
 
-export default function NewOrderPage() {
+function NewOrderForm() {
   const router = useRouter();
+  const params = useSearchParams();
   const { raw, setRaw, normalized, isTyping } = usePhoneSearch();
   const search = useCustomerSearch(normalized);
   const createOrder = useCreateOrder();
 
   const [customerName, setCustomerName] = useState('');
-  const [addressText, setAddressText] = useState('');
-  const [mapsUrl, setMapsUrl] = useState('');
-  const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
-  const [saveAddress, setSaveAddress] = useState(false);
+  const [deliver, setDeliver] = useState<DeliverState>(initialDeliverState);
   const [charge, setCharge] = useState('');
   const [currency, setCurrency] = useState<Currency>('LBP');
   const [instructions, setInstructions] = useState('');
   const [notes, setNotes] = useState('');
+  const [repeatOf, setRepeatOf] = useState<string | null>(null);
+  const autoSelected = useRef(false);
+  /** Phone a prefill was applied for — so the reset below doesn't wipe it. */
+  const prefilledFor = useRef<string | null>(null);
+  /** undefined until the first run, so mount never counts as "changed". */
+  const previousPhone = useRef<string | null | undefined>(undefined);
 
   const customer = search.data?.customer ?? null;
   const phoneReady = normalized !== null && !isTyping;
-  const isNewCustomer = phoneReady && !search.isPending && customer === null;
+  const isNewCustomer = phoneReady && !search.isPending && !search.isError && customer === null;
 
-  function pickSavedAddress(id: string) {
-    const address = customer?.addresses.find((a) => a.id === id);
-    if (!address) return;
-    setSelectedAddressId(id);
-    setAddressText(address.addressText);
-    setMapsUrl(address.mapsUrl ?? '');
-    setSaveAddress(false);
+  // Apply a repeat/prefill draft exactly once, then clean the URL so a back
+  // navigation doesn't silently re-apply it over the vendor's edits.
+  useEffect(() => {
+    const phoneParam = params.get('phone');
+    const isRepeat = params.get('repeat') === '1';
+    if (!phoneParam && !isRepeat) return;
+
+    const draft: OrderDraft | null = isRepeat ? takeOrderDraft() : null;
+    if (draft) {
+      prefilledFor.current = draft.customerPhone;
+      setRaw(draft.customerPhone);
+      setDeliver({
+        ...initialDeliverState,
+        addressText: draft.addressText,
+        mapsUrl: draft.mapsUrl ?? '',
+      });
+      if (draft.charge) setCharge(draft.charge);
+      if (draft.currency) setCurrency(draft.currency);
+      if (draft.deliveryInstructions) setInstructions(draft.deliveryInstructions);
+      if (draft.sourceOrderNumber) setRepeatOf(draft.sourceOrderNumber);
+      autoSelected.current = true; // the draft's address wins over auto-select
+    } else if (phoneParam) {
+      setRaw(phoneParam);
+    }
+    router.replace('/vendor/orders/new', { scroll: false });
+    // Intentionally mount-only: a prefill applies once, and params are read
+    // imperatively above so later navigations can't re-trigger it.
+  }, []);
+
+  // Auto-select the usual address once, so the common case is zero taps —
+  // but the confirmation strip always states the choice, never silently.
+  useEffect(() => {
+    if (autoSelected.current || !customer || customer.addresses.length === 0) return;
+    const usual = customer.stats.topAddress?.addressText?.trim().toLowerCase();
+    const pick =
+      customer.addresses.find((a) => a.addressText.trim().toLowerCase() === usual) ??
+      (customer.addresses.length === 1 ? customer.addresses[0] : undefined);
+    if (!pick) return;
+    autoSelected.current = true;
+    setDeliver((prev) => ({
+      ...prev,
+      mode: 'saved',
+      selectedAddressId: pick.id,
+      addressText: pick.addressText,
+      mapsUrl: pick.mapsUrl ?? '',
+      saveToProfile: false,
+    }));
+  }, [customer]);
+
+  // A different customer means a fresh location decision. Two things must NOT
+  // trigger it: the initial mount (which would wipe a repeat prefill applied in
+  // the effect above), and the phone that prefill was applied for.
+  useEffect(() => {
+    const previous = previousPhone.current;
+    previousPhone.current = normalized;
+    if (previous === undefined || previous === normalized) return;
+    if (normalized && normalized === prefilledFor.current) {
+      prefilledFor.current = null; // consumed; later changes reset normally
+      return;
+    }
+    autoSelected.current = false;
+    setDeliver(initialDeliverState);
+  }, [normalized]);
+
+  function resetAll() {
+    setRepeatOf(null);
+    setDeliver(initialDeliverState);
+    setCharge('');
+    setInstructions('');
+    setNotes('');
   }
 
   async function submit() {
@@ -59,12 +130,17 @@ export default function NewOrderPage() {
       toast.error('Enter the customer’s phone number first.');
       return;
     }
+    if (search.isError) {
+      toast.error('Customer lookup failed — try the search again before creating the order.');
+      return;
+    }
     const input = {
       customerPhone: normalized,
       ...(isNewCustomer ? { customerName: customerName.trim() } : {}),
-      saveAddressToCustomer: saveAddress && selectedAddressId === null,
-      deliveryAddressText: addressText.trim(),
-      ...(mapsUrl.trim() ? { deliveryMapsUrl: mapsUrl.trim() } : {}),
+      saveAddressToCustomer: deliver.saveToProfile && deliver.selectedAddressId === null,
+      ...(deliver.saveToProfile ? { saveAddressLabel: deliver.saveLabel } : {}),
+      deliveryAddressText: deliver.addressText.trim(),
+      ...(deliver.mapsUrl.trim() ? { deliveryMapsUrl: deliver.mapsUrl.trim() } : {}),
       currency,
       deliveryCharge: charge.trim(),
       ...(notes.trim() ? { notes: notes.trim() } : {}),
@@ -75,7 +151,7 @@ export default function NewOrderPage() {
       toast.error(parsed.error.issues[0]?.message ?? 'Check the form and try again.');
       return;
     }
-    if (isNewCustomer && (!customerName.trim() || customerName.trim().length < 2)) {
+    if (isNewCustomer && customerName.trim().length < 2) {
       toast.error('Enter the customer’s name.');
       return;
     }
@@ -95,6 +171,21 @@ export default function NewOrderPage() {
         <p className="text-sm text-muted-foreground">Start with the customer&apos;s phone number.</p>
       </div>
 
+      {repeatOf && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/25 bg-primary/5 px-4 py-3">
+          <p className="flex items-center gap-2 text-sm">
+            <RotateCcw className="size-4 text-primary" aria-hidden />
+            <span>
+              Repeating <span className="data-mono font-semibold">{repeatOf}</span> — address, link
+              and charge are filled in.
+            </span>
+          </p>
+          <Button variant="ghost" size="sm" onClick={resetAll}>
+            Start fresh
+          </Button>
+        </div>
+      )}
+
       {/* 1 — customer */}
       <Card>
         <CardHeader className="pb-3">
@@ -106,17 +197,37 @@ export default function NewOrderPage() {
           <PhoneSearchInput value={raw} onChange={setRaw} autoFocus />
           {phoneReady &&
             (search.isPending ? (
-              <Skeleton className="h-10 w-full" />
-            ) : customer ? (
-              <div className="flex items-center justify-between rounded-md bg-primary/5 px-3 py-2.5">
-                <div>
-                  <p className="text-sm font-medium">{customer.name}</p>
-                  <p className="data-mono text-xs text-muted-foreground">
-                    {displayPhone(customer.normalizedPhone)}
-                  </p>
-                </div>
-                <span className="text-xs text-muted-foreground">Known customer</span>
+              <CustomerProfileSkeleton variant="compact" />
+            ) : search.isError ? (
+              <div className="flex items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-3.5 py-3">
+                <p className="flex items-center gap-2 text-sm">
+                  <TriangleAlert className="size-4 text-destructive" aria-hidden />
+                  Couldn&apos;t load this customer
+                </p>
+                <Button variant="outline" size="sm" onClick={() => void search.refetch()}>
+                  Try again
+                </Button>
               </div>
+            ) : customer ? (
+              <CustomerProfilePanel
+                profile={customer}
+                variant="compact"
+                orderActions="callback"
+                onUseDraft={(draft) => {
+                  prefilledFor.current = draft.customerPhone;
+                  setDeliver({
+                    ...initialDeliverState,
+                    addressText: draft.addressText,
+                    mapsUrl: draft.mapsUrl ?? '',
+                  });
+                  if (draft.charge) setCharge(draft.charge);
+                  if (draft.currency) setCurrency(draft.currency);
+                  if (draft.deliveryInstructions) setInstructions(draft.deliveryInstructions);
+                  if (draft.sourceOrderNumber) setRepeatOf(draft.sourceOrderNumber);
+                  autoSelected.current = true;
+                  toast.success('Filled in from their last order');
+                }}
+              />
             ) : (
               <div className="space-y-2">
                 <Label htmlFor="no-name">Customer name (new customer)</Label>
@@ -131,71 +242,8 @@ export default function NewOrderPage() {
         </CardContent>
       </Card>
 
-      {/* 2 — delivery location */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <MapPin className="size-4 text-primary" aria-hidden /> Deliver to
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {customer && customer.addresses.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {customer.addresses.map((address) => (
-                <button
-                  key={address.id}
-                  type="button"
-                  onClick={() => pickSavedAddress(address.id)}
-                  className={cn(
-                    'cursor-pointer rounded-full border px-3 py-1.5 text-xs font-medium transition-colors duration-150',
-                    selectedAddressId === address.id
-                      ? 'border-primary bg-primary/10 text-primary'
-                      : 'text-muted-foreground hover:border-primary/50 hover:text-foreground',
-                  )}
-                >
-                  {address.label === 'HOME' ? 'Home' : address.label === 'WORK' ? 'Work' : 'Other'} ·{' '}
-                  {address.addressText.slice(0, 28)}
-                  {address.addressText.length > 28 ? '…' : ''}
-                </button>
-              ))}
-            </div>
-          )}
-          <div className="space-y-2">
-            <Label htmlFor="no-address">Address for THIS order</Label>
-            <Input
-              id="no-address"
-              value={addressText}
-              onChange={(e) => {
-                setAddressText(e.target.value);
-                setSelectedAddressId(null);
-              }}
-              placeholder="Street, building, floor — e.g. Hamra st, Salame bldg, 3rd"
-            />
-            <p className="text-xs text-muted-foreground">
-              Changing it here never touches the customer&apos;s saved addresses.
-            </p>
-          </div>
-          <MapsLinkField
-            id="no-maps-link"
-            value={mapsUrl}
-            onChange={(v) => {
-              setMapsUrl(v);
-              setSelectedAddressId(null);
-            }}
-          />
-          {selectedAddressId === null && addressText.trim().length >= 3 && (
-            <label className="flex cursor-pointer items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={saveAddress}
-                onChange={(e) => setSaveAddress(e.target.checked)}
-                className="size-4 accent-[var(--primary)]"
-              />
-              Also save this address to the customer&apos;s profile
-            </label>
-          )}
-        </CardContent>
-      </Card>
+      {/* 2 — where it goes */}
+      <DeliverToStep customer={customer} state={deliver} onChange={setDeliver} />
 
       {/* 3 — charge & notes */}
       <Card>
@@ -218,9 +266,9 @@ export default function NewOrderPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label>Currency</Label>
+              <Label htmlFor="no-currency">Currency</Label>
               <Select value={currency} onValueChange={(v) => setCurrency(v as Currency)}>
-                <SelectTrigger>
+                <SelectTrigger id="no-currency">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -257,14 +305,17 @@ export default function NewOrderPage() {
         </CardContent>
       </Card>
 
-      <Button
-        size="lg"
-        className="w-full"
-        loading={createOrder.isPending}
-        onClick={() => void submit()}
-      >
+      <Button size="lg" className="w-full" loading={createOrder.isPending} onClick={() => void submit()}>
         Create order
       </Button>
     </div>
+  );
+}
+
+export default function NewOrderPage() {
+  return (
+    <Suspense fallback={null}>
+      <NewOrderForm />
+    </Suspense>
   );
 }

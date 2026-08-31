@@ -47,7 +47,8 @@ test.describe('shared customer system', () => {
 
     // add a WORK address, then archive it
     await page.getByRole('button', { name: 'Add address' }).click();
-    await page.getByRole('combobox').click();
+    const addForm = page.getByRole('form', { name: 'New address' });
+    await addForm.getByRole('combobox').click();
     await page.getByRole('option', { name: 'Work' }).click();
     await page.locator('#new-address').fill('Downtown, Bank street, Office 12');
     await page.getByRole('button', { name: 'Save address' }).click();
@@ -56,6 +57,8 @@ test.describe('shared customer system', () => {
 
     const workAddress = page.getByRole('listitem').filter({ hasText: 'Downtown, Bank street' });
     await workAddress.getByRole('button', { name: 'Remove address' }).click();
+    // Removal confirms inline (no modal) — one extra tap, no focus trap mid-call.
+    await page.getByRole('button', { name: 'Remove', exact: true }).click();
     await expect(page.getByText('Downtown, Bank street, Office 12')).toHaveCount(0);
 
     // ANOTHER vendor finds the same global customer — the core sharing promise

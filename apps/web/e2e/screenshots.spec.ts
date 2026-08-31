@@ -1,5 +1,5 @@
 import { test } from '@playwright/test';
-import { ADMIN, DRIVER1_PHONE, ensureDuty, loginAs, VENDOR } from './helpers';
+import { ADMIN, createOrderUI, DRIVER1_PHONE, ensureDuty, loginAs, VENDOR } from './helpers';
 
 /**
  * Design-review captures (not assertions) — run with:
@@ -36,6 +36,19 @@ test('capture key screens', async ({ browser }) => {
   const vendorCtx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const vendor = await vendorCtx.newPage();
   await loginAs(vendor, VENDOR, '/vendor');
+
+  // The customer-360 panel — the mid-call screen.
+  const { customerPhone } = await createOrderUI(vendor, { charge: '150000' });
+  await vendor.goto('/vendor/customers');
+  await vendor.getByPlaceholder('Customer phone — 03 123 456').fill(customerPhone);
+  await vendor.waitForTimeout(900);
+  await vendor.screenshot({ path: `${OUT}/10-customer-profile.png`, fullPage: true });
+  await vendor.emulateMedia({ colorScheme: 'dark' });
+  await vendor.evaluate(() => document.documentElement.classList.add('dark'));
+  await vendor.waitForTimeout(300);
+  await vendor.screenshot({ path: `${OUT}/11-customer-profile-dark.png`, fullPage: true });
+  await vendor.evaluate(() => document.documentElement.classList.remove('dark'));
+  await vendor.emulateMedia({ colorScheme: 'light' });
   await vendor.waitForTimeout(600);
   await vendor.screenshot({ path: `${OUT}/06-vendor-orders.png` });
   await vendor.goto('/vendor/orders/new');

@@ -1,0 +1,159 @@
+import { expect, test } from '@playwright/test';
+import { ADMIN, createOrderUI, loginAs, uniquePhone, VENDOR } from './helpers';
+
+/**
+ * The customer-360 panel: what a vendor sees while the customer is on the
+ * phone, and the repeat-order path that follows from it.
+ */
+test.describe('customer profile', () => {
+  test('a known customer shows history, stats and a usual address', async ({ page }) => {
+    await loginAs(page, VENDOR, '/vendor');
+
+    // Two orders to the same place, one elsewhere → "usual" is the repeated one.
+    const { customerPhone } = await createOrderUI(page, { charge: '100000' });
+    for (const address of ['Badaro, Sami el Solh Ave, Bldg 4', 'Verdun, side street 3']) {
+      await page.goto('/vendor/orders/new');
+      await page.getByPlaceholder('Customer phone — 03 123 456').fill(customerPhone);
+      await expect(page.getByText('E2E Order Customer')).toBeVisible();
+      // A saved-address picker only appears once they have one; without it the
+      // plain one-off field is already showing.
+      const somewhereElse = page.getByRole('radio', { name: /Somewhere else/ });
+      if (await somewhereElse.count()) await somewhereElse.click();
+      await page.getByLabel('Address for THIS order').fill(address);
+      await page.getByLabel('Amount').fill('100000');
+      await page.getByRole('button', { name: 'Create order' }).click();
+      await page.waitForURL((url) => /\/vendor\/orders\/[a-z0-9]{20,}$/.test(url.pathname));
+    }
+
+    await page.goto('/vendor/customers');
+    await page.getByPlaceholder('Customer phone — 03 123 456').fill(customerPhone);
+
+    // Identity + the sentence the vendor actually says next.
+    await expect(page.getByRole('heading', { name: /E2E Order Customer/ })).toBeVisible();
+    await expect(page.getByText('Last order').first()).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Repeat order' })).toBeVisible();
+
+    // Stats: 3 orders with this vendor, none delivered yet.
+    await expect(page.getByText('Orders with you')).toBeVisible();
+    await expect(page.getByText('3', { exact: true }).first()).toBeVisible();
+
+    // Their usual address is known from order history even though it was never
+    // saved to the profile — so the order form can offer it in one tap.
+    await page.goto('/vendor/orders/new');
+    await page.getByPlaceholder('Customer phone — 03 123 456').fill(customerPhone);
+    await expect(page.getByText('Usually delivered to')).toBeVisible();
+    await page.getByRole('button', { name: /Usually delivered to/ }).click();
+    await expect(page.getByLabel('Address for THIS order')).toHaveValue(
+      'Badaro, Sami el Solh Ave, Bldg 4',
+    );
+
+    await page.goto('/vendor/customers');
+    await page.getByPlaceholder('Customer phone — 03 123 456').fill(customerPhone);
+
+    // History tab is seeded from the same payload — no extra request needed.
+    await page.getByRole('tab', { name: /Orders/ }).click();
+    await expect(page.getByRole('button', { name: /^Repeat/ }).first()).toBeVisible();
+  });
+
+  test('repeat order prefills address, link and charge', async ({ page }) => {
+    await loginAs(page, VENDOR, '/vendor');
+    const phone = uniquePhone();
+
+    await page.goto('/vendor/orders/new');
+    await page.getByPlaceholder('Customer phone — 03 123 456').fill(phone);
+    await page.getByLabel('Customer name (new customer)').fill('Repeat Customer');
+    await page.getByLabel('Address for THIS order').fill('Achrafieh, Sassine, Bldg 9');
+    await page.locator('#no-maps-link').fill('https://maps.app.goo.gl/repeat1');
+    await page.getByLabel('Amount').fill('175000');
+    await page.getByRole('button', { name: 'Create order' }).click();
+    await page.waitForURL((url) => /\/vendor\/orders\/[a-z0-9]{20,}$/.test(url.pathname));
+
+    await page.goto('/vendor/customers');
+    await page.getByPlaceholder('Customer phone — 03 123 456').fill(phone);
+    await page.getByRole('button', { name: 'Repeat order' }).click();
+
+    await page.waitForURL('**/vendor/orders/new**');
+    await expect(page.getByText(/Repeating ORD-/)).toBeVisible();
+    await expect(page.getByLabel('Address for THIS order')).toHaveValue('Achrafieh, Sassine, Bldg 9');
+    await expect(page.locator('#no-maps-link')).toHaveValue('https://maps.app.goo.gl/repeat1');
+    await expect(page.getByLabel('Amount')).toHaveValue('175000');
+
+    // "Start fresh" clears the prefill rather than trapping the vendor in it.
+    await page.getByRole('button', { name: 'Start fresh' }).click();
+    await expect(page.getByLabel('Amount')).toHaveValue('');
+  });
+
+  test('an address can be corrected in place, mid-call', async ({ page }) => {
+    await loginAs(page, VENDOR, '/vendor');
+    const phone = uniquePhone();
+
+    await page.goto('/vendor/customers');
+    await page.getByPlaceholder('Customer phone — 03 123 456').fill(phone);
+    await page.getByLabel('Name').fill('Typo Customer');
+    await page.getByLabel('Address (optional)').fill('Hamra steet, Bldg 3');
+    await page.getByRole('button', { name: 'Create customer' }).click();
+    await expect(page.getByText('Customer created')).toBeVisible();
+
+    // Editing happens inline — no modal to sit through while on a call.
+    await page.getByRole('button', { name: 'Edit address' }).click();
+    const field = page.locator('input[value="Hamra steet, Bldg 3"]');
+    await field.fill('Hamra street, Bldg 3');
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(page.getByText('Address updated')).toBeVisible();
+    await expect(page.getByText('Hamra street, Bldg 3')).toBeVisible();
+  });
+
+  test('vendor and admin can both create a customer explicitly', async ({ page, browser }) => {
+    await loginAs(page, VENDOR, '/vendor');
+    const vendorPhone = uniquePhone();
+    await page.goto('/vendor/customers');
+    await page.getByRole('button', { name: 'New customer' }).click();
+
+    const dialog = page.getByRole('dialog');
+    await dialog.getByLabel('Phone number').fill(vendorPhone);
+    await dialog.getByLabel('Name').fill('Vendor Made Customer');
+    await dialog.getByRole('button', { name: 'Create customer' }).click();
+    await expect(page.getByText('Customer created')).toBeVisible();
+    // The search box follows the new customer straight into their profile.
+    await expect(page.getByRole('heading', { name: /Vendor Made Customer/ })).toBeVisible();
+
+    const adminCtx = await browser.newContext();
+    const admin = await adminCtx.newPage();
+    await loginAs(admin, ADMIN, '/admin');
+    await admin.goto('/admin/customers');
+    await admin.getByRole('button', { name: 'New customer' }).click();
+    const adminDialog = admin.getByRole('dialog');
+    await adminDialog.getByLabel('Phone number').fill(uniquePhone());
+    await adminDialog.getByLabel('Name').fill('Admin Made Customer');
+    await adminDialog.getByRole('button', { name: 'Create customer' }).click();
+    await expect(admin.getByText('Customer created')).toBeVisible();
+    await expect(admin.getByRole('dialog').getByText('Manage customer')).toBeVisible();
+    await adminCtx.close();
+  });
+
+  test('a second vendor sees the person but none of the first vendor\'s trade', async ({
+    browser,
+  }) => {
+    const ctxA = await browser.newContext();
+    const vendorA = await ctxA.newPage();
+    await loginAs(vendorA, VENDOR, '/vendor');
+    const { customerPhone } = await createOrderUI(vendorA, { charge: '90000' });
+
+    const ctxB = await browser.newContext();
+    const vendorB = await ctxB.newPage();
+    await loginAs(vendorB, 'vendor2@e2e.local', '/vendor');
+    await vendorB.goto('/vendor/customers');
+    await vendorB.getByPlaceholder('Customer phone — 03 123 456').fill(customerPhone);
+
+    // Identity is shared…
+    await expect(vendorB.getByRole('heading', { name: /E2E Order Customer/ })).toBeVisible();
+    // …but the other vendor's order history is not.
+    await expect(vendorB.getByText('No orders with you yet')).toHaveCount(0);
+    await vendorB.getByRole('tab', { name: /Orders/ }).click();
+    await expect(vendorB.getByText('No orders with you yet')).toBeVisible();
+    await expect(vendorB.getByText('on the platform')).toBeVisible();
+
+    await ctxA.close();
+    await ctxB.close();
+  });
+});

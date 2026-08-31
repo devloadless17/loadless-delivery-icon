@@ -55,7 +55,7 @@ export async function createOrderUI(
     .fill(opts.customerName ?? 'E2E Order Customer');
   await vendor.getByLabel('Address for THIS order').fill('Badaro, Sami el Solh Ave, Bldg 4');
   if (opts.currency && opts.currency !== 'LBP') {
-    await vendor.getByRole('combobox').click();
+    await vendor.locator('#no-currency').click();
     await vendor.getByRole('option', { name: opts.currency }).click();
   }
   await vendor.getByLabel('Amount').fill(opts.charge ?? '100000');

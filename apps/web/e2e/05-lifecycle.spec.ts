@@ -65,7 +65,7 @@ test.describe('order lifecycle', () => {
     expect(orderNumber).toMatch(/^ORD-/);
   });
 
-  test('saved address becomes a one-tap chip on the next order', async () => {
+  test('saved address becomes a one-tap card on the next order', async () => {
     const phone = uniquePhone();
 
     // first order: type the address and save it to the customer profile
@@ -73,7 +73,7 @@ test.describe('order lifecycle', () => {
     await vendor.getByPlaceholder('Customer phone — 03 123 456').fill(phone);
     await vendor.getByLabel('Customer name (new customer)').fill('Chip Customer');
     await vendor.getByLabel('Address for THIS order').fill('Jounieh, main highway, Bldg 2');
-    await vendor.getByText("Also save this address to the customer's profile").click();
+    await vendor.getByLabel("Also save this address to the customer's profile").click();
     await vendor.getByLabel('Amount').fill('50000');
     await vendor.getByRole('button', { name: 'Create order' }).click();
     await vendor.waitForURL('**/vendor/orders/**');
@@ -82,12 +82,11 @@ test.describe('order lifecycle', () => {
     await vendor.goto('/vendor/orders/new');
     await vendor.getByPlaceholder('Customer phone — 03 123 456').fill(phone);
     await expect(vendor.getByText('Chip Customer')).toBeVisible(); // known customer
-    const chip = vendor.getByRole('button', { name: /Other · Jounieh/ });
-    await expect(chip).toBeVisible();
-    await chip.click();
-    await expect(vendor.getByLabel('Address for THIS order')).toHaveValue(
-      'Jounieh, main highway, Bldg 2',
-    );
+    const card = vendor.getByRole('radio', { name: /Jounieh, main highway/ });
+    await expect(card).toBeVisible();
+    await card.click();
+    // A saved address is now confirmed in words rather than dropped into the input.
+    await expect(vendor.getByText('Jounieh, main highway, Bldg 2').first()).toBeVisible();
   });
 
   test('vendor cancels a PENDING order — with a required reason', async () => {
