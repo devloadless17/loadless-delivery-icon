@@ -1,9 +1,8 @@
 'use client';
 
 import { Search, TriangleAlert, UserPlus } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   Table,
@@ -16,25 +15,33 @@ import {
 import { Pagination } from '@/components/pagination';
 import { Button } from '@/components/ui/button';
 import { displayPhone, displayRelative } from '@/lib/format';
-import { useDebouncedValue } from '@/lib/use-debounced-value';
 import { useMyCustomers } from './api';
 
 /**
  * "My customers" — everyone this vendor added or has ordered for.
  *
- * It fills the space where the phone box would otherwise show an empty dashed
- * placeholder, so the page answers two different questions with one screen:
- * "who is this number?" (type it) and "who do I deliver to?" (just look).
+ * It sits under the one search box on the page, filtering live as the vendor
+ * types — a name, or any prefix of a number. So the screen answers both
+ * questions at once: "who is this number?" and "who do I deliver to?".
  *
- * Searching here is bounded to the vendor's own customers by the API. Anyone
- * else on the platform is still reachable — but only by typing their full
- * number, never by browsing.
+ * `q` is bounded to the vendor's own customers by the API. Someone they have
+ * never dealt with is still reachable — but only by typing a complete phone
+ * number, never by browsing or by guessing at a name.
  */
-export function MyCustomersList({ onSelect }: { onSelect: (phone: string) => void }) {
+export function MyCustomersList({
+  q,
+  onSelect,
+}: {
+  /** The live search text from the page's single box. */
+  q: string;
+  onSelect: (phone: string) => void;
+}) {
   const [page, setPage] = useState(1);
-  const [search, setSearch] = useState('');
-  const q = useDebouncedValue(search, 300);
   const { data, isPending, isError, refetch } = useMyCustomers({ page, q });
+
+  // A new search starts at page 1 — otherwise a narrow result set lands the
+  // vendor on an empty page 3 and looks like "no customers".
+  useEffect(() => setPage(1), [q]);
 
   // Defensive: this list shares a screen with the mid-call phone lookup, and
   // nothing about browsing is worth taking that lookup down for.
@@ -43,24 +50,10 @@ export function MyCustomersList({ onSelect }: { onSelect: (phone: string) => voi
 
   return (
     <section className="space-y-3" aria-label="My customers">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-sm font-semibold text-muted-foreground">
-          My customers
-          {meta ? <span className="ml-1.5 font-normal">({meta.total})</span> : null}
-        </h2>
-        <div className="relative w-full max-w-72">
-          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Filter by name or phone"
-            className="h-9 pl-9"
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(1);
-            }}
-          />
-        </div>
-      </div>
+      <h2 className="text-sm font-semibold text-muted-foreground">
+        {q ? 'Matching your customers' : 'My customers'}
+        {meta ? <span className="ml-1.5 font-normal">({meta.total})</span> : null}
+      </h2>
 
       {isError ? (
         <div className="flex flex-col items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/5 py-10 text-center">
@@ -157,6 +150,13 @@ export function MyCustomersList({ onSelect }: { onSelect: (phone: string) => voi
             </Table>
           </div>
           {meta && <Pagination meta={meta} onPageChange={setPage} />}
+          {/* Only alongside results — the empty state below says the same
+              thing in its own words, and saying it twice reads as a warning. */}
+          {/\d/.test(q) && (
+            <p className="text-sm text-muted-foreground">
+              Finish the number to open anyone on the platform.
+            </p>
+          )}
         </>
       ) : q ? (
         <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed py-10 text-center">

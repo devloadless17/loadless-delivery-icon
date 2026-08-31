@@ -1,5 +1,15 @@
 import { test } from '@playwright/test';
-import { ADMIN, createOrderUI, DRIVER1_PHONE, ensureDuty, loginAs, uniquePhone, VENDOR, VENDOR2 } from './helpers';
+import {
+  ADMIN,
+  createOrderUI,
+  CUSTOMER_SEARCH,
+  DRIVER1_PHONE,
+  ensureDuty,
+  loginAs,
+  uniquePhone,
+  VENDOR,
+  VENDOR2,
+} from './helpers';
 
 /**
  * Design-review captures (not assertions) — run with:
@@ -40,7 +50,7 @@ test('capture key screens', async ({ browser }) => {
   // The customer-360 panel — the mid-call screen.
   const { customerPhone } = await createOrderUI(vendor, { charge: '150000' });
   await vendor.goto('/vendor/customers');
-  await vendor.getByPlaceholder('Customer phone — 03 123 456').fill(customerPhone);
+  await vendor.getByPlaceholder(CUSTOMER_SEARCH).fill(customerPhone);
   await vendor.waitForTimeout(900);
   await vendor.screenshot({ path: `${OUT}/10-customer-profile.png`, fullPage: true });
   await vendor.emulateMedia({ colorScheme: 'dark' });
@@ -51,7 +61,7 @@ test('capture key screens', async ({ browser }) => {
   await vendor.emulateMedia({ colorScheme: 'light' });
 
   // "My customers" — the idle state of the same screen, light and dark.
-  await vendor.getByPlaceholder('Customer phone — 03 123 456').fill('');
+  await vendor.getByPlaceholder(CUSTOMER_SEARCH).fill('');
   await vendor.waitForTimeout(700);
   await vendor.screenshot({ path: `${OUT}/12-my-customers.png`, fullPage: true });
   await vendor.emulateMedia({ colorScheme: 'dark' });
@@ -78,7 +88,7 @@ test('capture key screens', async ({ browser }) => {
   // A customer vendor 1 owns, so vendor 2's view shows the read-only states.
   const sharedPhone = uniquePhone();
   await vendor.goto('/vendor/customers');
-  await vendor.getByPlaceholder('Customer phone — 03 123 456').fill(sharedPhone);
+  await vendor.getByPlaceholder(CUSTOMER_SEARCH).fill(sharedPhone);
   await vendor.getByLabel('Name').fill('Nadia Haddad');
   await vendor.getByLabel('Address (optional)').fill('Ashrafieh, Sassine square, Bldg 12');
   await vendor.getByRole('button', { name: 'Create customer' }).click();
@@ -89,7 +99,7 @@ test('capture key screens', async ({ browser }) => {
   const vendor2 = await vendor2Ctx.newPage();
   await loginAs(vendor2, VENDOR2, '/vendor');
   await vendor2.goto('/vendor/customers');
-  await vendor2.getByPlaceholder('Customer phone — 03 123 456').fill(sharedPhone);
+  await vendor2.getByPlaceholder(CUSTOMER_SEARCH).fill(sharedPhone);
   await vendor2.waitForTimeout(800);
   await vendor2.screenshot({ path: `${OUT}/15-address-ownership.png`, fullPage: true });
   await vendor2.getByRole('button', { name: 'Edit name' }).click();

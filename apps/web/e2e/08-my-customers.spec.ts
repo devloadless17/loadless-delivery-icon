@@ -1,5 +1,14 @@
 import { expect, test, type Page } from '@playwright/test';
-import { ADMIN, createOrderUI, loginAs, uniquePhone, VENDOR, VENDOR2 } from './helpers';
+import {
+  ADMIN,
+  createOrderUI,
+  CUSTOMER_SEARCH,
+  loginAs,
+  ORDER_PHONE,
+  uniquePhone,
+  VENDOR,
+  VENDOR2,
+} from './helpers';
 
 /**
  * The vendor <-> customer relationship, from both sides at once.
@@ -11,14 +20,11 @@ import { ADMIN, createOrderUI, loginAs, uniquePhone, VENDOR, VENDOR2 } from './h
  * vendor silently rewriting the first vendor's data.
  */
 
-const PHONE_BOX = 'Customer phone — 03 123 456';
-const FILTER_BOX = 'Filter by name or phone';
-
 async function openMyCustomers(page: Page) {
   await page.goto('/vendor/customers');
-  // The list only renders in the idle state; clear the box in case a previous
-  // action left a number in it.
-  await page.getByPlaceholder(PHONE_BOX).fill('');
+  // The list gives way to a profile once the box holds a complete number, so
+  // clear it in case a previous action left one there.
+  await page.getByPlaceholder(CUSTOMER_SEARCH).fill('');
   await expect(page.getByRole('region', { name: 'My customers' })).toBeVisible();
 }
 
@@ -45,6 +51,15 @@ test.describe('my customers', () => {
     // match a digit in the phone number.
     await expect(mine.getByRole('cell').nth(2)).toHaveText('1');
 
+    // Search as you type: a partial number, typed the local way, finds them
+    // without finishing it — and so does a piece of the name.
+    const search = vendorA.getByPlaceholder(CUSTOMER_SEARCH);
+    await search.fill(customerPhone.slice(0, 6));
+    await expect(row(vendorA, 'Relationship Customer')).toBeVisible();
+    await search.fill('lationship');
+    await expect(row(vendorA, 'Relationship Customer')).toBeVisible();
+    await search.fill('');
+
     // Clicking a row loads the SAME inline profile the phone search renders.
     await mine.click();
     await expect(
@@ -57,11 +72,12 @@ test.describe('my customers', () => {
     const vendorB = await ctxB.newPage();
     await loginAs(vendorB, VENDOR2, '/vendor');
     await openMyCustomers(vendorB);
-    await vendorB.getByPlaceholder(FILTER_BOX).fill('Relationship Customer');
+    await vendorB.getByPlaceholder(CUSTOMER_SEARCH).fill('Relationship Customer');
     await expect(vendorB.getByText('No match among your customers')).toBeVisible();
     await expect(vendorB.getByText('Relationship Customer')).toHaveCount(0);
 
-    await vendorB.getByPlaceholder(PHONE_BOX).fill(customerPhone);
+    // The full number still reaches them — that is the ONLY way in.
+    await vendorB.getByPlaceholder(CUSTOMER_SEARCH).fill(customerPhone);
     await expect(vendorB.getByRole('heading', { name: /Relationship Customer/ })).toBeVisible();
 
     await ctxA.close();
@@ -85,7 +101,7 @@ test.describe('my customers', () => {
 
     // B orders for the same person → the customer becomes theirs too.
     await vendorB.goto('/vendor/orders/new');
-    await vendorB.getByPlaceholder(PHONE_BOX).fill(customerPhone);
+    await vendorB.getByPlaceholder(ORDER_PHONE).fill(customerPhone);
     await expect(vendorB.getByText('Two Shop Customer')).toBeVisible();
     const somewhereElse = vendorB.getByRole('radio', { name: /Somewhere else/ });
     if (await somewhereElse.count()) await somewhereElse.click();
@@ -121,7 +137,7 @@ test.describe('my customers', () => {
     const vendorB = await ctxB.newPage();
     await loginAs(vendorB, VENDOR2, '/vendor');
     await vendorB.goto('/vendor/customers');
-    await vendorB.getByPlaceholder(PHONE_BOX).fill(customerPhone);
+    await vendorB.getByPlaceholder(CUSTOMER_SEARCH).fill(customerPhone);
     await expect(vendorB.getByRole('heading', { name: /Ahmad Original/ })).toBeVisible();
 
     // B did not add them, so the editor warns BEFORE the keystroke that this
@@ -139,7 +155,7 @@ test.describe('my customers', () => {
 
     // Vendor A's screen is untouched — the failure this feature exists to stop.
     await vendorA.goto('/vendor/customers');
-    await vendorA.getByPlaceholder(PHONE_BOX).fill(customerPhone);
+    await vendorA.getByPlaceholder(CUSTOMER_SEARCH).fill(customerPhone);
     await expect(vendorA.getByRole('heading', { name: /Ahmad Original/ })).toBeVisible();
     await expect(vendorA.getByText('Falafel regular')).toHaveCount(0);
     // A added them, so A holds the pen on the shared name.
@@ -162,7 +178,7 @@ test.describe('my customers', () => {
     const vendorA = await ctxA.newPage();
     await loginAs(vendorA, VENDOR, '/vendor');
     await vendorA.goto('/vendor/customers');
-    await vendorA.getByPlaceholder(PHONE_BOX).fill(phone);
+    await vendorA.getByPlaceholder(CUSTOMER_SEARCH).fill(phone);
     await vendorA.getByLabel('Name').fill('Address Owner Test');
     await vendorA.getByLabel('Address (optional)').fill('Gemmayze, Gouraud st, Bldg 5');
     await vendorA.getByRole('button', { name: 'Create customer' }).click();
@@ -172,7 +188,7 @@ test.describe('my customers', () => {
     const vendorB = await ctxB.newPage();
     await loginAs(vendorB, VENDOR2, '/vendor');
     await vendorB.goto('/vendor/customers');
-    await vendorB.getByPlaceholder(PHONE_BOX).fill(phone);
+    await vendorB.getByPlaceholder(CUSTOMER_SEARCH).fill(phone);
 
     // B can READ it — sharing is the point — but not rewrite it.
     await expect(vendorB.getByText('Gemmayze, Gouraud st, Bldg 5')).toBeVisible();
@@ -192,7 +208,7 @@ test.describe('my customers', () => {
     await expect(vendorB.getByRole('button', { name: 'Edit address' })).toHaveCount(1);
 
     await vendorA.goto('/vendor/customers');
-    await vendorA.getByPlaceholder(PHONE_BOX).fill(phone);
+    await vendorA.getByPlaceholder(CUSTOMER_SEARCH).fill(phone);
     await expect(vendorA.getByText('Gemmayze, Gouraud st, Bldg 5', { exact: true })).toBeVisible();
     await expect(vendorA.getByRole('button', { name: 'Edit address' })).toHaveCount(1);
     await expect(vendorA.getByText('Added by another vendor')).toBeVisible();

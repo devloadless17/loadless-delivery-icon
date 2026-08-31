@@ -8,6 +8,11 @@ export const VENDOR2 = 'vendor2@e2e.local';
 export const DRIVER1_PHONE = '71 999 888'; // 25% override
 export const DRIVER2_PHONE = '71 999 777'; // platform default 30%
 
+/** The single search box on /vendor/customers — name OR partial number. */
+export const CUSTOMER_SEARCH = 'Search by name or phone';
+/** The order form's box: a complete number is the only valid answer there. */
+export const ORDER_PHONE = 'Customer phone — 03 123 456';
+
 let phoneCounter = Date.now() % 1_000_000;
 
 /** Unique, valid Lebanese mobile per call — never collides across specs. */
@@ -51,7 +56,7 @@ export async function createOrderUI(
 ): Promise<CreatedOrder> {
   const customerPhone = uniquePhone();
   await vendor.goto('/vendor/orders/new');
-  await vendor.getByPlaceholder('Customer phone — 03 123 456').fill(customerPhone);
+  await vendor.getByPlaceholder(ORDER_PHONE).fill(customerPhone);
   await vendor
     .getByLabel('Customer name (new customer)')
     .fill(opts.customerName ?? 'E2E Order Customer');

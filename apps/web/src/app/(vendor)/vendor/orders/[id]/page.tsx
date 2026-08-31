@@ -1,8 +1,8 @@
 'use client';
 
-import { ArrowLeft, Phone, RotateCcw } from 'lucide-react';
+import { ArrowLeft, Phone } from 'lucide-react';
 import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { ApiError } from '@/lib/api-client';
@@ -21,14 +21,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useCancelOrder, useVendorOrder } from '@/features/orders/api';
-import { stashOrderDraft } from '@/features/orders/order-draft';
-import { displayAddress, fromMinorUnits } from '@loadless/shared';
+import { displayAddress } from '@loadless/shared';
 import { OrderStatusBadge } from '@/features/orders/order-status';
 import { OrderTimeline } from '@/features/orders/order-timeline';
 
 export default function VendorOrderDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const router = useRouter();
   const { data: order, isPending } = useVendorOrder(id);
   const cancelOrder = useCancelOrder();
   const [cancelOpen, setCancelOpen] = useState(false);
@@ -131,27 +129,6 @@ export default function VendorOrderDetailPage() {
           <p className="mt-3 text-xs text-muted-foreground">Created {displayDateTime(order.createdAt)}</p>
         </CardContent>
       </Card>
-
-      <Button
-        variant="outline"
-        className="w-full"
-        onClick={() => {
-          stashOrderDraft({
-            customerPhone: order.customer.normalizedPhone,
-            addressText: order.deliveryAddressText ?? '',
-            mapsUrl: order.deliveryMapsUrl,
-            charge: fromMinorUnits(order.deliveryCharge, order.currency),
-            currency: order.currency,
-            deliveryInstructions: order.deliveryInstructions,
-            sourceOrderNumber: order.orderNumber,
-          });
-          router.push(
-            `/vendor/orders/new?repeat=1&phone=${encodeURIComponent(order.customer.normalizedPhone)}`,
-          );
-        }}
-      >
-        <RotateCcw /> Repeat this order
-      </Button>
 
       {order.status === 'PENDING' && (
         <Button variant="destructive" className="w-full" onClick={() => setCancelOpen(true)}>

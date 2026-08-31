@@ -691,6 +691,32 @@ describe('customers (integration)', () => {
       await request(server).get('/api/v1/vendor/customers').set(auth(adminToken)).expect(403);
     });
 
+    it('finds a customer from a PARTIAL number typed the way people type it', async () => {
+      // Numbers are stored "+9613100101" — the leading 0 is dropped on the way
+      // in. Matching the literal typed "03 100 1" would find nothing, which is
+      // exactly the bug this asserts against.
+      for (const typed of ['03 100 1', '03100', '3 100 1', '+961 3 100 1']) {
+        const res = await request(server)
+          .get(`/api/v1/vendor/customers?q=${encodeURIComponent(typed)}`)
+          .set(auth(vendorAToken))
+          .expect(200);
+        const phones = res.body.data.map((r: { normalizedPhone: string }) => r.normalizedPhone);
+        expect(phones).toContain('+9613100101');
+        // …and the prefix still cannot reach vendor B's customer on the same one.
+        expect(phones).not.toContain('+9613100100');
+      }
+    });
+
+    it('finds a customer from a partial NAME, among mine only', async () => {
+      const res = await request(server)
+        .get('/api/v1/vendor/customers?q=finda')
+        .set(auth(vendorAToken))
+        .expect(200);
+      const names = res.body.data.map((r: { name: string }) => r.name);
+      expect(names).toContain('Findable Mine');
+      expect(names).not.toContain('Findable Person');
+    });
+
     it('creating a customer links them at zero orders; ordering counts up', async () => {
       const created = await request(server)
         .post('/api/v1/customers')
@@ -1006,6 +1032,17 @@ describe('customers (integration)', () => {
         .set(auth(vendorAToken))
         .expect(200);
       expect(asA.body.data.vendorLinks).toBeUndefined();
+    });
+
+    it('admin search matches a partial number in local format', async () => {
+      const res = await request(server)
+        .get(`/api/v1/admin/customers?q=${encodeURIComponent('03 100 1')}&limit=100`)
+        .set(auth(adminToken))
+        .expect(200);
+      const phones = res.body.data.map((c: { normalizedPhone: string }) => c.normalizedPhone);
+      // Admin sees the whole directory, so BOTH vendors' customers come back.
+      expect(phones).toContain('+9613100100');
+      expect(phones).toContain('+9613100101');
     });
 
     it('the directory can be narrowed to one vendor\'s customers', async () => {

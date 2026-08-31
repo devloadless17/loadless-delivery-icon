@@ -1,7 +1,7 @@
 'use client';
 
 import { createOrderSchema, CURRENCIES, type Currency } from '@loadless/shared';
-import { Banknote, RotateCcw, StickyNote, TriangleAlert, UserRound } from 'lucide-react';
+import { Banknote, StickyNote, TriangleAlert, UserRound } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
@@ -27,7 +27,6 @@ import {
   initialDeliverState,
   type DeliverState,
 } from '@/features/orders/new-order/deliver-to-step';
-import { takeOrderDraft, type OrderDraft } from '@/features/orders/order-draft';
 
 function NewOrderForm() {
   const router = useRouter();
@@ -42,10 +41,9 @@ function NewOrderForm() {
   const [currency, setCurrency] = useState<Currency>('LBP');
   const [instructions, setInstructions] = useState('');
   const [notes, setNotes] = useState('');
-  const [repeatOf, setRepeatOf] = useState<string | null>(null);
   const autoSelected = useRef(false);
-  /** Phone a prefill was applied for — so the reset below doesn't wipe it. */
-  const prefilledFor = useRef<string | null>(null);
+  /** ?addressId= — one saved address to preselect, applied once, then dropped. */
+  const preselectAddressId = useRef<string | null>(null);
   /** undefined until the first run, so mount never counts as "changed". */
   const previousPhone = useRef<string | null | undefined>(undefined);
 
@@ -53,44 +51,38 @@ function NewOrderForm() {
   const phoneReady = normalized !== null && !isTyping;
   const isNewCustomer = phoneReady && !search.isPending && !search.isError && customer === null;
 
-  // Apply a repeat/prefill draft exactly once, then clean the URL so a back
-  // navigation doesn't silently re-apply it over the vendor's edits.
+  // The form ALWAYS opens blank. The only things a link may carry are who the
+  // order is for and which saved address to start on — never an amount, notes
+  // or instructions from a previous delivery. Read once, then the URL is
+  // cleaned so a back navigation can't re-apply anything over live edits.
   useEffect(() => {
     const phoneParam = params.get('phone');
-    const isRepeat = params.get('repeat') === '1';
-    if (!phoneParam && !isRepeat) return;
-
-    const draft: OrderDraft | null = isRepeat ? takeOrderDraft() : null;
-    if (draft) {
-      prefilledFor.current = draft.customerPhone;
-      setRaw(draft.customerPhone);
-      setDeliver({
-        ...initialDeliverState,
-        addressText: draft.addressText,
-        mapsUrl: draft.mapsUrl ?? '',
-      });
-      if (draft.charge) setCharge(draft.charge);
-      if (draft.currency) setCurrency(draft.currency);
-      if (draft.deliveryInstructions) setInstructions(draft.deliveryInstructions);
-      if (draft.sourceOrderNumber) setRepeatOf(draft.sourceOrderNumber);
-      autoSelected.current = true; // the draft's address wins over auto-select
-    } else if (phoneParam) {
-      setRaw(phoneParam);
-    }
+    if (!phoneParam) return;
+    preselectAddressId.current = params.get('addressId');
+    setRaw(phoneParam);
     router.replace('/vendor/orders/new', { scroll: false });
-    // Intentionally mount-only: a prefill applies once, and params are read
-    // imperatively above so later navigations can't re-trigger it.
+    // Intentionally mount-only: params are read imperatively above, so later
+    // navigations can't re-trigger this.
   }, []);
 
   // Auto-select the usual address once, so the common case is zero taps —
   // but the confirmation strip always states the choice, never silently.
   useEffect(() => {
     if (autoSelected.current || !customer || customer.addresses.length === 0) return;
+    // An address named in the link wins: the vendor already picked it on the
+    // profile, and second-guessing them there would be the silent-carry-over
+    // behaviour this form no longer does.
+    const requested = preselectAddressId.current
+      ? customer.addresses.find((a) => a.id === preselectAddressId.current)
+      : undefined;
+    preselectAddressId.current = null; // applies once
     const usual = customer.stats.topAddress?.addressText?.trim().toLowerCase();
     const pick =
+      requested ??
       (usual
         ? customer.addresses.find((a) => a.addressText?.trim().toLowerCase() === usual)
-        : undefined) ?? (customer.addresses.length === 1 ? customer.addresses[0] : undefined);
+        : undefined) ??
+      (customer.addresses.length === 1 ? customer.addresses[0] : undefined);
     if (!pick) return;
     autoSelected.current = true;
     setDeliver((prev) => ({
@@ -103,28 +95,15 @@ function NewOrderForm() {
     }));
   }, [customer]);
 
-  // A different customer means a fresh location decision. Two things must NOT
-  // trigger it: the initial mount (which would wipe a repeat prefill applied in
-  // the effect above), and the phone that prefill was applied for.
+  // A different customer means a fresh location decision. The initial mount
+  // must not count as a change, or a ?phone= link would reset itself.
   useEffect(() => {
     const previous = previousPhone.current;
     previousPhone.current = normalized;
     if (previous === undefined || previous === normalized) return;
-    if (normalized && normalized === prefilledFor.current) {
-      prefilledFor.current = null; // consumed; later changes reset normally
-      return;
-    }
     autoSelected.current = false;
     setDeliver(initialDeliverState);
   }, [normalized]);
-
-  function resetAll() {
-    setRepeatOf(null);
-    setDeliver(initialDeliverState);
-    setCharge('');
-    setInstructions('');
-    setNotes('');
-  }
 
   async function submit() {
     if (!normalized) {
@@ -172,21 +151,6 @@ function NewOrderForm() {
         <p className="text-sm text-muted-foreground">Start with the customer&apos;s phone number.</p>
       </div>
 
-      {repeatOf && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/25 bg-primary/5 px-4 py-3">
-          <p className="flex items-center gap-2 text-sm">
-            <RotateCcw className="size-4 text-primary" aria-hidden />
-            <span>
-              Repeating <span className="data-mono font-semibold">{repeatOf}</span> — address, link
-              and charge are filled in.
-            </span>
-          </p>
-          <Button variant="ghost" size="sm" onClick={resetAll}>
-            Start fresh
-          </Button>
-        </div>
-      )}
-
       {/* 1 — customer */}
       <Card>
         <CardHeader className="pb-3">
@@ -210,25 +174,7 @@ function NewOrderForm() {
                 </Button>
               </div>
             ) : customer ? (
-              <CustomerProfilePanel
-                profile={customer}
-                variant="compact"
-                orderActions="callback"
-                onUseDraft={(draft) => {
-                  prefilledFor.current = draft.customerPhone;
-                  setDeliver({
-                    ...initialDeliverState,
-                    addressText: draft.addressText,
-                    mapsUrl: draft.mapsUrl ?? '',
-                  });
-                  if (draft.charge) setCharge(draft.charge);
-                  if (draft.currency) setCurrency(draft.currency);
-                  if (draft.deliveryInstructions) setInstructions(draft.deliveryInstructions);
-                  if (draft.sourceOrderNumber) setRepeatOf(draft.sourceOrderNumber);
-                  autoSelected.current = true;
-                  toast.success('Filled in from their last order');
-                }}
-              />
+              <CustomerProfilePanel profile={customer} variant="compact" orderActions="none" />
             ) : (
               <div className="space-y-2">
                 <Label htmlFor="no-name">Customer name (new customer)</Label>

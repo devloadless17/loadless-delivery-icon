@@ -46,3 +46,25 @@ export function formatLebanesePhone(normalized: string): string {
   }
   return `${nsn.slice(0, 2)} ${nsn.slice(2, 5)} ${nsn.slice(5)}`;
 }
+
+/**
+ * The NSN digits to PREFIX-match a stored number against, from whatever the
+ * user has typed so far. Unlike normalizeLebanesePhone this never rejects an
+ * incomplete number — it is for searching, not for storing.
+ *
+ *   "03 12"        -> "312"
+ *   "70 12"        -> "7012"
+ *   "+961 3 123"   -> "3123"
+ *   "Ahmad"        -> ""      (no digits: caller should search by name)
+ *
+ * Dropping the leading 0 matters: numbers are stored as "+9613123456", so a
+ * naive contains-match on the typed "03123456" finds nothing at all.
+ */
+export function phoneSearchDigits(input: string): string {
+  let digits = input.replace(/[^\d+]/g, '');
+  if (digits.startsWith('+')) digits = digits.slice(1);
+  if (digits.startsWith('00961')) digits = digits.slice(5);
+  else if (digits.startsWith('961')) digits = digits.slice(3);
+  if (digits.startsWith('0')) digits = digits.slice(1);
+  return digits;
+}

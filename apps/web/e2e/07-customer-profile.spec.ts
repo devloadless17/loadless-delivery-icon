@@ -1,5 +1,14 @@
 import { expect, test } from '@playwright/test';
-import { ADMIN, createOrderUI, loginAs, uniquePhone, VENDOR, VENDOR2 } from './helpers';
+import {
+  ADMIN,
+  createOrderUI,
+  CUSTOMER_SEARCH,
+  loginAs,
+  ORDER_PHONE,
+  uniquePhone,
+  VENDOR,
+  VENDOR2,
+} from './helpers';
 
 /**
  * The customer-360 panel: what a vendor sees while the customer is on the
@@ -13,7 +22,7 @@ test.describe('customer profile', () => {
     const { customerPhone } = await createOrderUI(page, { charge: '100000' });
     for (const address of ['Badaro, Sami el Solh Ave, Bldg 4', 'Verdun, side street 3']) {
       await page.goto('/vendor/orders/new');
-      await page.getByPlaceholder('Customer phone — 03 123 456').fill(customerPhone);
+      await page.getByPlaceholder(ORDER_PHONE).fill(customerPhone);
       await expect(page.getByText('E2E Order Customer')).toBeVisible();
       // A saved-address picker only appears once they have one; without it the
       // plain one-off field is already showing.
@@ -26,12 +35,11 @@ test.describe('customer profile', () => {
     }
 
     await page.goto('/vendor/customers');
-    await page.getByPlaceholder('Customer phone — 03 123 456').fill(customerPhone);
+    await page.getByPlaceholder(CUSTOMER_SEARCH).fill(customerPhone);
 
     // Identity + the sentence the vendor actually says next.
     await expect(page.getByRole('heading', { name: /E2E Order Customer/ })).toBeVisible();
     await expect(page.getByText('Last order').first()).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Repeat order' })).toBeVisible();
 
     // Stats: 3 orders with this vendor, none delivered yet. Scoped to the
     // cell — a bare getByText('3') matches any stray digit on the page.
@@ -42,7 +50,7 @@ test.describe('customer profile', () => {
     // Their usual address is known from order history even though it was never
     // saved to the profile — so the order form can offer it in one tap.
     await page.goto('/vendor/orders/new');
-    await page.getByPlaceholder('Customer phone — 03 123 456').fill(customerPhone);
+    await page.getByPlaceholder(ORDER_PHONE).fill(customerPhone);
     await expect(page.getByText('Usually delivered to')).toBeVisible();
     await page.getByRole('button', { name: /Usually delivered to/ }).click();
     await expect(page.getByLabel('Address for THIS order')).toHaveValue(
@@ -50,38 +58,70 @@ test.describe('customer profile', () => {
     );
 
     await page.goto('/vendor/customers');
-    await page.getByPlaceholder('Customer phone — 03 123 456').fill(customerPhone);
+    await page.getByPlaceholder(CUSTOMER_SEARCH).fill(customerPhone);
 
     // History tab is seeded from the same payload — no extra request needed.
     await page.getByRole('tab', { name: /Orders/ }).click();
-    await expect(page.getByRole('button', { name: /^Repeat/ }).first()).toBeVisible();
+    await expect(page.getByText('Badaro, Sami el Solh Ave, Bldg 4').first()).toBeVisible();
   });
 
-  test('repeat order prefills address, link and charge', async ({ page }) => {
+  test('every order starts blank — nothing rides along from the last one', async ({ page }) => {
     await loginAs(page, VENDOR, '/vendor');
     const phone = uniquePhone();
 
+    // A first order with a distinctive charge and instructions.
     await page.goto('/vendor/orders/new');
-    await page.getByPlaceholder('Customer phone — 03 123 456').fill(phone);
-    await page.getByLabel('Customer name (new customer)').fill('Repeat Customer');
+    await page.getByPlaceholder(ORDER_PHONE).fill(phone);
+    await page.getByLabel('Customer name (new customer)').fill('Fresh Start Customer');
     await page.getByLabel('Address for THIS order').fill('Achrafieh, Sassine, Bldg 9');
-    await page.locator('#no-maps-link').fill('https://maps.app.goo.gl/repeat1');
+    await page.locator('#no-maps-link').fill('https://maps.app.goo.gl/fresh1');
+    await page.getByLabel('Delivery instructions (optional)').fill('Ring twice');
     await page.getByLabel('Amount').fill('175000');
     await page.getByRole('button', { name: 'Create order' }).click();
     await page.waitForURL((url) => /\/vendor\/orders\/[a-z0-9]{20,}$/.test(url.pathname));
 
+    // The profile offers no way to repeat it — that path is gone on purpose.
     await page.goto('/vendor/customers');
-    await page.getByPlaceholder('Customer phone — 03 123 456').fill(phone);
-    await page.getByRole('button', { name: 'Repeat order' }).click();
+    await page.getByPlaceholder(CUSTOMER_SEARCH).fill(phone);
+    await expect(page.getByRole('heading', { name: /Fresh Start Customer/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Repeat/ })).toHaveCount(0);
+
+    // A second order for the SAME customer starts empty: the saved address may
+    // be preselected, but no amount and no instructions carry over.
+    await page.goto('/vendor/orders/new');
+    await page.getByPlaceholder(ORDER_PHONE).fill(phone);
+    await expect(page.getByText('Fresh Start Customer')).toBeVisible();
+    await expect(page.getByLabel('Amount')).toHaveValue('');
+    await expect(page.getByLabel('Delivery instructions (optional)')).toHaveValue('');
+    await expect(page.getByText(/Repeating ORD-/)).toHaveCount(0);
+  });
+
+  test('"Start order here" carries the chosen address and nothing else', async ({ page }) => {
+    await loginAs(page, VENDOR, '/vendor');
+    const phone = uniquePhone();
+
+    await page.goto('/vendor/customers');
+    await page.getByPlaceholder(CUSTOMER_SEARCH).fill(phone);
+    await page.getByLabel('Name').fill('Two Address Customer');
+    await page.getByLabel('Address (optional)').fill('Hamra, Bliss street, Bldg 1');
+    await page.getByRole('button', { name: 'Create customer' }).click();
+    await expect(page.getByText('Customer created')).toBeVisible();
+
+    // A second address, so the pick is genuinely ambiguous without the link.
+    await page.getByRole('button', { name: 'Add address' }).click();
+    await page.locator('#new-address').fill('Jounieh, Maameltein, Bldg 7');
+    await page.getByRole('button', { name: 'Save address' }).click();
+    await expect(page.getByText('Address saved')).toBeVisible();
+
+    await page
+      .getByRole('listitem')
+      .filter({ hasText: 'Jounieh, Maameltein' })
+      .getByRole('button', { name: 'Start order here' })
+      .click();
 
     await page.waitForURL('**/vendor/orders/new**');
-    await expect(page.getByText(/Repeating ORD-/)).toBeVisible();
-    await expect(page.getByLabel('Address for THIS order')).toHaveValue('Achrafieh, Sassine, Bldg 9');
-    await expect(page.locator('#no-maps-link')).toHaveValue('https://maps.app.goo.gl/repeat1');
-    await expect(page.getByLabel('Amount')).toHaveValue('175000');
-
-    // "Start fresh" clears the prefill rather than trapping the vendor in it.
-    await page.getByRole('button', { name: 'Start fresh' }).click();
+    // That exact address is chosen — and the charge is still empty.
+    await expect(page.getByText('Jounieh, Maameltein, Bldg 7').first()).toBeVisible();
     await expect(page.getByLabel('Amount')).toHaveValue('');
   });
 
@@ -90,7 +130,7 @@ test.describe('customer profile', () => {
     const phone = uniquePhone();
 
     await page.goto('/vendor/customers');
-    await page.getByPlaceholder('Customer phone — 03 123 456').fill(phone);
+    await page.getByPlaceholder(CUSTOMER_SEARCH).fill(phone);
     await page.getByLabel('Name').fill('Typo Customer');
     await page.getByLabel('Address (optional)').fill('Hamra steet, Bldg 3');
     await page.getByRole('button', { name: 'Create customer' }).click();
@@ -145,7 +185,7 @@ test.describe('customer profile', () => {
     const vendorB = await ctxB.newPage();
     await loginAs(vendorB, VENDOR2, '/vendor');
     await vendorB.goto('/vendor/customers');
-    await vendorB.getByPlaceholder('Customer phone — 03 123 456').fill(customerPhone);
+    await vendorB.getByPlaceholder(CUSTOMER_SEARCH).fill(customerPhone);
 
     // Identity is shared…
     await expect(vendorB.getByRole('heading', { name: /E2E Order Customer/ })).toBeVisible();

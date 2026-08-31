@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type { MyCustomersFilter } from '@loadless/shared';
+import { phoneSearchDigits, type MyCustomersFilter } from '@loadless/shared';
 import { Prisma } from '@prisma/client';
 import { offsetMeta } from '../common/pagination';
 import { PrismaService } from '../prisma/prisma.service';
@@ -41,12 +41,34 @@ export class CustomerDirectoryService {
     const vendorId = vendorCustomerScope(actor);
 
     const q = filter.q?.trim();
-    // Phones are stored as +961…; a vendor types "70 123 456" or "03123456".
-    const digits = q ? q.replace(/\D/g, '') : '';
+    // Search as they type: any prefix of a name, or any prefix of a number.
+    //
+    // The phone half must go through phoneSearchDigits — numbers are stored as
+    // "+9613123456" with the leading 0 dropped, so matching the literal typed
+    // "03 12" would find nothing. Anchored with a prefix LIKE rather than a
+    // contains: people read numbers left to right, and '+961…%' can ride the
+    // index instead of scanning.
+    const digits = q ? phoneSearchDigits(q) : '';
+    const like = `%${q}%`;
+    // Split rather than COALESCE(display_name, name): each side can then use
+    // its own trigram index, and a vendor who renamed someone can still find
+    // them by the name the rest of the platform uses.
     const search = q
       ? Prisma.sql`AND (
-          COALESCE(cv."display_name", c."name") ILIKE ${'%' + q + '%'}
-          ${digits.length >= 3 ? Prisma.sql`OR c."normalized_phone" LIKE ${'%' + digits + '%'}` : Prisma.empty}
+          c."name" ILIKE ${like} OR cv."display_name" ILIKE ${like}
+          ${digits ? Prisma.sql`OR c."normalized_phone" LIKE ${'+961' + digits + '%'}` : Prisma.empty}
+        )`
+      : Prisma.empty;
+    // The count must stay ANCHORED on customer_vendors. Written as a join with
+    // the filter on c.*, the planner flips it into a sequential scan of every
+    // customer on the platform (measured: 120k-row seq scan, 21ms per
+    // keystroke). EXISTS keeps the vendor's own links as the driving table.
+    const countSearch = q
+      ? Prisma.sql`AND (
+          cv."display_name" ILIKE ${like}
+          ${digits ? Prisma.sql`OR c."normalized_phone" LIKE ${'+961' + digits + '%'}` : Prisma.empty}
+          OR EXISTS (SELECT 1 FROM "customers" c2
+                      WHERE c2."id" = cv."customer_id" AND c2."name" ILIKE ${like})
         )`
       : Prisma.empty;
 
@@ -86,9 +108,16 @@ export class CustomerDirectoryService {
       SELECT COUNT(*) AS count
       FROM "customer_vendors" cv
       JOIN "customers" c ON c."id" = cv."customer_id"
-      WHERE cv."vendor_id" = ${vendorId} ${search}`;
+      WHERE cv."vendor_id" = ${vendorId} ${countSearch}`;
 
-    const [rows, totalRows] = await this.prisma.$transaction([rowsQuery, totalQuery]);
+    // Promise.all, NOT $transaction: a transaction pins both statements to one
+    // connection and runs them back to back, so the request pays their latency
+    // in series (measured 38ms -> 20ms for a vendor with ~10k customers). The
+    // snapshot consistency a transaction would buy is worth nothing here — the
+    // page and the total feed a list that changes under the reader anyway.
+    // (The customer profile keeps its transaction for the opposite reason: its
+    // numbers are compared against each other on screen.)
+    const [rows, totalRows] = await Promise.all([rowsQuery, totalQuery]);
 
     return {
       data: rows.map((row) => ({

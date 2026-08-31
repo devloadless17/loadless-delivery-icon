@@ -8,22 +8,23 @@ import { Card } from '@/components/ui/card';
 import { Segmented } from '@/components/ui/segmented';
 import { displayPhone, displayRelative } from '@/lib/format';
 import { cn } from '@/lib/utils';
-import { draftFromOrder, stashOrderDraft, type OrderDraft } from '@/features/orders/order-draft';
 import { AddressManager } from './addresses/address-manager';
 import { IdentityHeader } from './profile/identity-header';
-import { LastOrderLine } from './profile/last-order-line';
 import { RecentOrders } from './profile/recent-orders';
 import { StatStrip } from './profile/stat-strip';
-import type { CustomerAddress, CustomerOrder, CustomerProfile } from './api';
+import type { CustomerAddress, CustomerProfile } from './api';
 
 type Tab = 'addresses' | 'orders';
 
 export interface CustomerProfilePanelProps {
   profile: CustomerProfile;
   variant?: 'full' | 'compact';
-  /** 'navigate' pushes to the order form; 'callback' fills the form in place. */
-  orderActions?: 'navigate' | 'callback' | 'none';
-  onUseDraft?: (draft: OrderDraft) => void;
+  /**
+   * Whether this panel offers to start an order. There is deliberately no
+   * "repeat the last one": every order begins from a blank form, so nothing
+   * from a previous delivery can ride along unnoticed into a new one.
+   */
+  orderActions?: 'navigate' | 'none';
   className?: string;
 }
 
@@ -36,38 +37,27 @@ export function CustomerProfilePanel({
   profile,
   variant = 'full',
   orderActions = 'navigate',
-  onUseDraft,
   className,
 }: CustomerProfilePanelProps) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>('addresses');
   const [editingName, setEditingName] = useState(false);
 
-  const lastOrder = profile.recentOrders[0];
   // PLATFORM scope means admin: they may correct any address, whoever added it.
   const isPlatform = profile.stats.scope === 'PLATFORM';
   const usualAddressText = profile.stats.topAddress?.addressText ?? null;
 
-  function applyDraft(draft: OrderDraft) {
-    if (orderActions === 'callback' && onUseDraft) {
-      onUseDraft(draft);
-      return;
-    }
-    stashOrderDraft(draft);
-    router.push(
-      `/vendor/orders/new?repeat=1&phone=${encodeURIComponent(profile.normalizedPhone)}`,
-    );
-  }
-
-  const repeat = (order: CustomerOrder, customer: CustomerProfile) =>
-    applyDraft(draftFromOrder(order, customer));
-
+  /**
+   * Open a blank order form on this customer, with one saved address already
+   * chosen. Carried in the URL rather than stashed state: an address id is
+   * short, survives a refresh, and is the ONLY thing that travels — no charge,
+   * no notes, nothing from any previous order.
+   */
   const startFromAddress = (address: CustomerAddress) =>
-    applyDraft({
-      customerPhone: profile.normalizedPhone,
-      addressText: address.addressText ?? '',
-      mapsUrl: address.mapsUrl,
-    });
+    router.push(
+      `/vendor/orders/new?phone=${encodeURIComponent(profile.normalizedPhone)}` +
+        `&addressId=${encodeURIComponent(address.id)}`,
+    );
 
   if (variant === 'compact') {
     return (
@@ -89,15 +79,6 @@ export function CustomerProfilePanel({
               ? `First order with you — ${profile.stats.totalOrdersPlatform} on the platform`
               : 'First order on the platform'}
         </p>
-        {lastOrder && (
-          <LastOrderLine
-            order={lastOrder}
-            customer={profile}
-            dense
-            onRepeat={repeat}
-            repeatLabel="Use last order"
-          />
-        )}
       </div>
     );
   }
@@ -124,7 +105,6 @@ export function CustomerProfilePanel({
             ) : undefined
           }
         />
-        {lastOrder && <LastOrderLine order={lastOrder} customer={profile} onRepeat={repeat} />}
       </div>
 
       <StatStrip stats={profile.stats} />
@@ -147,7 +127,7 @@ export function CustomerProfilePanel({
             {...(orderActions !== 'none' ? { onStartOrder: startFromAddress } : {})}
           />
         ) : (
-          <RecentOrders customer={profile} onRepeat={repeat} />
+          <RecentOrders customer={profile} />
         )}
         <p className="text-xs text-muted-foreground">
           {displayPhone(profile.normalizedPhone)} is shared across the platform. You can edit what

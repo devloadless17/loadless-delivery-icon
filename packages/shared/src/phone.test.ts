@@ -3,6 +3,7 @@ import {
   formatLebanesePhone,
   isNormalizedLebanesePhone,
   normalizeLebanesePhone,
+  phoneSearchDigits,
 } from './phone';
 
 describe('normalizeLebanesePhone', () => {
@@ -66,5 +67,30 @@ describe('formatLebanesePhone', () => {
     expect(formatLebanesePhone('+9613123456')).toBe('03 123 456');
     expect(formatLebanesePhone('+96170123456')).toBe('70 123 456');
     expect(formatLebanesePhone('+9611344970')).toBe('01 344 970');
+  });
+});
+
+describe('phoneSearchDigits', () => {
+  it.each([
+    ['03 12', '312'],
+    ['03123456', '3123456'],
+    ['3 123', '3123'],
+    ['70 12', '7012'],
+    ['+961 3 123', '3123'],
+    ['009613 12', '312'],
+    ['9613123456', '3123456'],
+    ['', ''],
+    ['Ahmad', ''],
+  ])('%s -> %s', (input, expected) => {
+    expect(phoneSearchDigits(input)).toBe(expected);
+  });
+
+  it('is a prefix of the stored number for every partial spelling', () => {
+    const stored = normalizeLebanesePhone('03 123 456');
+    expect(stored).toBe('+9613123456');
+    for (const partial of ['0', '03', '03 1', '03 12', '03 123', '03 123 456']) {
+      const digits = phoneSearchDigits(partial);
+      expect(`+961${digits}`).toBe(stored!.slice(0, 4 + digits.length));
+    }
   });
 });

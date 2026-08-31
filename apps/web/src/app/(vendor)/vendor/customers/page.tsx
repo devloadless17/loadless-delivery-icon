@@ -12,10 +12,14 @@ import { CustomerProfileSkeleton } from '@/features/customers/profile/profile-sk
 import { PhoneSearchInput, usePhoneSearch } from '@/features/customers/phone-search';
 
 export default function VendorCustomersPage() {
-  const { raw, setRaw, normalized, isTyping } = usePhoneSearch();
+  const { raw, setRaw, normalized, isTyping, debounced } = usePhoneSearch();
   const search = useCustomerSearch(normalized);
   const [createOpen, setCreateOpen] = useState(false);
 
+  // A COMPLETE phone number opens that person's profile directly — including
+  // someone this vendor has never served, which is the mid-call path.
+  // Anything else (a name, a half-typed number) filters their own customers
+  // below as they type.
   const showResult = normalized !== null && !isTyping;
 
   return (
@@ -24,7 +28,7 @@ export default function VendorCustomersPage() {
         <div>
           <h1 className="text-2xl font-semibold">Customers</h1>
           <p className="text-sm text-muted-foreground">
-            Your customers are below. Type any phone number to reach anyone on the platform.
+            Start typing a name or number. A full phone number reaches anyone on the platform.
           </p>
         </div>
         <Button onClick={() => setCreateOpen(true)}>
@@ -33,18 +37,13 @@ export default function VendorCustomersPage() {
       </div>
 
       <div className="sticky top-14 z-10 -mx-4 bg-background/95 px-4 py-2 backdrop-blur">
-        <PhoneSearchInput value={raw} onChange={setRaw} autoFocus />
+        <PhoneSearchInput value={raw} onChange={setRaw} autoFocus mode="any" />
       </div>
 
       {!showResult ? (
-        raw.trim() === '' ? (
-          // Idle state only. The moment a phone number is typed this unmounts
-          // and the lookup takes over — the mid-call path is never competing
-          // with a list for the vendor's attention.
-          <MyCustomersList onSelect={setRaw} />
-        ) : (
-          <p className="px-1 text-sm text-muted-foreground">Keep typing — enter a full number.</p>
-        )
+        /* Results narrow with every keystroke; the moment the text becomes a
+           complete number this gives way to the profile. */
+        <MyCustomersList q={debounced.trim()} onSelect={setRaw} />
       ) : search.isPending ? (
         <CustomerProfileSkeleton />
       ) : search.isError ? (

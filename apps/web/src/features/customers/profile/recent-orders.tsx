@@ -1,23 +1,17 @@
 'use client';
 
-import { PackageSearch, RotateCcw } from 'lucide-react';
+import { PackageSearch } from 'lucide-react';
 import { displayAddress, formatMoney } from '@loadless/shared';
 import { displayRelative } from '@/lib/format';
 import { Button } from '@/components/ui/button';
 import { OrderStatusBadge } from '@/features/orders/order-status';
-import { useCustomerOrders, type CustomerOrder, type CustomerProfile } from '../api';
+import { useCustomerOrders, type CustomerProfile } from '../api';
 
 /**
  * This customer's history WITH THIS VENDOR. Seeded from the profile payload,
  * so opening the tab costs zero requests; only "Load more" hits the network.
  */
-export function RecentOrders({
-  customer,
-  onRepeat,
-}: {
-  customer: CustomerProfile;
-  onRepeat: (order: CustomerOrder, customer: CustomerProfile) => void;
-}) {
+export function RecentOrders({ customer }: { customer: CustomerProfile }) {
   const query = useCustomerOrders(customer.id, {
     orders: customer.recentOrders,
     nextCursor: customer.recentOrdersNextCursor,
@@ -59,19 +53,9 @@ export function RecentOrders({
                 {displayRelative(order.createdAt)}
               </p>
             </div>
-            <div className="flex shrink-0 items-center gap-2">
-              <span className="data-mono text-sm font-semibold">
-                {formatMoney(order.deliveryCharge, order.currency)}
-              </span>
-              <Button
-                variant="ghost"
-                size="sm"
-                aria-label={`Repeat ${order.orderNumber}`}
-                onClick={() => onRepeat(order, customer)}
-              >
-                <RotateCcw /> Repeat
-              </Button>
-            </div>
+            <span className="data-mono shrink-0 text-sm font-semibold">
+              {formatMoney(order.deliveryCharge, order.currency)}
+            </span>
           </li>
         ))}
       </ul>

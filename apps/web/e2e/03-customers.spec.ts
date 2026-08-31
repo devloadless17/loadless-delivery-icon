@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { loginAs, uniquePhone, VENDOR, VENDOR2 } from './helpers';
+import { CUSTOMER_SEARCH, loginAs, uniquePhone, VENDOR, VENDOR2 } from './helpers';
 
 /**
  * The shared global customer system, at the UI level: creation, cross-format
@@ -12,11 +12,12 @@ test.describe('shared customer system', () => {
     await page.goto('/vendor/customers');
 
     const phone = uniquePhone(); // e.g. 03XXXXXX
-    const search = page.getByPlaceholder('Customer phone — 03 123 456');
+    const search = page.getByPlaceholder(CUSTOMER_SEARCH);
 
-    // partial number → helpful hint, no result yet
+    // A partial number narrows their OWN customers as they type; it never
+    // opens a stranger's record until the number is complete.
     await search.fill('03 12');
-    await expect(page.getByText('Keep typing — enter a full number.')).toBeVisible();
+    await expect(page.getByRole('region', { name: 'My customers' })).toBeVisible();
 
     // unknown full number → inline create
     await search.fill(phone);
@@ -67,7 +68,7 @@ test.describe('shared customer system', () => {
     await page.waitForURL('**/login');
     await loginAs(page, VENDOR2, '/vendor');
     await page.goto('/vendor/customers');
-    await page.getByPlaceholder('Customer phone — 03 123 456').fill(phone);
+    await page.getByPlaceholder(CUSTOMER_SEARCH).fill(phone);
     await expect(page.getByText('Rana K. Khoury')).toBeVisible();
     await expect(page.getByText('Ashrafieh, Sassine square')).toBeVisible();
     // …as a customer they did NOT add: the record is shared, the pen is not.

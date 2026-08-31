@@ -165,6 +165,9 @@ model Customer {
   vendorLinks   CustomerVendor[]
 
   @@index([createdByVendorId])
+  /// The admin directory orders by createdAt desc; without this it scans every
+  /// customer on every page.
+  @@index([createdAt(sort: Desc)])
   @@map("customers")
 }
 
@@ -288,11 +291,19 @@ model Order {
   statusHistory OrderStatusHistory[]
 
   @@index([vendorId, status, createdAt])
-  @@index([driverId, status])
+  // The vendor's home screen is the UNFILTERED list. With status in the middle
+  // of the index above, an unfiltered read cannot get createdAt ordering from
+  // it — it read every one of the vendor's orders and top-N sorted them (33ms
+  // at 16k orders). This serves the same page as a pure index scan.
+  @@index([vendorId, createdAt(sort: Desc), id(sort: Desc)])
+  @@index([driverId, status, createdAt(sort: Desc)])
   @@index([customerId, createdAt])
   // Customer 360: the vendor-scoped slice of one customer's history — the
   // hottest read in the vendor UI (fires on every phone lookup mid-call).
   @@index([customerId, vendorId, createdAt])
+  // Admin's order list and every date-range analytics read. Without it the
+  // platform's main operational screen sequential-scans the whole table.
+  @@index([createdAt(sort: Desc), id(sort: Desc)])
   // Partial index for the PENDING feed lives in raw SQL (see constraints migration)
   @@map("orders")
 }
