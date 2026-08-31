@@ -23,7 +23,8 @@ export const createOrderSchema = z.object({
   /** Label for the saved copy; omitted -> HOME for a first address, else OTHER. */
   saveAddressLabel: z.enum(ADDRESS_LABELS).optional(),
 
-  deliveryAddressText: z.string().trim().min(3).max(500),
+  /** Text OR a maps link is enough — see the superRefine below. */
+  deliveryAddressText: z.string().trim().min(3).max(500).optional(),
   /** The Google Maps link the customer sent for THIS delivery. */
   deliveryMapsUrl: mapsUrlSchema.optional(),
   deliveryLat: latitudeSchema.optional(),
@@ -46,6 +47,13 @@ export const createOrderSchema = z.object({
         code: 'custom',
         path: ['deliveryCharge'],
         message: 'Enter a valid positive amount',
+      });
+    }
+    if (!order.deliveryAddressText && !order.deliveryMapsUrl) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['deliveryAddressText'],
+        message: 'Add an address or paste a Google Maps link',
       });
     }
   });

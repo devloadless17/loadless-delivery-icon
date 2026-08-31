@@ -63,7 +63,7 @@ export function CustomerProfilePanel({
   const startFromAddress = (address: CustomerAddress) =>
     applyDraft({
       customerPhone: profile.normalizedPhone,
-      addressText: address.addressText,
+      addressText: address.addressText ?? '',
       mapsUrl: address.mapsUrl,
     });
 

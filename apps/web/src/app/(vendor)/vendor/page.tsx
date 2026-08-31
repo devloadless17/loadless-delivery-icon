@@ -1,6 +1,6 @@
 'use client';
 
-import type { OrderStatus } from '@loadless/shared';
+import { displayAddress, type OrderStatus } from '@loadless/shared';
 import { PackagePlus } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
@@ -81,7 +81,7 @@ export default function VendorOrdersPage() {
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium">{order.customer.name}</p>
                         <p className="truncate text-xs text-muted-foreground">
-                          {order.deliveryAddressText}
+                          {displayAddress(order.deliveryAddressText, order.deliveryMapsUrl)}
                         </p>
                         {order.driver && (
                           <p className="mt-0.5 text-xs text-muted-foreground">

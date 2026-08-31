@@ -47,7 +47,7 @@ export function takeOrderDraft(): OrderDraft | null {
 export function draftFromOrder(order: CustomerOrder, customer: CustomerProfile): OrderDraft {
   return {
     customerPhone: customer.normalizedPhone,
-    addressText: order.deliveryAddressText,
+    addressText: order.deliveryAddressText ?? '',
     mapsUrl: order.deliveryMapsUrl,
     // Orders store minor units; the amount input takes major units.
     charge: fromMinorUnits(order.deliveryCharge, order.currency),

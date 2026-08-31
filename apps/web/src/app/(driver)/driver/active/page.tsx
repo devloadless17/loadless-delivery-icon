@@ -1,5 +1,6 @@
 'use client';
 
+import { displayAddress } from '@loadless/shared';
 import { Bike } from 'lucide-react';
 import Link from 'next/link';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -38,7 +39,9 @@ export default function DriverActivePage() {
                   <div className="flex items-end justify-between gap-3">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium">{order.vendor.businessName}</p>
-                      <p className="truncate text-xs text-muted-foreground">{order.deliveryAddressText}</p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {displayAddress(order.deliveryAddressText, order.deliveryMapsUrl)}
+                      </p>
                       <p className="data-mono mt-0.5 text-xs text-muted-foreground">
                         {order.customer.name} · {displayPhone(order.customer.normalizedPhone)}
                       </p>

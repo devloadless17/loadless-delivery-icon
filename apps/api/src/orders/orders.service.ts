@@ -1,6 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { toMinorUnits, type AdminOrderListFilter, type CreateOrderInput, type OrderListFilter } from '@loadless/shared';
+import {
+  displayAddress,
+  toMinorUnits,
+  type AdminOrderListFilter,
+  type CreateOrderInput,
+  type OrderListFilter,
+} from '@loadless/shared';
 import type { Prisma } from '@prisma/client';
 import { AppException } from '../common/app.exception';
 import { cursorArgs, cursorResult } from '../common/pagination';
@@ -171,7 +177,9 @@ export class OrdersService {
       orderNumber: created.orderNumber,
       vendorId: created.vendorId,
       vendorName: created.vendor.businessName,
-      deliveryAddressText: created.deliveryAddressText,
+      // The live driver feed must always show a readable line, even when the
+      // customer only shared a pin.
+      deliveryAddressText: displayAddress(created.deliveryAddressText, input.deliveryMapsUrl),
       deliveryCharge: created.deliveryCharge,
       currency: created.currency,
       createdAt: created.createdAt,

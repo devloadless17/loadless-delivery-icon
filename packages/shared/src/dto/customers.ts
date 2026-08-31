@@ -22,13 +22,22 @@ export const customerSearchSchema = z.object({
 });
 export type CustomerSearchInput = z.infer<typeof customerSearchSchema>;
 
-export const customerAddressInputSchema = z.object({
-  label: z.enum(ADDRESS_LABELS).default('OTHER'),
-  addressText: z.string().trim().min(3).max(500),
-  mapsUrl: mapsUrlSchema.optional(),
-  lat: latitudeSchema.optional(),
-  lng: longitudeSchema.optional(),
-});
+/**
+ * A location needs EITHER typed text or a Google Maps link — customers here
+ * usually just share a pin, and the driver navigates by the link regardless.
+ */
+export const customerAddressInputSchema = z
+  .object({
+    label: z.enum(ADDRESS_LABELS).default('OTHER'),
+    addressText: z.string().trim().min(3).max(500).optional(),
+    mapsUrl: mapsUrlSchema.optional(),
+    lat: latitudeSchema.optional(),
+    lng: longitudeSchema.optional(),
+  })
+  .refine((a) => !!a.addressText || !!a.mapsUrl, {
+    path: ['addressText'],
+    message: 'Add an address or paste a Google Maps link',
+  });
 export type CustomerAddressInput = z.infer<typeof customerAddressInputSchema>;
 
 export const createCustomerSchema = z.object({
@@ -56,7 +65,7 @@ export const addCustomerAddressSchema = customerAddressInputSchema;
 export const updateCustomerAddressSchema = z
   .object({
     label: z.enum(ADDRESS_LABELS).optional(),
-    addressText: z.string().trim().min(3).max(500).optional(),
+    addressText: z.string().trim().min(3).max(500).nullable().optional(),
     mapsUrl: mapsUrlSchema.nullable().optional(),
   })
   .refine((v) => Object.values(v).some((x) => x !== undefined), {
@@ -85,7 +94,7 @@ export type CustomerProfileScope = 'VENDOR' | 'PLATFORM';
 export interface CustomerAddressView {
   id: string;
   label: AddressLabel;
-  addressText: string;
+  addressText: string | null;
   mapsUrl: string | null;
   lat: number | null;
   lng: number | null;
@@ -100,7 +109,7 @@ export interface MoneyByCurrencyView {
 
 /** Derived from order snapshots, not the address book (saved rows can duplicate). */
 export interface CustomerTopAddressView {
-  addressText: string;
+  addressText: string | null;
   mapsUrl: string | null;
   orderCount: number;
   lastUsedAt: string;
@@ -127,7 +136,7 @@ export interface CustomerOrderView {
   id: string;
   orderNumber: string;
   status: OrderStatus;
-  deliveryAddressText: string;
+  deliveryAddressText: string | null;
   deliveryMapsUrl: string | null;
   deliveryInstructions: string | null;
   deliveryCharge: string;

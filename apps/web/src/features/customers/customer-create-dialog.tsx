@@ -64,11 +64,13 @@ export function CustomerCreateDialog({
       const result = await createCustomer.mutateAsync({
         phone: normalized,
         name: name.trim(),
-        ...(addressText.trim().length >= 3
+        // Either half is a complete location — a shared pin is often all the
+        // customer gives you.
+        ...(addressText.trim().length >= 3 || mapsUrl.trim()
           ? {
               address: {
                 label: 'HOME' as const,
-                addressText: addressText.trim(),
+                ...(addressText.trim().length >= 3 ? { addressText: addressText.trim() } : {}),
                 ...(mapsUrl.trim() ? { mapsUrl: mapsUrl.trim() } : {}),
               },
             }
@@ -143,9 +145,10 @@ export function CustomerCreateDialog({
               placeholder="Street, building, floor"
             />
           </div>
-          {addressText.trim().length >= 3 && (
-            <MapsLinkField id="cc-maps" value={mapsUrl} onChange={setMapsUrl} />
-          )}
+          <MapsLinkField id="cc-maps" value={mapsUrl} onChange={setMapsUrl} />
+          <p className="-mt-1 text-xs text-muted-foreground">
+            Either one is enough — a shared Google Maps pin is a complete location.
+          </p>
           <div className="flex justify-end gap-2">
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
               Cancel

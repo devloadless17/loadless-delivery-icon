@@ -1,7 +1,7 @@
 'use client';
 
 import { PackageSearch, RotateCcw } from 'lucide-react';
-import { formatMoney } from '@loadless/shared';
+import { displayAddress, formatMoney } from '@loadless/shared';
 import { displayRelative } from '@/lib/format';
 import { Button } from '@/components/ui/button';
 import { OrderStatusBadge } from '@/features/orders/order-status';
@@ -55,7 +55,8 @@ export function RecentOrders({
                 )}
               </div>
               <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                {order.deliveryAddressText} · {displayRelative(order.createdAt)}
+                {displayAddress(order.deliveryAddressText, order.deliveryMapsUrl)} ·{' '}
+                {displayRelative(order.createdAt)}
               </p>
             </div>
             <div className="flex shrink-0 items-center gap-2">

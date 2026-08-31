@@ -1,5 +1,6 @@
 'use client';
 
+import { displayAddress, isSameAddress } from '@loadless/shared';
 import { Check, Plus, TriangleAlert } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
@@ -30,9 +31,7 @@ export function AddressPicker({
       {addresses.map((address) => {
         const Icon = LABEL_ICON[address.label];
         const selected = address.id === selectedId;
-        const isUsual =
-          !!usualAddressText &&
-          address.addressText.trim().toLowerCase() === usualAddressText.trim().toLowerCase();
+        const isUsual = isSameAddress(address.addressText, usualAddressText);
         return (
           <button
             key={address.id}
@@ -55,7 +54,9 @@ export function AddressPicker({
               {isUsual && <Badge className="ml-0.5">Usual</Badge>}
               {selected && <Check className="ml-auto size-4 text-primary" aria-hidden />}
             </span>
-            <span className="line-clamp-2 text-sm">{address.addressText}</span>
+            <span className="line-clamp-2 text-sm">
+              {displayAddress(address.addressText, address.mapsUrl)}
+            </span>
             {address.mapsUrl ? (
               <span className="mt-auto text-xs text-muted-foreground">Maps link ready</span>
             ) : (

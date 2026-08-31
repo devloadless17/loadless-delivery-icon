@@ -1,5 +1,6 @@
 'use client';
 
+import { displayAddress } from '@loadless/shared';
 import { ArrowLeft, Navigation, Phone, Store } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
@@ -117,7 +118,9 @@ export default function DriverOrderDetailPage() {
 
           <div className="space-y-1">
             <p className="text-sm font-semibold">{order.customer.name}</p>
-            <p className="text-sm text-muted-foreground">{order.deliveryAddressText}</p>
+            <p className="text-sm text-muted-foreground">
+              {displayAddress(order.deliveryAddressText, order.deliveryMapsUrl)}
+            </p>
             {order.deliveryInstructions && (
               <p className="text-sm text-muted-foreground">“{order.deliveryInstructions}”</p>
             )}

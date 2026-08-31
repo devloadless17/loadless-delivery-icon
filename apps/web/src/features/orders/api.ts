@@ -20,7 +20,7 @@ export interface VendorOrder {
   id: string;
   orderNumber: string;
   status: OrderStatus;
-  deliveryAddressText: string;
+  deliveryAddressText: string | null;
   deliveryMapsUrl: string | null;
   deliveryLat: number | null;
   deliveryLng: number | null;

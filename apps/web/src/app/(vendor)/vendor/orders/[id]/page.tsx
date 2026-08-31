@@ -22,7 +22,7 @@ import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useCancelOrder, useVendorOrder } from '@/features/orders/api';
 import { stashOrderDraft } from '@/features/orders/order-draft';
-import { fromMinorUnits } from '@loadless/shared';
+import { displayAddress, fromMinorUnits } from '@loadless/shared';
 import { OrderStatusBadge } from '@/features/orders/order-status';
 import { OrderTimeline } from '@/features/orders/order-timeline';
 
@@ -91,7 +91,9 @@ export default function VendorOrderDetailPage() {
               >
                 {displayPhone(order.customer.normalizedPhone)}
               </a>
-              <p className="mt-1 text-sm text-muted-foreground">{order.deliveryAddressText}</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {displayAddress(order.deliveryAddressText, order.deliveryMapsUrl)}
+              </p>
               {order.deliveryInstructions && (
                 <p className="mt-1 text-sm text-muted-foreground">“{order.deliveryInstructions}”</p>
               )}
@@ -136,7 +138,7 @@ export default function VendorOrderDetailPage() {
         onClick={() => {
           stashOrderDraft({
             customerPhone: order.customer.normalizedPhone,
-            addressText: order.deliveryAddressText,
+            addressText: order.deliveryAddressText ?? '',
             mapsUrl: order.deliveryMapsUrl,
             charge: fromMinorUnits(order.deliveryCharge, order.currency),
             currency: order.currency,

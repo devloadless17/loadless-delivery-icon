@@ -1,7 +1,7 @@
 'use client';
 
 import { RotateCcw } from 'lucide-react';
-import { formatMoney } from '@loadless/shared';
+import { displayAddress, formatMoney } from '@loadless/shared';
 import { displayRelative } from '@/lib/format';
 import { Button } from '@/components/ui/button';
 import { OrderStatusBadge } from '@/features/orders/order-status';
@@ -37,7 +37,9 @@ export function LastOrderLine({
       </div>
       <div className="mt-1.5 flex flex-wrap items-end justify-between gap-2">
         <div className="min-w-0">
-          <p className="truncate text-sm font-medium">{order.deliveryAddressText}</p>
+          <p className="truncate text-sm font-medium">
+            {displayAddress(order.deliveryAddressText, order.deliveryMapsUrl)}
+          </p>
           <p className="data-mono text-xs text-muted-foreground">
             {formatMoney(order.deliveryCharge, order.currency)}
           </p>

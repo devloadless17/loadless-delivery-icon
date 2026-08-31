@@ -1,5 +1,6 @@
 'use client';
 
+import { displayAddress } from '@loadless/shared';
 import { ExternalLink, Pencil, Trash2, TriangleAlert } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
@@ -37,7 +38,7 @@ export function AddressRow({
   const archiveAddress = useArchiveAddress();
   const [draft, setDraft] = useState<AddressDraft>({
     label: address.label,
-    addressText: address.addressText,
+    addressText: address.addressText ?? '',
     mapsUrl: address.mapsUrl ?? '',
   });
 
@@ -46,15 +47,16 @@ export function AddressRow({
   function beginEdit() {
     setDraft({
       label: address.label,
-      addressText: address.addressText,
+      addressText: address.addressText ?? '',
       mapsUrl: address.mapsUrl ?? '',
     });
     onModeChange('edit');
   }
 
   async function save() {
-    if (draft.addressText.trim().length < 3) {
-      toast.error('Enter the address first.');
+    // Either half is a complete location — a shared pin needs no typed text.
+    if (draft.addressText.trim().length < 3 && !draft.mapsUrl.trim()) {
+      toast.error('Add an address or paste a Google Maps link.');
       return;
     }
     try {
@@ -63,7 +65,7 @@ export function AddressRow({
         addressId: address.id,
         input: {
           label: draft.label,
-          addressText: draft.addressText.trim(),
+          addressText: draft.addressText.trim() || null,
           mapsUrl: draft.mapsUrl.trim() || null,
         },
       });
@@ -151,7 +153,7 @@ export function AddressRow({
               </p>
               {isUsual && <Badge>Usual</Badge>}
             </div>
-            <p className="text-sm">{address.addressText}</p>
+            <p className="text-sm">{displayAddress(address.addressText, address.mapsUrl)}</p>
             {address.mapsUrl ? (
               <a
                 href={address.mapsUrl}

@@ -10,7 +10,7 @@ import { api } from '@/lib/api-client';
 export interface FeedOrder {
   id: string;
   orderNumber: string;
-  deliveryAddressText: string;
+  deliveryAddressText: string | null;
   deliveryMapsUrl: string | null;
   deliveryLat: number | null;
   deliveryLng: number | null;

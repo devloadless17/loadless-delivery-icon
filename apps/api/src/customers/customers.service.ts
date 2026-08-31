@@ -143,7 +143,7 @@ export class CustomersService {
     tx: Tx,
     customerId: string,
     input: {
-      addressText: string;
+      addressText?: string | null;
       mapsUrl?: string | null;
       lat?: number | null;
       lng?: number | null;
@@ -160,7 +160,8 @@ export class CustomersService {
     const link = input.mapsUrl?.trim() || null;
     const match =
       (link ? existing.find((a) => a.mapsUrl?.trim() === link) : undefined) ??
-      existing.find((a) => normalizeAddressKey(a.addressText) === key);
+      // A link-only address has no text key, so it can only match on the link.
+      (key ? existing.find((a) => normalizeAddressKey(a.addressText) === key) : undefined);
 
     if (match) {
       if (link && !match.mapsUrl) {
@@ -192,7 +193,7 @@ export class CustomersService {
         {
           customerId,
           label,
-          addressText: input.addressText.trim(),
+          addressText: input.addressText?.trim() || null,
           mapsUrl: link,
           lat: input.lat ?? null,
           lng: input.lng ?? null,
@@ -206,15 +207,23 @@ export class CustomersService {
       // A concurrent write got there first — which is exactly what we wanted.
       const rows = await tx.customerAddress.findMany({
         where: { customerId, isArchived: false },
-        select: { id: true, addressText: true },
+        select: { id: true, addressText: true, mapsUrl: true },
       });
-      const winner = rows.find((a) => normalizeAddressKey(a.addressText) === key);
+      const winner =
+        (link ? rows.find((a) => a.mapsUrl?.trim() === link) : undefined) ??
+        (key ? rows.find((a) => normalizeAddressKey(a.addressText) === key) : undefined);
       if (!winner) throw AppException.notFound('Address not found');
       return { id: winner.id, created: false };
     }
 
     const created = await tx.customerAddress.findFirstOrThrow({
-      where: { customerId, isArchived: false, addressText: input.addressText.trim() },
+      where: {
+        customerId,
+        isArchived: false,
+        ...(input.addressText?.trim()
+          ? { addressText: input.addressText.trim() }
+          : { mapsUrl: link }),
+      },
       select: { id: true },
       orderBy: { createdAt: 'desc' },
     });
@@ -271,7 +280,7 @@ export class CustomersService {
           where: { id: addressId },
           data: {
             ...(diff.label ? { label: input.label } : {}),
-            ...(diff.addressText ? { addressText: input.addressText?.trim() } : {}),
+            ...(diff.addressText ? { addressText: input.addressText?.trim() || null } : {}),
             ...(diff.mapsUrl ? { mapsUrl: input.mapsUrl?.trim() || null } : {}),
           },
           select: ADDRESS_SELECT,

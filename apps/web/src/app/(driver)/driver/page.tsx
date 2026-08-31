@@ -1,6 +1,6 @@
 'use client';
 
-import { ERROR_CODES } from '@loadless/shared';
+import { displayAddress, ERROR_CODES } from '@loadless/shared';
 import { MapPin, Radar, Store } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
@@ -59,7 +59,7 @@ function FeedCard({ order }: { order: FeedOrder }) {
         <p className="flex items-start gap-1.5 text-sm text-muted-foreground">
           <MapPin className="mt-0.5 size-4 shrink-0" aria-hidden />
           <span className="min-w-0">
-            {order.deliveryAddressText}
+            {displayAddress(order.deliveryAddressText, order.deliveryMapsUrl)}
             {order.deliveryMapsUrl && (
               <span className="ml-1.5 inline-flex items-center gap-0.5 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
                 MAPS LINK

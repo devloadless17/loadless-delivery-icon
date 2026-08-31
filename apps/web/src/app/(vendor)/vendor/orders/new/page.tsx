@@ -88,15 +88,16 @@ function NewOrderForm() {
     if (autoSelected.current || !customer || customer.addresses.length === 0) return;
     const usual = customer.stats.topAddress?.addressText?.trim().toLowerCase();
     const pick =
-      customer.addresses.find((a) => a.addressText.trim().toLowerCase() === usual) ??
-      (customer.addresses.length === 1 ? customer.addresses[0] : undefined);
+      (usual
+        ? customer.addresses.find((a) => a.addressText?.trim().toLowerCase() === usual)
+        : undefined) ?? (customer.addresses.length === 1 ? customer.addresses[0] : undefined);
     if (!pick) return;
     autoSelected.current = true;
     setDeliver((prev) => ({
       ...prev,
       mode: 'saved',
       selectedAddressId: pick.id,
-      addressText: pick.addressText,
+      addressText: pick.addressText ?? '',
       mapsUrl: pick.mapsUrl ?? '',
       saveToProfile: false,
     }));

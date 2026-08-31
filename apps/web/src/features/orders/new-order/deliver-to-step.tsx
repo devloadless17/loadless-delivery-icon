@@ -1,6 +1,6 @@
 'use client';
 
-import type { AddressLabel } from '@loadless/shared';
+import { displayAddress, isSameAddress, type AddressLabel } from '@loadless/shared';
 import { History, MapPin, TriangleAlert } from 'lucide-react';
 import { toast } from 'sonner';
 import { MapsLinkField } from '@/components/maps-link';
@@ -60,7 +60,7 @@ export function DeliverToStep({
       ...state,
       mode: 'saved',
       selectedAddressId: address.id,
-      addressText: address.addressText,
+      addressText: address.addressText ?? '',
       mapsUrl: address.mapsUrl ?? '',
       saveToProfile: false,
     });
@@ -98,13 +98,10 @@ export function DeliverToStep({
   // their most common address on every single call.
   const top = customer?.stats.topAddress ?? null;
   const topIsSaved =
-    !!top &&
-    (customer?.addresses ?? []).some(
-      (a) => a.addressText.trim().toLowerCase() === top.addressText.trim().toLowerCase(),
-    );
-  const suggestion = top && !topIsSaved ? top : null;
-  const suggestionUsed =
-    !!suggestion && state.addressText.trim().toLowerCase() === suggestion.addressText.trim().toLowerCase();
+    !!top && (customer?.addresses ?? []).some((a) => isSameAddress(a.addressText, top.addressText));
+  const suggestion = top?.addressText ? top : null;
+  const suggestionShown = !!suggestion && !topIsSaved;
+  const suggestionUsed = !!suggestion && isSameAddress(state.addressText, suggestion.addressText);
 
   function useSuggestion() {
     if (!suggestion) return;
@@ -112,7 +109,7 @@ export function DeliverToStep({
       ...state,
       mode: 'oneoff',
       selectedAddressId: null,
-      addressText: suggestion.addressText,
+      addressText: suggestion.addressText ?? '',
       mapsUrl: suggestion.mapsUrl ?? '',
       // It's demonstrably their usual place — offer to remember it.
       saveToProfile: true,
@@ -144,7 +141,7 @@ export function DeliverToStep({
           </>
         )}
 
-        {suggestion && !suggestionUsed && state.mode !== 'saved' && (
+        {suggestionShown && !suggestionUsed && state.mode !== 'saved' && (
           <button
             type="button"
             onClick={useSuggestion}
@@ -169,7 +166,9 @@ export function DeliverToStep({
                   <SelectedIcon className="size-4 text-muted-foreground" aria-hidden />
                   Delivering to {LABEL_TEXT[selected.label]}
                 </p>
-                <p className="mt-0.5 text-sm text-muted-foreground">{selected.addressText}</p>
+                <p className="mt-0.5 text-sm text-muted-foreground">
+                  {displayAddress(selected.addressText, selected.mapsUrl)}
+                </p>
               </div>
               <Button type="button" variant="ghost" size="sm" onClick={somewhereElse}>
                 Edit for this order

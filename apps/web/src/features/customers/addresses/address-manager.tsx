@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 import { ApiError } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
+import { isSameAddress } from '@loadless/shared';
 import { AddressFields, emptyAddressDraft, type AddressDraft } from './address-fields';
 import { AddressRow, type RowMode } from './address-row';
 import { useAddAddress, type CustomerAddress } from '../api';
@@ -64,10 +65,7 @@ export function AddressManager({
               key={address.id}
               customerId={customerId}
               address={address}
-              isUsual={
-                !!usualAddressText &&
-                address.addressText.trim().toLowerCase() === usualAddressText.trim().toLowerCase()
-              }
+              isUsual={isSameAddress(address.addressText, usualAddressText)}
               mode={rowMode(address.id)}
               onModeChange={(mode) =>
                 setEditing(mode === 'view' ? null : { kind: 'row', id: address.id, mode })

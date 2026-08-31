@@ -169,7 +169,8 @@ model CustomerAddress {
   customerId        String       @map("customer_id")
   customer          Customer     @relation(fields: [customerId], references: [id])
   label             AddressLabel @default(OTHER)
-  addressText       String       @map("address_text")
+  /// Optional: a shared Google Maps link alone is a complete location.
+  addressText       String?      @map("address_text")
   /// Google Maps link the customer shared (the way locations travel in Lebanon)
   mapsUrl           String?      @map("maps_url")
   lat               Float?
@@ -211,8 +212,9 @@ model Order {
   driver      Driver?     @relation(fields: [driverId], references: [id])
   status      OrderStatus @default(PENDING)
 
-  // Delivery snapshot — frozen copy; never mutates the customer profile
-  deliveryAddressText String  @map("delivery_address_text")
+  // Delivery snapshot — frozen copy; never mutates the customer profile.
+  // Text OR maps link is enough — customers often just share a pin.
+  deliveryAddressText String? @map("delivery_address_text")
   /// Google Maps link for THIS delivery — what the driver actually navigates by
   deliveryMapsUrl     String? @map("delivery_maps_url")
   deliveryLat         Float?  @map("delivery_lat")

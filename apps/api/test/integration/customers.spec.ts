@@ -573,4 +573,65 @@ describe('customers (integration)', () => {
       expect(await prisma.customer.count({ where: { normalizedPhone: '+9613100030' } })).toBe(1);
     });
   });
+
+  // -------------------------------------------------- location: text OR link
+
+  describe('a shared maps link is a complete location', () => {
+    it('creates a customer address from a link alone', async () => {
+      const res = await request(server)
+        .post('/api/v1/customers')
+        .set(auth(vendorAToken))
+        .send({
+          phone: '03100040',
+          name: 'Pin Only',
+          address: { label: 'HOME', mapsUrl: 'https://maps.app.goo.gl/pin-only-1' },
+        })
+        .expect(200);
+
+      const [address] = res.body.data.customer.addresses;
+      expect(address.addressText).toBeNull();
+      expect(address.mapsUrl).toBe('https://maps.app.goo.gl/pin-only-1');
+    });
+
+    it('creates an ORDER from a link alone', async () => {
+      const res = await request(server)
+        .post('/api/v1/vendor/orders')
+        .set(auth(vendorAToken))
+        .send({
+          customerPhone: '03100041',
+          customerName: 'Pin Only Order',
+          deliveryMapsUrl: 'https://maps.app.goo.gl/pin-order',
+          deliveryCharge: '100000',
+          currency: 'LBP',
+        })
+        .expect(201);
+      expect(res.body.data.deliveryAddressText).toBeNull();
+      expect(res.body.data.deliveryMapsUrl).toBe('https://maps.app.goo.gl/pin-order');
+    });
+
+    it('still rejects a location with neither text nor link', async () => {
+      const res = await request(server)
+        .post('/api/v1/vendor/orders')
+        .set(auth(vendorAToken))
+        .send({ customerPhone: '03100042', customerName: 'No Location', deliveryCharge: '100000' });
+      expect(res.status).toBe(400);
+      expect(JSON.stringify(res.body)).toContain('Add an address or paste a Google Maps link');
+    });
+
+    it('dedupes two link-only saves of the same pin', async () => {
+      const customer = await prisma.customer.findUniqueOrThrow({
+        where: { normalizedPhone: '+9613100040' },
+      });
+      await request(server)
+        .post(`/api/v1/customers/${customer.id}/addresses`)
+        .set(auth(vendorBToken))
+        .send({ label: 'WORK', mapsUrl: 'https://maps.app.goo.gl/pin-only-1' })
+        .expect(201);
+
+      const rows = await prisma.customerAddress.findMany({
+        where: { customerId: customer.id, isArchived: false },
+      });
+      expect(rows).toHaveLength(1);
+    });
+  });
 });

@@ -1,6 +1,6 @@
 'use client';
 
-import { formatBps } from '@loadless/shared';
+import { displayAddress, formatBps } from '@loadless/shared';
 import { ArrowLeft, UserCog, XCircle } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
@@ -172,7 +172,7 @@ export default function AdminOrderDetailPage() {
           <CardTitle className="text-base">Delivery</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3 text-sm">
-          <p>{order.deliveryAddressText}</p>
+          <p>{displayAddress(order.deliveryAddressText, order.deliveryMapsUrl)}</p>
           {order.deliveryInstructions && (
             <p className="text-muted-foreground">“{order.deliveryInstructions}”</p>
           )}

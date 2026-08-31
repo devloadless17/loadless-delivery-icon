@@ -28,11 +28,11 @@ export function NewCustomerForm({ normalizedPhone }: { normalizedPhone: string }
       await createCustomer.mutateAsync({
         phone: normalizedPhone,
         name: name.trim(),
-        ...(addressText.trim().length >= 3
+        ...(addressText.trim().length >= 3 || mapsUrl.trim()
           ? {
               address: {
                 label: 'HOME' as const,
-                addressText: addressText.trim(),
+                ...(addressText.trim().length >= 3 ? { addressText: addressText.trim() } : {}),
                 ...(mapsUrl.trim() ? { mapsUrl: mapsUrl.trim() } : {}),
               },
             }
@@ -86,9 +86,7 @@ export function NewCustomerForm({ normalizedPhone }: { normalizedPhone: string }
               placeholder="Street, building, floor"
             />
           </div>
-          {addressText.trim().length >= 3 && (
-            <MapsLinkField id="nc-maps" value={mapsUrl} onChange={setMapsUrl} />
-          )}
+          <MapsLinkField id="nc-maps" value={mapsUrl} onChange={setMapsUrl} />
           <Button type="submit" loading={createCustomer.isPending}>
             Create customer
           </Button>
