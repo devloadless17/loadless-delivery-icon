@@ -21,15 +21,35 @@ export function AddressManager({
   addresses,
   usualAddressText,
   onStartOrder,
+  canManageAll,
 }: {
   customerId: string;
   addresses: CustomerAddress[];
   usualAddressText?: string | null;
   onStartOrder?: (address: CustomerAddress) => void;
+  /** ADMIN: every row is editable, whoever added it. */
+  canManageAll?: boolean;
 }) {
   const [editing, setEditing] = useState<EditTarget>(null);
   const [draft, setDraft] = useState<AddressDraft>(emptyAddressDraft);
   const addAddress = useAddAddress();
+
+  /**
+   * "Save my version" of an address another vendor owns.
+   *
+   * No new endpoint: it prefills the add-form from their row, the vendor
+   * corrects whatever was wrong, and the normal save stamps THEM as owner.
+   * Saving it byte-identical is harmless — the dedupe index simply returns the
+   * existing row instead of creating a twin.
+   */
+  function saveMyVersion(address: CustomerAddress) {
+    setDraft({
+      label: address.label,
+      addressText: address.addressText ?? '',
+      mapsUrl: address.mapsUrl ?? '',
+    });
+    setEditing({ kind: 'new' });
+  }
 
   async function save() {
     if (draft.addressText.trim().length < 3) {
@@ -71,6 +91,7 @@ export function AddressManager({
                 setEditing(mode === 'view' ? null : { kind: 'row', id: address.id, mode })
               }
               {...(onStartOrder ? { onStartOrder } : {})}
+              {...(canManageAll ? { canManageAll } : { onSaveMyVersion: saveMyVersion })}
             />
           ))}
         </ul>

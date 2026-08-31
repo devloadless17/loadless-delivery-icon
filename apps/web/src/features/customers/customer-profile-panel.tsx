@@ -44,6 +44,8 @@ export function CustomerProfilePanel({
   const [editingName, setEditingName] = useState(false);
 
   const lastOrder = profile.recentOrders[0];
+  // PLATFORM scope means admin: they may correct any address, whoever added it.
+  const isPlatform = profile.stats.scope === 'PLATFORM';
   const usualAddressText = profile.stats.topAddress?.addressText ?? null;
 
   function applyDraft(draft: OrderDraft) {
@@ -141,14 +143,15 @@ export function CustomerProfilePanel({
             customerId={profile.id}
             addresses={profile.addresses}
             usualAddressText={usualAddressText}
+            canManageAll={isPlatform}
             {...(orderActions !== 'none' ? { onStartOrder: startFromAddress } : {})}
           />
         ) : (
           <RecentOrders customer={profile} onRepeat={repeat} />
         )}
         <p className="text-xs text-muted-foreground">
-          {displayPhone(profile.normalizedPhone)} is shared across the platform — edits here apply
-          everywhere.
+          {displayPhone(profile.normalizedPhone)} is shared across the platform. You can edit what
+          you added; everything else stays as its owner set it.
         </p>
       </div>
     </Card>

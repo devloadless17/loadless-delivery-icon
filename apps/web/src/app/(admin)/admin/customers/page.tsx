@@ -15,6 +15,14 @@ import {
 } from '@/components/ui/table';
 import { Pagination, type PageMeta } from '@/components/pagination';
 import { Button } from '@/components/ui/button';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { useVendors } from '@/features/admin/vendors/api';
 import { CustomerManageDialog } from '@/features/admin/customers/manage-dialog';
 import { CustomerCreateDialog } from '@/features/customers/customer-create-dialog';
 import { displayDate, displayPhone } from '@/lib/format';
@@ -26,15 +34,17 @@ interface AdminCustomer {
   name: string;
   createdAt: string;
   createdByVendor: { businessName: string } | null;
-  _count: { orders: number; addresses: number };
+  /** vendorLinks = how many vendors actually deal with this customer. */
+  _count: { orders: number; addresses: number; vendorLinks: number };
 }
 
-function useAdminCustomers(page: number, q: string) {
+function useAdminCustomers(page: number, q: string, vendorId: string) {
   return useQuery({
-    queryKey: ['admin', 'customers', page, q],
+    queryKey: ['admin', 'customers', page, q, vendorId],
     queryFn: async () => {
       const params = new URLSearchParams({ page: String(page), limit: '20' });
       if (q) params.set('q', q);
+      if (vendorId !== 'ALL') params.set('vendorId', vendorId);
       const res = await fetch(`/api/v1/admin/customers?${params}`);
       if (!res.ok) throw new Error('Failed to load customers');
       return (await res.json()) as { data: AdminCustomer[]; meta: PageMeta };
@@ -48,8 +58,10 @@ export default function AdminCustomersPage() {
   const [search, setSearch] = useState('');
   const [managingId, setManagingId] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  const [vendorId, setVendorId] = useState('ALL');
   const q = useDebouncedValue(search, 300);
-  const { data, isPending } = useAdminCustomers(page, q);
+  const { data, isPending } = useAdminCustomers(page, q, vendorId);
+  const vendors = useVendors(1, '');
 
   return (
     <div className="space-y-5">
@@ -65,17 +77,38 @@ export default function AdminCustomersPage() {
         </Button>
       </div>
 
-      <div className="relative max-w-sm">
-        <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          placeholder="Search by name or phone"
-          className="pl-9"
-          value={search}
-          onChange={(e) => {
-            setSearch(e.target.value);
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative w-full max-w-sm">
+          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search by name or phone"
+            className="pl-9"
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
+          />
+        </div>
+        <Select
+          value={vendorId}
+          onValueChange={(v) => {
+            setVendorId(v);
             setPage(1);
           }}
-        />
+        >
+          <SelectTrigger className="h-10 w-52">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">All vendors</SelectItem>
+            {(vendors.data?.data ?? []).map((vendor) => (
+              <SelectItem key={vendor.id} value={vendor.id}>
+                {vendor.businessName}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {isPending ? (
@@ -93,6 +126,7 @@ export default function AdminCustomersPage() {
                 <TableHead>Phone</TableHead>
                 <TableHead>Orders</TableHead>
                 <TableHead>Addresses</TableHead>
+                <TableHead>Vendors</TableHead>
                 <TableHead>Added by</TableHead>
                 <TableHead>Added</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
@@ -105,6 +139,7 @@ export default function AdminCustomersPage() {
                   <TableCell className="data-mono">{displayPhone(customer.normalizedPhone)}</TableCell>
                   <TableCell className="data-mono">{customer._count.orders}</TableCell>
                   <TableCell className="data-mono">{customer._count.addresses}</TableCell>
+                  <TableCell className="data-mono">{customer._count.vendorLinks}</TableCell>
                   <TableCell className="text-muted-foreground">
                     {customer.createdByVendor?.businessName ?? 'Admin'}
                   </TableCell>

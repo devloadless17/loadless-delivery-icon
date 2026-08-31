@@ -1,4 +1,15 @@
-import { Body, Controller, Get, HttpCode, Param, Patch, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  Patch,
+  Post,
+  Put,
+  Query,
+} from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import {
   addCustomerAddressSchema,
@@ -12,6 +23,10 @@ import {
   customerSearchSchema,
   offsetPaginationSchema,
   updateCustomerSchema,
+  myCustomersFilterSchema,
+  setCustomerDisplayNameSchema,
+  type MyCustomersFilter,
+  type SetCustomerDisplayNameInput,
   type CreateCustomerInput,
   type CustomerAddressInput,
   type CustomerSearchInput,
@@ -22,6 +37,7 @@ import { z } from 'zod';
 import { CurrentUser, Roles } from '../auth/decorators';
 import type { AuthUser } from '../auth/auth.types';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
+import { CustomerDirectoryService } from './customer-directory.service';
 import { CustomerProfileService } from './customer-profile.service';
 import { CustomersService } from './customers.service';
 
@@ -74,13 +90,45 @@ export class CustomersController {
     return this.profiles.listOrders(id, user, filter);
   }
 
+  /**
+   * The name EVERY vendor sees. Admin, or the vendor who added the customer;
+   * anyone else gets 403 NAME_NOT_YOURS and is pointed at their own alias.
+   *
+   * Two routes rather than one overloaded one on purpose: "rename for
+   * everybody" and "rename for me" are different acts with different blast
+   * radii, and a single endpoint that silently picks between them would be
+   * exactly the confusion this feature exists to remove.
+   */
   @Patch(':id')
-  update(
+  async update(
     @Param('id') id: string,
     @Body(new ZodValidationPipe(updateCustomerSchema)) body: UpdateCustomerInput,
     @CurrentUser() user: AuthUser,
   ) {
-    return this.customers.update(id, body, user);
+    await this.customers.update(id, body, user);
+    // Every customer route answers with the SAME full profile. A write that
+    // returned only the identity fields would look like a profile to the
+    // client, get written into the cache, and take the panel down when it
+    // reached for stats that were never there.
+    return this.profiles.build(id, user);
+  }
+
+  /** My private name for this customer. Nobody else ever sees it. */
+  @Put(':id/display-name')
+  async setDisplayName(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(setCustomerDisplayNameSchema)) body: SetCustomerDisplayNameInput,
+    @CurrentUser() user: AuthUser,
+  ) {
+    await this.customers.setDisplayName(id, body.displayName, user);
+    return this.profiles.build(id, user);
+  }
+
+  /** Drop my private name and follow the shared record again. */
+  @Delete(':id/display-name')
+  async clearDisplayName(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    await this.customers.clearDisplayName(id, user);
+    return this.profiles.build(id, user);
   }
 
   @Post(':id/addresses')
@@ -113,8 +161,33 @@ export class CustomersController {
   }
 }
 
+/**
+ * "My customers" — the vendor's own, bounded list.
+ *
+ * Separate controller because it carries a different guarantee from everything
+ * in CustomersController: those routes act on ONE customer the caller already
+ * named by phone or id, while this one enumerates. Enumeration is the
+ * capability the shared-customer model withholds, so it lives where it is
+ * obvious and is scoped by the JWT alone.
+ */
+@Controller('vendor/customers')
+@Roles('VENDOR')
+export class VendorCustomersController {
+  constructor(private readonly directory: CustomerDirectoryService) {}
+
+  @Get()
+  list(
+    @Query(new ZodValidationPipe(myCustomersFilterSchema)) query: MyCustomersFilter,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.directory.myCustomers(query, user);
+  }
+}
+
 const adminListSchema = offsetPaginationSchema.extend({
   q: z.string().trim().max(120).optional(),
+  /** Narrow the directory to one vendor's customers. ADMIN only, by route. */
+  vendorId: z.string().trim().min(1).max(40).optional(),
 });
 
 @Controller('admin/customers')
@@ -127,9 +200,10 @@ export class AdminCustomersController {
 
   @Get()
   list(
-    @Query(new ZodValidationPipe(adminListSchema)) query: OffsetPagination & { q?: string },
+    @Query(new ZodValidationPipe(adminListSchema))
+    query: OffsetPagination & { q?: string; vendorId?: string },
   ) {
-    return this.customers.adminList(query, query.q);
+    return this.customers.adminList(query, query.q, query.vendorId);
   }
 
   @Get(':id')
@@ -138,11 +212,12 @@ export class AdminCustomersController {
   }
 
   @Patch(':id')
-  update(
+  async update(
     @Param('id') id: string,
     @Body(new ZodValidationPipe(adminUpdateCustomerSchema)) body: AdminUpdateCustomerInput,
     @CurrentUser() user: AuthUser,
   ) {
-    return this.customers.adminUpdate(id, body, user);
+    await this.customers.adminUpdate(id, body, user);
+    return this.profiles.build(id, user); // same full shape as every read
   }
 }

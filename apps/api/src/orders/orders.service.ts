@@ -38,6 +38,41 @@ const VENDOR_ORDER_SELECT = {
   driver: { select: { id: true, fullName: true, contactPhone: true } },
 } as const;
 
+/**
+ * The same projection, plus the CALLING vendor's private name for the customer.
+ *
+ * Without this the orders list would keep showing the shared name while the
+ * customer panel showed the vendor's own — the same person under two names on
+ * two screens. `vendorLinks` is a nested filtered relation, so Prisma batches
+ * it into one extra query for the whole page: no N+1.
+ *
+ * Deliberately NOT reused for drivers or admin. A vendor's alias is private:
+ * the driver knocking on the door must hear the name the customer answers to.
+ */
+const vendorOrderSelect = (vendorId: string) =>
+  ({
+    ...VENDOR_ORDER_SELECT,
+    customer: {
+      select: {
+        id: true,
+        name: true,
+        normalizedPhone: true,
+        vendorLinks: { where: { vendorId }, select: { displayName: true }, take: 1 },
+      },
+    },
+  }) as const;
+
+type WithLinkedCustomer<T> = T & {
+  customer: { name: string; vendorLinks: Array<{ displayName: string | null }> };
+};
+
+/** Collapses the alias onto `customer.name` and drops the link off the wire. */
+function applyAlias<T>(row: WithLinkedCustomer<T>) {
+  const { vendorLinks, ...customer } = row.customer;
+  const alias = vendorLinks[0]?.displayName;
+  return { ...row, customer: { ...customer, name: alias ?? customer.name } };
+}
+
 const DRIVER_ORDER_SELECT = {
   id: true,
   orderNumber: true,
@@ -200,17 +235,18 @@ export class OrdersService {
     };
     const rows = await this.prisma.order.findMany({
       where,
-      select: VENDOR_ORDER_SELECT,
+      select: vendorOrderSelect(vendorId),
       ...cursorArgs(filter),
     });
-    return cursorResult(rows, filter.limit);
+    const page = cursorResult(rows, filter.limit);
+    return { data: page.data.map(applyAlias), meta: page.meta };
   }
 
   async vendorGet(orderId: string, vendorId: string) {
     const order = await this.prisma.order.findUnique({
       where: { id: orderId, vendorId }, // scoping in the WHERE: foreign order = not found
       select: {
-        ...VENDOR_ORDER_SELECT,
+        ...vendorOrderSelect(vendorId),
         statusHistory: {
           orderBy: { createdAt: 'asc' as const },
           select: { id: true, fromStatus: true, toStatus: true, actorType: true, reason: true, createdAt: true },
@@ -218,7 +254,7 @@ export class OrdersService {
       },
     });
     if (!order) throw AppException.notFound('Order not found');
-    return order;
+    return applyAlias(order);
   }
 
   // ---------------------------------------------------------------- driver

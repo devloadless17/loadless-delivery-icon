@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { loginAs, uniquePhone, VENDOR } from './helpers';
+import { loginAs, uniquePhone, VENDOR, VENDOR2 } from './helpers';
 
 /**
  * The shared global customer system, at the UI level: creation, cross-format
@@ -35,7 +35,8 @@ test.describe('shared customer system', () => {
     const intl = `+961 ${phone.slice(1, 3)} ${phone.slice(3)}`; // "+961 3X XXXXX"-ish
     await search.fill(intl);
     await expect(page.getByText('Rana Khoury')).toBeVisible();
-    await expect(page.getByText('Shared customer')).toBeVisible();
+    // This vendor entered them, so they hold the pen on the shared name.
+    await expect(page.getByText('Added by you')).toBeVisible();
     await expect(page.getByText('Ashrafieh, Sassine square')).toBeVisible();
 
     // edit name (global, with history)
@@ -64,10 +65,13 @@ test.describe('shared customer system', () => {
     // ANOTHER vendor finds the same global customer — the core sharing promise
     await page.getByRole('button', { name: 'Sign out' }).click();
     await page.waitForURL('**/login');
-    await loginAs(page, 'vendor2@e2e.local', '/vendor');
+    await loginAs(page, VENDOR2, '/vendor');
     await page.goto('/vendor/customers');
     await page.getByPlaceholder('Customer phone — 03 123 456').fill(phone);
     await expect(page.getByText('Rana K. Khoury')).toBeVisible();
     await expect(page.getByText('Ashrafieh, Sassine square')).toBeVisible();
+    // …as a customer they did NOT add: the record is shared, the pen is not.
+    await expect(page.getByText('Shared customer')).toBeVisible();
+    await expect(page.getByText('Added by you')).toHaveCount(0);
   });
 });

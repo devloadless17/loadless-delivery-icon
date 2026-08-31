@@ -1,11 +1,12 @@
 'use client';
 
-import { TriangleAlert, UserPlus, Users } from 'lucide-react';
+import { TriangleAlert, UserPlus } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { useCustomerSearch } from '@/features/customers/api';
 import { CustomerCreateDialog } from '@/features/customers/customer-create-dialog';
 import { CustomerProfilePanel } from '@/features/customers/customer-profile-panel';
+import { MyCustomersList } from '@/features/customers/my-customers-list';
 import { NewCustomerForm } from '@/features/customers/new-customer-form';
 import { CustomerProfileSkeleton } from '@/features/customers/profile/profile-skeleton';
 import { PhoneSearchInput, usePhoneSearch } from '@/features/customers/phone-search';
@@ -23,7 +24,7 @@ export default function VendorCustomersPage() {
         <div>
           <h1 className="text-2xl font-semibold">Customers</h1>
           <p className="text-sm text-muted-foreground">
-            Look up any customer by phone — the customer list is shared across the whole platform.
+            Your customers are below. Type any phone number to reach anyone on the platform.
           </p>
         </div>
         <Button onClick={() => setCreateOpen(true)}>
@@ -37,15 +38,10 @@ export default function VendorCustomersPage() {
 
       {!showResult ? (
         raw.trim() === '' ? (
-          <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed py-14 text-center">
-            <Users className="size-8 text-muted-foreground" aria-hidden />
-            <div>
-              <p className="font-medium">Search by phone number</p>
-              <p className="text-sm text-muted-foreground">
-                Any format works: 03 123 456, 70123456, +961 3 123 456…
-              </p>
-            </div>
-          </div>
+          // Idle state only. The moment a phone number is typed this unmounts
+          // and the lookup takes over — the mid-call path is never competing
+          // with a list for the vendor's attention.
+          <MyCustomersList onSelect={setRaw} />
         ) : (
           <p className="px-1 text-sm text-muted-foreground">Keep typing — enter a full number.</p>
         )

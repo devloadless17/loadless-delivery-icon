@@ -1,6 +1,6 @@
 'use client';
 
-import { Check, Copy, Pencil } from 'lucide-react';
+import { Check, Copy, Pencil, RotateCcw } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { toast } from 'sonner';
 import { ApiError } from '@/lib/api-client';
@@ -9,7 +9,12 @@ import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { useUpdateCustomerName, type CustomerProfile } from '../api';
+import {
+  useClearDisplayName,
+  useSetDisplayName,
+  useUpdateCustomerName,
+  type CustomerProfile,
+} from '../api';
 
 /** Name, phone and the one-tap actions — the first thing the vendor's eye hits. */
 export function IdentityHeader({
@@ -28,6 +33,13 @@ export function IdentityHeader({
   const [name, setName] = useState(customer.name);
   const [copied, setCopied] = useState(false);
   const updateName = useUpdateCustomerName();
+  const setDisplayName = useSetDisplayName();
+  const clearDisplayName = useClearDisplayName();
+
+  // GLOBAL: you added them (or you're admin), so your edit is everyone's.
+  // MINE: another vendor added them — you can only label them for yourself.
+  const isGlobal = customer.nameScope === 'GLOBAL';
+  const saving = updateName.isPending || setDisplayName.isPending;
 
   async function save() {
     const trimmed = name.trim();
@@ -40,11 +52,25 @@ export function IdentityHeader({
       return;
     }
     try {
-      await updateName.mutateAsync({ id: customer.id, name: trimmed });
+      if (isGlobal) {
+        await updateName.mutateAsync({ id: customer.id, name: trimmed });
+        toast.success('Name updated');
+      } else {
+        await setDisplayName.mutateAsync({ id: customer.id, displayName: trimmed });
+        toast.success('Saved — only you see this name');
+      }
       onEditingChange(false);
-      toast.success('Name updated');
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Could not update the name.');
+    }
+  }
+
+  async function usePlatformName() {
+    try {
+      await clearDisplayName.mutateAsync({ id: customer.id });
+      toast.success(`Now showing ${customer.baseName}`);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Could not reset the name.');
     }
   }
 
@@ -69,6 +95,7 @@ export function IdentityHeader({
         </span>
         <div className="min-w-0">
           {editing ? (
+            <div className="space-y-1">
             <form
               className="flex items-center gap-2"
               onSubmit={(e) => {
@@ -89,7 +116,7 @@ export function IdentityHeader({
                 autoFocus
                 onFocus={(e) => e.currentTarget.select()}
               />
-              <Button type="submit" size="sm" loading={updateName.isPending}>
+              <Button type="submit" size="sm" loading={saving}>
                 Save
               </Button>
               <Button
@@ -104,6 +131,15 @@ export function IdentityHeader({
                 Cancel
               </Button>
             </form>
+            {/* The consequence, stated BEFORE the keystroke. This one sentence
+                is the whole answer to "another vendor renamed my customer and
+                I got confused". */}
+            <p className="text-xs text-muted-foreground">
+              {isGlobal
+                ? 'Everyone on the platform sees this name.'
+                : `Only you will see this name. Everyone else keeps “${customer.baseName}”.`}
+            </p>
+            </div>
           ) : (
             <h2
               className={cn(
@@ -125,6 +161,19 @@ export function IdentityHeader({
                 <Pencil className="size-3.5" />
               </Button>
             </h2>
+          )}
+          {customer.displayName && (
+            <p className="text-xs text-muted-foreground">
+              Your name for them · platform shows{' '}
+              <span className="font-medium">{customer.baseName}</span>
+              <button
+                type="button"
+                onClick={() => void usePlatformName()}
+                className="ml-1.5 inline-flex cursor-pointer items-center gap-1 font-medium text-primary hover:underline"
+              >
+                <RotateCcw className="size-3" aria-hidden /> Use platform name
+              </button>
+            </p>
           )}
           <div className="flex items-center gap-1.5">
             <a
@@ -149,7 +198,12 @@ export function IdentityHeader({
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-2">
-        {!dense && <Badge variant="muted">Shared customer</Badge>}
+        {!dense &&
+          (customer.addedByYou ? (
+            <Badge variant="muted">Added by you</Badge>
+          ) : (
+            <Badge variant="muted">Shared customer</Badge>
+          ))}
         {actionSlot}
       </div>
     </div>

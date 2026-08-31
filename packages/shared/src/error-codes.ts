@@ -26,6 +26,11 @@ export const ERROR_CODES = {
   // customers
   PHONE_INVALID: 'PHONE_INVALID',
   PHONE_ALREADY_EXISTS: 'PHONE_ALREADY_EXISTS',
+  /// Editing an address another vendor owns. 403, not 404: the row IS on the
+  /// caller's screen, so "not found" would be a lie they can disprove.
+  ADDRESS_NOT_YOURS: 'ADDRESS_NOT_YOURS',
+  /// Rewriting the name everyone sees, when you did not add this customer.
+  NAME_NOT_YOURS: 'NAME_NOT_YOURS',
 
   // files
   FILE_TOO_LARGE: 'FILE_TOO_LARGE',

@@ -12,6 +12,7 @@ import type {
   CustomerProfileView,
   CustomerStatsView,
   UpdateCustomerAddressInput,
+  VendorCustomerRow,
 } from '@loadless/shared';
 import { api } from '@/lib/api-client';
 
@@ -26,6 +27,35 @@ export type Customer = CustomerProfileView;
 interface CursorPage<T> {
   data: T[];
   meta: { nextCursor: string | null };
+}
+
+export interface OffsetPage<T> {
+  data: T[];
+  meta: { page: number; limit: number; total: number; totalPages: number };
+}
+
+/**
+ * "My customers" — everyone this vendor added or has ordered for.
+ *
+ * This is the ONLY listing a vendor gets. Typing a phone reaches anyone on the
+ * platform; browsing reaches only the people they actually deal with.
+ */
+export function useMyCustomers(params: { page: number; q: string }) {
+  return useQuery({
+    queryKey: ['vendor', 'customers', params.page, params.q],
+    // Raw fetch, not api.get: this endpoint answers with a { data, meta }
+    // envelope, and api.get unwraps to `data` alone — which would silently
+    // drop the pagination meta the table pages off.
+    queryFn: async ({ signal }) => {
+      const qs = new URLSearchParams({ page: String(params.page), limit: '10' });
+      if (params.q.trim()) qs.set('q', params.q.trim());
+      const res = await fetch(`/api/v1/vendor/customers?${qs}`, { signal });
+      if (!res.ok) throw new Error('Failed to load customers');
+      return (await res.json()) as OffsetPage<VendorCustomerRow>;
+    },
+    placeholderData: (previous) => previous, // paging shouldn't blank the table
+    staleTime: 15_000,
+  });
 }
 
 /**
@@ -104,23 +134,61 @@ export function useCreateCustomer() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['customers'] });
       void qc.invalidateQueries({ queryKey: ['admin', 'customers'] });
+      // Adding a customer makes them mine — the list must show them at once.
+      void qc.invalidateQueries({ queryKey: ['vendor', 'customers'] });
     },
   });
 }
 
+/**
+ * Rewrite the name EVERY vendor sees. Allowed for admin and for the vendor who
+ * added the customer; anyone else gets 403 NAME_NOT_YOURS and should use
+ * `useSetDisplayName` instead.
+ */
 export function useUpdateCustomerName() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, name }: { id: string; name: string }) =>
       api.patch<CustomerProfile>(`/customers/${id}`, { name }),
     onMutate: ({ id, name }) => {
-      patchCachedCustomer(qc, id, (c) => ({ ...c, name }));
+      // baseName moves with it: the caller has no alias, so they follow it.
+      patchCachedCustomer(qc, id, (c) => ({ ...c, name, baseName: name }));
     },
     onError: () => {
       void qc.invalidateQueries({ queryKey: ['customers'] });
     },
     onSettled: () => {
       void qc.invalidateQueries({ queryKey: ['admin', 'customers'] });
+      void qc.invalidateQueries({ queryKey: ['vendor', 'customers'] });
+    },
+  });
+}
+
+/**
+ * Set MY private name for a customer. Nothing changes for any other vendor —
+ * which is the point: shared data nobody else can rewrite under you.
+ */
+export function useSetDisplayName() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, displayName }: { id: string; displayName: string }) =>
+      api.put<CustomerProfile>(`/customers/${id}/display-name`, { displayName }),
+    onSuccess: (customer) => {
+      patchCachedCustomer(qc, customer.id, () => customer);
+      void qc.invalidateQueries({ queryKey: ['vendor', 'customers'] });
+    },
+  });
+}
+
+/** Drop my private name and follow the shared record again. */
+export function useClearDisplayName() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id }: { id: string }) =>
+      api.delete<CustomerProfile>(`/customers/${id}/display-name`),
+    onSuccess: (customer) => {
+      patchCachedCustomer(qc, customer.id, () => customer);
+      void qc.invalidateQueries({ queryKey: ['vendor', 'customers'] });
     },
   });
 }

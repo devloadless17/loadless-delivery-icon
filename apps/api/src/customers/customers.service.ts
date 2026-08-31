@@ -12,17 +12,34 @@ import { AppException } from '../common/app.exception';
 import { offsetArgs, offsetMeta } from '../common/pagination';
 import { PrismaService } from '../prisma/prisma.service';
 import type { AuthUser } from '../auth/auth.types';
-import { ADDRESS_SELECT, CUSTOMER_SELECT } from './customer.select';
+import {
+  ADDRESS_SELECT,
+  CUSTOMER_SELECT,
+  projectAddress,
+  projectCustomer,
+} from './customer.select';
+import { adminVendorLinkFilter, vendorCustomerScope } from './customer-order.scope';
 
 type Tx = Prisma.TransactionClient;
 
 
 /**
  * Customers are GLOBAL: shared across all vendors, keyed by normalized phone.
- * Policy (documented in the plan): any active vendor may read, create, edit
- * names and add addresses; every edit leaves a change-history diff; the phone
- * (identity key) is admin-only to change. `createdByVendorId` is immutable
- * attribution, never ownership.
+ * Any active vendor may look one up by phone and add addresses; every edit
+ * leaves a change-history diff.
+ *
+ * What a vendor may CHANGE is narrower, because shared master data that anyone
+ * can rewrite is data nobody can trust ("I need my customer's data to stay how
+ * I set it"):
+ *
+ *   phone (identity)      -> ADMIN only
+ *   the global name       -> ADMIN, or the vendor who added the customer
+ *   your private name     -> you only, and only you ever see it
+ *   an address you added  -> you (+ ADMIN); everyone still reads it
+ *   an address others own -> nobody but them; you save your own version
+ *
+ * So `createdByVendorId` is no longer bare attribution: on customers it grants
+ * the global-name pen, and on addresses it is ownership.
  */
 @Injectable()
 export class CustomersService {
@@ -106,9 +123,42 @@ export class CustomersService {
     });
   }
 
+  /** The caller's own private name for this customer (null for ADMIN). */
+  private async myAlias(customerId: string, actor: AuthUser): Promise<string | null> {
+    if (actor.role !== 'VENDOR' || !actor.vendorId) return null;
+    const link = await this.prisma.customerVendor.findUnique({
+      where: { customerId_vendorId: { customerId, vendorId: actor.vendorId } },
+      select: { displayName: true },
+    });
+    return link?.displayName ?? null;
+  }
+
+  /**
+   * Rewrite the name EVERY vendor sees.
+   *
+   * Restricted to the vendor who added the customer (and admin). A second
+   * vendor who wants a different name sets their own alias instead — that way
+   * the first vendor's screen never changes under them, which is the whole
+   * point. It stays creator-editable rather than alias-only on purpose: when
+   * the vendor who entered a typo fixes it, everyone should get the fix.
+   */
   async update(id: string, input: UpdateCustomerInput, actor: AuthUser) {
     const existing = await this.get(id);
-    if (input.name === undefined || input.name === existing.name) return existing;
+    const alias = await this.myAlias(id, actor);
+    if (input.name === undefined || input.name === existing.name) {
+      return projectCustomer(actor, existing, alias);
+    }
+
+    if (
+      actor.role !== 'ADMIN' &&
+      (!actor.vendorId || existing.createdByVendorId !== actor.vendorId)
+    ) {
+      throw new AppException(
+        ERROR_CODES.NAME_NOT_YOURS,
+        'Only the vendor who added this customer can change the name everyone sees. Set your own name for them instead.',
+        HttpStatus.FORBIDDEN,
+      );
+    }
 
     const [updated] = await this.prisma.$transaction([
       this.prisma.customer.update({
@@ -125,7 +175,41 @@ export class CustomersService {
         },
       }),
     ]);
-    return updated;
+    return projectCustomer(actor, updated, alias);
+  }
+
+  /**
+   * Set MY private name for a customer. Nothing about the shared record moves;
+   * no other vendor and no driver ever sees this string.
+   *
+   * An alias equal to the base name is stored as NULL rather than as a copy:
+   * the vendor plainly meant "this name", so they should keep receiving the
+   * creator's future corrections instead of freezing today's spelling.
+   */
+  async setDisplayName(customerId: string, displayName: string, actor: AuthUser) {
+    const vendorId = vendorCustomerScope(actor);
+    const customer = await this.get(customerId);
+    const value = displayName === customer.name ? null : displayName;
+
+    await this.prisma.customerVendor.upsert({
+      where: { customerId_vendorId: { customerId, vendorId } },
+      // The link may not exist yet: looking a customer up does not create one,
+      // only creating them or ordering for them does.
+      create: { customerId, vendorId, displayName: value },
+      update: { displayName: value },
+    });
+    return projectCustomer(actor, customer, value);
+  }
+
+  /** Drop my alias and follow the global name again. */
+  async clearDisplayName(customerId: string, actor: AuthUser) {
+    const vendorId = vendorCustomerScope(actor);
+    const customer = await this.get(customerId);
+    await this.prisma.customerVendor.updateMany({
+      where: { customerId, vendorId },
+      data: { displayName: null },
+    });
+    return projectCustomer(actor, customer, null);
   }
 
   /**
@@ -244,10 +328,32 @@ export class CustomersService {
     const { id } = await this.prisma.$transaction((tx) =>
       this.saveAddressInTx(tx, customerId, input, actor),
     );
-    return this.prisma.customerAddress.findUniqueOrThrow({
+    const row = await this.prisma.customerAddress.findUniqueOrThrow({
       where: { id },
       select: ADDRESS_SELECT,
     });
+    return projectAddress(actor, row);
+  }
+
+  /**
+   * May the caller rewrite this address row?
+   *
+   * Deliberately 403 and not 404. Everywhere else a resource the caller cannot
+   * touch is "not found", because saying "forbidden" would confirm it exists.
+   * Here it is already on their screen, listed in the profile they just
+   * loaded — pretending it vanished would be a lie they can disprove, and it
+   * would hide the actual affordance ("save your own version").
+   */
+  private assertAddressOwner(ownerVendorId: string | null, actor: AuthUser) {
+    if (actor.role === 'ADMIN') return;
+    if (actor.role === 'VENDOR' && actor.vendorId && ownerVendorId === actor.vendorId) return;
+    throw new AppException(
+      ERROR_CODES.ADDRESS_NOT_YOURS,
+      ownerVendorId === null
+        ? 'This address predates address ownership — ask the platform to change it.'
+        : 'Another vendor added this address and relies on it. Save your own version instead.',
+      HttpStatus.FORBIDDEN,
+    );
   }
 
   /** Correct a saved address in place — the gap that forced archive-and-re-add. */
@@ -265,6 +371,8 @@ export class CustomersService {
         select: ADDRESS_SELECT,
       });
       if (!existing) throw AppException.notFound('Address not found');
+      // Existence first, then ownership: a row on ANOTHER customer stays a 404.
+      this.assertAddressOwner(existing.createdByVendorId, actor);
 
       const diff: Record<string, { old: unknown; new: unknown }> = {};
       for (const key of ['label', 'addressText', 'mapsUrl'] as const) {
@@ -273,7 +381,8 @@ export class CustomersService {
           diff[key] = { old: existing[key], new: next };
         }
       }
-      if (Object.keys(diff).length === 0) return existing; // no-op writes no history
+      // no-op writes no history
+      if (Object.keys(diff).length === 0) return projectAddress(actor, existing);
 
       try {
         const updated = await tx.customerAddress.update({
@@ -293,7 +402,7 @@ export class CustomersService {
             changes: { addressUpdated: { addressId, ...diff } } as never,
           },
         });
-        return updated;
+        return projectAddress(actor, updated);
       } catch (err) {
         if (err instanceof Prisma.PrismaClientKnownRequestError) {
           if (err.code === 'P2025') throw AppException.notFound('Address not found');
@@ -310,18 +419,31 @@ export class CustomersService {
   }
 
   async archiveAddress(customerId: string, addressId: string, actor: AuthUser) {
-    const result = await this.prisma.customerAddress.updateMany({
-      where: { id: addressId, customerId, isArchived: false },
-      data: { isArchived: true },
-    });
-    if (result.count === 0) throw AppException.notFound('Address not found');
-    await this.prisma.customerChangeHistory.create({
-      data: {
-        customerId,
-        changedByUserId: actor.userId,
-        actorType: actor.role,
-        changes: { addressArchived: { old: addressId } },
-      },
+    await this.prisma.$transaction(async (tx) => {
+      const existing = await tx.customerAddress.findFirst({
+        where: { id: addressId, customerId, isArchived: false },
+        select: { id: true, createdByVendorId: true },
+      });
+      if (!existing) throw AppException.notFound('Address not found');
+      this.assertAddressOwner(existing.createdByVendorId, actor);
+
+      // Still a conditional updateMany: the read above answers "who owns it",
+      // not "is it still unarchived", and only the WHERE can answer that
+      // without a race.
+      const result = await tx.customerAddress.updateMany({
+        where: { id: addressId, customerId, isArchived: false },
+        data: { isArchived: true },
+      });
+      if (result.count === 0) throw AppException.notFound('Address not found');
+
+      await tx.customerChangeHistory.create({
+        data: {
+          customerId,
+          changedByUserId: actor.userId,
+          actorType: actor.role,
+          changes: { addressArchived: { old: addressId } },
+        },
+      });
     });
   }
 
@@ -339,7 +461,7 @@ export class CustomersService {
     if (input.phone && input.phone !== existing.normalizedPhone) {
       changes.normalizedPhone = { old: existing.normalizedPhone, new: input.phone };
     }
-    if (Object.keys(changes).length === 0) return existing;
+    if (Object.keys(changes).length === 0) return projectCustomer(actor, existing, null);
 
     try {
       const [updated] = await this.prisma.$transaction([
@@ -360,7 +482,7 @@ export class CustomersService {
           },
         }),
       ]);
-      return updated;
+      return projectCustomer(actor, updated, null); // ADMIN never has an alias
     } catch (err) {
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
         throw new AppException(
@@ -373,16 +495,23 @@ export class CustomersService {
     }
   }
 
-  /** Admin browsing — vendors never get bulk listing (search is exact-phone only). */
-  async adminList(pagination: OffsetPagination, q?: string) {
-    const where = q
-      ? {
-          OR: [
-            { name: { contains: q, mode: 'insensitive' as const } },
-            { normalizedPhone: { contains: q.replace(/\s/g, '') } },
-          ],
-        }
-      : {};
+  /**
+   * Admin browsing — the ONLY name-searchable listing of the whole directory.
+   * Vendors get `myCustomers` instead, which is bounded to their own links.
+   * `vendorId` narrows it to one vendor's customers (served by the link PK).
+   */
+  async adminList(pagination: OffsetPagination, q?: string, vendorId?: string) {
+    const where: Prisma.CustomerWhereInput = {
+      ...adminVendorLinkFilter(vendorId),
+      ...(q
+        ? {
+            OR: [
+              { name: { contains: q, mode: 'insensitive' as const } },
+              { normalizedPhone: { contains: q.replace(/\s/g, '') } },
+            ],
+          }
+        : {}),
+    };
     const [rows, total] = await this.prisma.$transaction([
       this.prisma.customer.findMany({
         where,
@@ -392,7 +521,13 @@ export class CustomersService {
           name: true,
           createdAt: true,
           createdByVendor: { select: { businessName: true } },
-          _count: { select: { orders: true, addresses: { where: { isArchived: false } } } },
+          _count: {
+            select: {
+              orders: true,
+              addresses: { where: { isArchived: false } },
+              vendorLinks: true,
+            },
+          },
         },
         orderBy: { createdAt: 'desc' },
         ...offsetArgs(pagination),

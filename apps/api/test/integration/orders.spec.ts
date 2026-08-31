@@ -39,8 +39,8 @@ describe('orders (integration)', () => {
     // clean slate — TRUNCATE bypasses the append-only row trigger on history
     await prisma.$executeRawUnsafe(
       `TRUNCATE TABLE order_status_history, orders, customer_change_history,
-       customer_addresses, customers, audit_logs, refresh_tokens, file_objects,
-       drivers, vendors, users CASCADE`,
+       customer_vendors, customer_addresses, customers, audit_logs, refresh_tokens,
+       file_objects, drivers, vendors, users CASCADE`,
     );
     await prisma.platformSetting.upsert({
       where: { id: 'singleton' },

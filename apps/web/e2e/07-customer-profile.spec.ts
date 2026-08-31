@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { ADMIN, createOrderUI, loginAs, uniquePhone, VENDOR } from './helpers';
+import { ADMIN, createOrderUI, loginAs, uniquePhone, VENDOR, VENDOR2 } from './helpers';
 
 /**
  * The customer-360 panel: what a vendor sees while the customer is on the
@@ -33,9 +33,11 @@ test.describe('customer profile', () => {
     await expect(page.getByText('Last order').first()).toBeVisible();
     await expect(page.getByRole('button', { name: 'Repeat order' })).toBeVisible();
 
-    // Stats: 3 orders with this vendor, none delivered yet.
-    await expect(page.getByText('Orders with you')).toBeVisible();
-    await expect(page.getByText('3', { exact: true }).first()).toBeVisible();
+    // Stats: 3 orders with this vendor, none delivered yet. Scoped to the
+    // cell — a bare getByText('3') matches any stray digit on the page.
+    await expect(page.getByTestId('stat-orders')).toContainText('Orders with you');
+    await expect(page.getByTestId('stat-orders-value')).toHaveText('3');
+    await expect(page.getByTestId('stat-delivered-value')).toHaveText('0');
 
     // Their usual address is known from order history even though it was never
     // saved to the profile — so the order form can offer it in one tap.
@@ -141,7 +143,7 @@ test.describe('customer profile', () => {
 
     const ctxB = await browser.newContext();
     const vendorB = await ctxB.newPage();
-    await loginAs(vendorB, 'vendor2@e2e.local', '/vendor');
+    await loginAs(vendorB, VENDOR2, '/vendor');
     await vendorB.goto('/vendor/customers');
     await vendorB.getByPlaceholder('Customer phone — 03 123 456').fill(customerPhone);
 
@@ -151,7 +153,8 @@ test.describe('customer profile', () => {
     await expect(vendorB.getByText('No orders with you yet')).toHaveCount(0);
     await vendorB.getByRole('tab', { name: /Orders/ }).click();
     await expect(vendorB.getByText('No orders with you yet')).toBeVisible();
-    await expect(vendorB.getByText('on the platform')).toBeVisible();
+    // The one deliberate cross-vendor signal: a bare count, no vendor named.
+    await expect(vendorB.getByText(/They.ve ordered \d+ times? on the platform/)).toBeVisible();
 
     await ctxA.close();
     await ctxB.close();

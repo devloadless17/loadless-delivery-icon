@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { ADDRESS_LABELS, ORDER_STATUSES, type AddressLabel, type OrderStatus } from '../enums';
 import type { Currency } from '../money';
-import { cuidSchema, cursorPaginationSchema, phoneSchema } from './common';
+import { cuidSchema, cursorPaginationSchema, offsetPaginationSchema, phoneSchema } from './common';
 
 export const latitudeSchema = z.coerce.number().min(-90).max(90);
 export const longitudeSchema = z.coerce.number().min(-180).max(180);
@@ -74,6 +74,25 @@ export const updateCustomerAddressSchema = z
 export type UpdateCustomerAddressInput = z.infer<typeof updateCustomerAddressSchema>;
 
 /**
+ * A vendor's PRIVATE name for a customer. Setting it changes nothing for any
+ * other vendor; clearing it (DELETE) returns to following the global name.
+ */
+export const setCustomerDisplayNameSchema = z.object({
+  displayName: z.string().trim().min(2).max(120),
+});
+export type SetCustomerDisplayNameInput = z.infer<typeof setCustomerDisplayNameSchema>;
+
+/**
+ * "My customers" — the vendor's own list. Like the history filter, it has NO
+ * vendorId field: the boundary is the JWT, and an injected ?vendorId is
+ * dropped by zod before it can reach a query.
+ */
+export const myCustomersFilterSchema = offsetPaginationSchema.extend({
+  q: z.string().trim().max(120).optional(),
+});
+export type MyCustomersFilter = z.infer<typeof myCustomersFilterSchema>;
+
+/**
  * Customer order history. Deliberately has NO vendorId field: a vendor's slice
  * comes from their JWT and can never be widened by a query parameter.
  */
@@ -91,6 +110,16 @@ export const archiveCustomerAddressSchema = z.object({ addressId: cuidSchema });
 /** Which slice of order data the stats describe. Vendors NEVER get PLATFORM. */
 export type CustomerProfileScope = 'VENDOR' | 'PLATFORM';
 
+/**
+ * Who may edit an address, from the CALLER's point of view.
+ *   MINE     — you added it: edit and archive freely.
+ *   OTHER    — another vendor added it and relies on it: read-only for you.
+ *   PLATFORM — nobody owns it (admin-only).
+ * A computed enum, never the owning vendor's id: vendors must not be able to
+ * correlate a customer's addresses with a competitor.
+ */
+export type AddressOwnership = 'MINE' | 'OTHER' | 'PLATFORM';
+
 export interface CustomerAddressView {
   id: string;
   label: AddressLabel;
@@ -98,6 +127,9 @@ export interface CustomerAddressView {
   mapsUrl: string | null;
   lat: number | null;
   lng: number | null;
+  ownership: AddressOwnership;
+  /** ADMIN scope only — which vendor owns the row. */
+  ownerVendorName?: string | null;
 }
 
 /** Money never merges across currencies — one entry per currency. */
@@ -147,14 +179,60 @@ export interface CustomerOrderView {
   vendorName?: string;
 }
 
+/**
+ * Whose name you are editing.
+ *   GLOBAL — the name every vendor sees (you added this customer, or you're admin).
+ *   MINE   — your private label; everyone else keeps the base name.
+ * The UI states the consequence BEFORE the keystroke, which is the whole
+ * answer to "another vendor changed my customer's name and I got confused".
+ */
+export type CustomerNameScope = 'GLOBAL' | 'MINE';
+
 export interface CustomerProfileView {
   id: string;
   normalizedPhone: string;
+  /** The name to display: your alias if you set one, else the global name. */
   name: string;
-  createdByVendorId: string | null;
+  /** The global name — what a vendor without an alias sees. */
+  baseName: string;
+  /** Your private alias, or null when you follow the global name. */
+  displayName: string | null;
+  /** Which name a save would rewrite. */
+  nameScope: CustomerNameScope;
+  /** VENDOR scope: did YOU add them. (No competitor id ever ships.) */
+  addedByYou: boolean;
+  /** ADMIN scope only. */
+  createdByVendorId?: string | null;
   createdAt: string;
   addresses: CustomerAddressView[];
   stats: CustomerStatsView;
   recentOrders: CustomerOrderView[];
   recentOrdersNextCursor: string | null;
+  /** ADMIN scope only — every vendor who deals with this customer. */
+  vendorLinks?: CustomerVendorLinkView[];
+}
+
+/** One vendor's relationship with a customer, as the admin sees it. */
+export interface CustomerVendorLinkView {
+  vendorId: string;
+  businessName: string;
+  /** That vendor's private name for this customer, if they set one. */
+  displayName: string | null;
+  ordersCount: number;
+  lastOrderAt: string | null;
+  isCreator: boolean;
+}
+
+/** One row of a vendor's "my customers" list. */
+export interface VendorCustomerRow {
+  id: string;
+  name: string;
+  baseName: string;
+  displayName: string | null;
+  normalizedPhone: string;
+  /** Orders with YOU, not platform-wide. */
+  ordersCount: number;
+  lastOrderAt: string | null;
+  addressCount: number;
+  addedByYou: boolean;
 }

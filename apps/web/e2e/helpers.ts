@@ -3,6 +3,8 @@ import { expect, type Page } from '@playwright/test';
 export const PASSWORD = 'e2epassword1';
 export const ADMIN = 'admin@e2e.local';
 export const VENDOR = 'vendor@e2e.local';
+/** The second shop. Created by 02-admin; every cross-vendor spec uses it. */
+export const VENDOR2 = 'vendor2@e2e.local';
 export const DRIVER1_PHONE = '71 999 888'; // 25% override
 export const DRIVER2_PHONE = '71 999 777'; // platform default 30%
 

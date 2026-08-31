@@ -5,13 +5,14 @@ import { AppException } from '../common/app.exception';
 import { cursorArgs, cursorResult } from '../common/pagination';
 import { PrismaService } from '../prisma/prisma.service';
 import type { AuthUser } from '../auth/auth.types';
-import { CUSTOMER_SELECT } from './customer.select';
+import { CUSTOMER_SELECT, projectCustomer } from './customer.select';
 import {
   ADMIN_CUSTOMER_ORDER_SELECT,
   CUSTOMER_ORDER_SELECT,
   customerOrderScope,
   flattenVendorName,
   isPlatformScope,
+  vendorCustomerScope,
 } from './customer-order.scope';
 
 /** How many recent orders ride along inside the profile payload. */
@@ -50,6 +51,8 @@ export class CustomerProfileService {
   async build(customerId: string, actor: AuthUser) {
     const scope = customerOrderScope(actor, customerId);
     const platform = isPlatformScope(actor);
+    // Same JWT-only boundary as the order scope, on the link table.
+    const myVendorId = platform ? null : vendorCustomerScope(actor);
     // Interpolated only from the JWT claim, never from request input.
     const vendorFilter = platform
       ? Prisma.empty
@@ -80,6 +83,21 @@ export class CustomerProfileService {
       _count: { _all: true },
       _sum: { deliveryCharge: true },
     });
+    // The caller's relationship rows. For a VENDOR the where pins their own
+    // vendorId, so at most one row comes back and it is theirs — this is the
+    // same JWT-only boundary as customerOrderScope, expressed on the link
+    // table. For ADMIN it is every vendor who deals with this customer.
+    const linksQuery = this.prisma.customerVendor.findMany({
+      where: myVendorId ? { customerId, vendorId: myVendorId } : { customerId },
+      select: {
+        vendorId: true,
+        displayName: true,
+        ordersCount: true,
+        lastOrderAt: true,
+        vendor: { select: { businessName: true } },
+      },
+      orderBy: [{ ordersCount: 'desc' }, { vendorId: 'asc' }],
+    });
     const recentQuery = this.prisma.order.findMany({
       where: scope,
       select: platform ? ADMIN_CUSTOMER_ORDER_SELECT : CUSTOMER_ORDER_SELECT,
@@ -103,12 +121,13 @@ export class CustomerProfileService {
 
     // One round trip, one snapshot — so the platform count and the scoped
     // counts can never disagree with each other.
-    const [customer, totalOrdersPlatform, byStatus, spend, recentRows, topAddressRows] =
+    const [customer, totalOrdersPlatform, byStatus, spend, links, recentRows, topAddressRows] =
       await this.prisma.$transaction([
         customerQuery,
         platformCountQuery,
         byStatusQuery,
         spendQuery,
+        linksQuery,
         recentQuery,
         topAddressQuery,
       ]);
@@ -126,8 +145,27 @@ export class CustomerProfileService {
     const recent = cursorResult(recentRows, RECENT_ORDERS);
     const top = topAddressRows[0];
 
+    // A vendor's own row is the only one they can have; ADMIN has none.
+    const alias = myVendorId
+      ? (links.find((l) => l.vendorId === myVendorId)?.displayName ?? null)
+      : null;
+
     return {
-      ...customer,
+      ...projectCustomer(actor, customer, alias),
+      // ADMIN only: who else serves this customer. A vendor asking the same
+      // question gets nothing — that list IS the competitive information.
+      ...(platform
+        ? {
+            vendorLinks: links.map((l) => ({
+              vendorId: l.vendorId,
+              businessName: l.vendor.businessName,
+              displayName: l.displayName,
+              ordersCount: l.ordersCount,
+              lastOrderAt: l.lastOrderAt,
+              isCreator: l.vendorId === customer.createdByVendorId,
+            })),
+          }
+        : {}),
       stats: {
         scope: platform ? ('PLATFORM' as const) : ('VENDOR' as const),
         totalOrdersPlatform,

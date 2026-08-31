@@ -1,7 +1,7 @@
 'use client';
 
 import { displayAddress } from '@loadless/shared';
-import { ExternalLink, Pencil, Trash2, TriangleAlert } from 'lucide-react';
+import { CopyPlus, ExternalLink, Lock, Pencil, Trash2, TriangleAlert } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { ApiError } from '@/lib/api-client';
@@ -26,6 +26,8 @@ export function AddressRow({
   mode,
   onModeChange,
   onStartOrder,
+  onSaveMyVersion,
+  canManageAll,
 }: {
   customerId: string;
   address: CustomerAddress;
@@ -33,6 +35,9 @@ export function AddressRow({
   mode: RowMode;
   onModeChange: (mode: RowMode) => void;
   onStartOrder?: (address: CustomerAddress) => void;
+  onSaveMyVersion?: (address: CustomerAddress) => void;
+  /** ADMIN: the platform can correct any row, whoever added it. */
+  canManageAll?: boolean;
 }) {
   const updateAddress = useUpdateAddress();
   const archiveAddress = useArchiveAddress();
@@ -43,6 +48,11 @@ export function AddressRow({
   });
 
   const Icon = LABEL_ICON[address.label];
+  // You may rewrite only what you added. Another vendor's row stays readable —
+  // sharing is the whole point — but untouchable, so their screen never
+  // changes under them. `onSaveMyVersion` is the way forward: copy it, correct
+  // it, own the copy.
+  const canEdit = canManageAll || address.ownership === 'MINE';
 
   function beginEdit() {
     setDraft({
@@ -164,29 +174,62 @@ export function AddressRow({
                 <ExternalLink className="size-3" aria-hidden /> Open in Google Maps
               </a>
             ) : (
-              <button
-                type="button"
-                onClick={beginEdit}
-                className="mt-0.5 inline-flex cursor-pointer items-center gap-1 text-xs font-medium text-warning hover:underline"
-              >
-                <TriangleAlert className="size-3" aria-hidden /> No maps link — add one
-              </button>
+              canEdit && (
+                <button
+                  type="button"
+                  onClick={beginEdit}
+                  className="mt-0.5 inline-flex cursor-pointer items-center gap-1 text-xs font-medium text-warning hover:underline"
+                >
+                  <TriangleAlert className="size-3" aria-hidden /> No maps link — add one
+                </button>
+              )
+            )}
+            {!canEdit ? (
+              <p className="mt-0.5 inline-flex items-center gap-1 text-xs text-muted-foreground">
+                <Lock className="size-3" aria-hidden />
+                {address.ownership === 'OTHER'
+                  ? 'Added by another vendor'
+                  : 'Managed by the platform'}
+              </p>
+            ) : (
+              // Admin only: WHO owns the row. Vendors never see another
+              // vendor's name anywhere in a customer payload.
+              address.ownerVendorName && (
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Added by {address.ownerVendorName}
+                </p>
+              )
             )}
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-0.5">
-          <Button variant="ghost" size="icon" aria-label="Edit address" onClick={beginEdit}>
-            <Pencil />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="Remove address"
-            className="text-muted-foreground hover:text-destructive"
-            onClick={() => onModeChange('confirmRemove')}
-          >
-            <Trash2 />
-          </Button>
+          {canEdit ? (
+            <>
+              <Button variant="ghost" size="icon" aria-label="Edit address" onClick={beginEdit}>
+                <Pencil />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Remove address"
+                className="text-muted-foreground hover:text-destructive"
+                onClick={() => onModeChange('confirmRemove')}
+              >
+                <Trash2 />
+              </Button>
+            </>
+          ) : (
+            onSaveMyVersion && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground"
+                onClick={() => onSaveMyVersion(address)}
+              >
+                <CopyPlus /> Save my version
+              </Button>
+            )
+          )}
         </div>
       </div>
       {onStartOrder && (

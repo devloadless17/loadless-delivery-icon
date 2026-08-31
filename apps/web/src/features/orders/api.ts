@@ -71,7 +71,13 @@ export function useCreateOrder() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: CreateOrderInput) => api.post<VendorOrder>('/vendor/orders', input),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['vendor', 'orders'] }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['vendor', 'orders'] });
+      // Ordering for someone makes them one of my customers (and bumps their
+      // order count), so "My customers" is stale the moment this succeeds.
+      void qc.invalidateQueries({ queryKey: ['vendor', 'customers'] });
+      void qc.invalidateQueries({ queryKey: ['customers'] });
+    },
   });
 }
 

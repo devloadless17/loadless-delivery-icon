@@ -119,7 +119,9 @@ model Vendor {
   updatedAt    DateTime      @updatedAt @map("updated_at")
 
   orders           Order[]
-  createdCustomers Customer[] @relation("CustomerCreator")
+  createdCustomers Customer[]        @relation("CustomerCreator")
+  customerLinks    CustomerVendor[]
+  ownedAddresses   CustomerAddress[] @relation("AddressOwner")
 
   @@map("vendors")
 }
@@ -160,8 +162,44 @@ model Customer {
   addresses     CustomerAddress[]
   orders        Order[]
   changeHistory CustomerChangeHistory[]
+  vendorLinks   CustomerVendor[]
 
+  @@index([createdByVendorId])
   @@map("customers")
+}
+
+/// The vendor<->customer relationship. A row exists once a vendor CREATES a
+/// customer or places an order for one; the same customer can be linked to
+/// many vendors. This is what makes "my customers" a bounded list instead of
+/// a global directory, and what carries each vendor's PRIVATE overlay.
+///
+/// Maintained by Postgres triggers (see the customer_vendor_relationship
+/// migration), never by app code: a link row is an invariant of "an order
+/// exists", so it must be written inside the order's own transaction whether
+/// the insert came from the service, a script, or a test fixture.
+model CustomerVendor {
+  customerId String   @map("customer_id")
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  vendorId   String   @map("vendor_id")
+  vendor     Vendor   @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  /// This vendor's PRIVATE name for the customer. NULL = follow customers.name.
+  /// No other vendor and no driver ever sees it.
+  displayName String? @map("display_name")
+
+  /// Denormalized by the trigger so the list sorts and pages straight off an
+  /// index instead of aggregating orders per row.
+  ordersCount    Int       @default(0) @map("orders_count")
+  lastOrderAt    DateTime? @map("last_order_at")
+  /// Sort key for "my customers" — never NULL, so the index scan needs no Sort.
+  lastActivityAt DateTime  @default(now()) @map("last_activity_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@id([customerId, vendorId])
+  @@index([vendorId, lastActivityAt(sort: Desc), customerId(sort: Desc)], map: "customer_vendors_vendor_activity_idx")
+  @@map("customer_vendors")
 }
 
 model CustomerAddress {
@@ -176,11 +214,15 @@ model CustomerAddress {
   lat               Float?
   lng               Float?
   isArchived        Boolean      @default(false) @map("is_archived")
+  /// OWNERSHIP, not just attribution: only this vendor (or an admin) may edit
+  /// or archive the row. NULL = platform-owned (admin-editable only).
   createdByVendorId String?      @map("created_by_vendor_id")
+  createdByVendor   Vendor?      @relation("AddressOwner", fields: [createdByVendorId], references: [id], onDelete: SetNull)
   createdAt         DateTime     @default(now()) @map("created_at")
   updatedAt         DateTime     @updatedAt @map("updated_at")
 
   @@index([customerId, isArchived])
+  @@index([createdByVendorId])
   @@map("customer_addresses")
 }
 
