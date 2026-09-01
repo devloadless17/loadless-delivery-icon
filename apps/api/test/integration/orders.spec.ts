@@ -1,3 +1,5 @@
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
 import { Test } from '@nestjs/testing';
 import type { INestApplication } from '@nestjs/common';
 import cookieParser from 'cookie-parser';
@@ -334,5 +336,100 @@ describe('orders (integration)', () => {
 
     const count = await prisma.customer.count({ where: { normalizedPhone: '+9613987654' } });
     expect(count).toBe(1);
+  });
+  // ---------------------------------------------------------------- driver photos
+
+  /**
+   * The face photo exists for one job: the vendor checking that the person at
+   * their counter is the driver they were assigned. Showing it to them widens
+   * a file-access rule, so the boundary is asserted in both directions — and
+   * the BIKE photo stays with the platform.
+   */
+  describe('driver photos: the face reaches the vendor handing over, the bike does not', () => {
+    let facePhotoKey: string;
+    let bikePhotoKey: string;
+
+    beforeAll(async () => {
+      // Uploaded by the ADMIN filling in the driver form, which is exactly why
+      // the file's ownerUserId cannot answer "whose photo is this?" — the keys
+      // on the driver row are the only honest link.
+      const admin = await prisma.user.findFirstOrThrow({ where: { role: 'ADMIN' } });
+      const mk = async (purpose: 'DRIVER_FACE' | 'DRIVER_BIKE', name: string) => {
+        const key = `${purpose.toLowerCase()}/${name}.jpg`;
+        const full = path.join('/tmp/loadless-itest-uploads', key);
+        await fs.mkdir(path.dirname(full), { recursive: true });
+        await fs.writeFile(full, Buffer.from([0xff, 0xd8, 0xff, 0xd9])); // tiny jpeg
+        await prisma.fileObject.create({
+          data: { key, purpose, ownerUserId: admin.id, contentType: 'image/jpeg', sizeBytes: 4 },
+        });
+        return key;
+      };
+      facePhotoKey = await mk('DRIVER_FACE', 'aaaaface');
+      bikePhotoKey = await mk('DRIVER_BIKE', 'aaaabike');
+      await prisma.driver.update({
+        where: { id: driverAId },
+        data: { facePhotoKey, bikePhotoKey },
+      });
+    });
+
+    it('the face key ships on the vendor order once a driver accepts — never the bike', async () => {
+      const created = await request(server)
+        .post('/api/v1/vendor/orders')
+        .set(auth(vendorAToken))
+        .send({
+          customerPhone: '03700111',
+          customerName: 'Handover Customer',
+          deliveryAddressText: 'Somewhere, Bldg 1',
+          deliveryCharge: '100000',
+          currency: 'LBP',
+        })
+        .expect(201);
+      const id = created.body.data.id;
+
+      // PENDING: no driver yet, so nothing to show.
+      const before = await request(server)
+        .get(`/api/v1/vendor/orders/${id}`)
+        .set(auth(vendorAToken))
+        .expect(200);
+      expect(before.body.data.driver).toBeNull();
+
+      await request(server)
+        .post(`/api/v1/driver/orders/${id}/accept`)
+        .set(auth(driverAToken))
+        .expect(200);
+
+      const after = await request(server)
+        .get(`/api/v1/vendor/orders/${id}`)
+        .set(auth(vendorAToken))
+        .expect(200);
+      expect(after.body.data.driver.facePhotoKey).toBe(facePhotoKey);
+      expect(after.body.data.driver.bikePhotoKey).toBeUndefined();
+      expect(JSON.stringify(after.body)).not.toContain('driver_bike');
+
+      // The face file loads for that vendor; the bike does not exist for them.
+      await request(server)
+        .get(`/api/v1/files/${facePhotoKey}`)
+        .set(auth(vendorAToken))
+        .expect(200);
+      await request(server)
+        .get(`/api/v1/files/${bikePhotoKey}`)
+        .set(auth(vendorAToken))
+        .expect(404);
+    });
+
+    it('a vendor this driver never carried for gets 404 — not 403', async () => {
+      // 404 and not 403: a refusal that confirms the file exists is itself a
+      // small statement about who drives for whom.
+      for (const key of [facePhotoKey, bikePhotoKey]) {
+        await request(server).get(`/api/v1/files/${key}`).set(auth(vendorBToken)).expect(404);
+      }
+    });
+
+    it('the driver sees both of their own; admin sees both of anyone\'s', async () => {
+      for (const token of [driverAToken, adminToken]) {
+        await request(server).get(`/api/v1/files/${facePhotoKey}`).set(auth(token)).expect(200);
+        await request(server).get(`/api/v1/files/${bikePhotoKey}`).set(auth(token)).expect(200);
+      }
+    });
   });
 });

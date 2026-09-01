@@ -34,7 +34,12 @@ export interface VendorOrder {
   deliveredAt: string | null;
   cancelledAt: string | null;
   customer: { id: string; name: string; normalizedPhone: string };
-  driver: { id: string; fullName: string; contactPhone: string } | null;
+  driver: {
+    id: string;
+    fullName: string;
+    contactPhone: string;
+    facePhotoKey: string | null;
+  } | null;
   statusHistory?: OrderTimelineEntry[];
 }
 

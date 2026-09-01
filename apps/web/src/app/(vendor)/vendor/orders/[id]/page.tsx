@@ -6,7 +6,7 @@ import { useParams } from 'next/navigation';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { ApiError } from '@/lib/api-client';
-import { displayDateTime, displayMoney, displayPhone } from '@/lib/format';
+import { displayDateTime, displayMoney, displayPhone, fileUrl, initialsOf } from '@/lib/format';
 import { MapsLinkButton } from '@/components/maps-link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -109,13 +109,34 @@ export default function VendorOrderDetailPage() {
           <CardHeader className="pb-3">
             <CardTitle className="text-base">Driver</CardTitle>
           </CardHeader>
-          <CardContent className="flex items-center justify-between">
-            <p className="text-sm font-medium">{order.driver.fullName}</p>
-            <a href={`tel:${order.driver.contactPhone}`}>
-              <Button variant="outline" size="sm">
-                <Phone /> <span className="data-mono">{displayPhone(order.driver.contactPhone)}</span>
-              </Button>
-            </a>
+          <CardContent>
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-3">
+                {/* The whole point of the face photo: check who is at the
+                    counter before handing the package over. */}
+                {order.driver.facePhotoKey ? (
+                  <img
+                    src={fileUrl(order.driver.facePhotoKey)}
+                    alt={`${order.driver.fullName}, the assigned driver`}
+                    className="size-11 shrink-0 rounded-full border object-cover"
+                  />
+                ) : (
+                  <span
+                    aria-hidden
+                    className="flex size-11 shrink-0 items-center justify-center rounded-full bg-muted font-display text-sm font-semibold text-muted-foreground"
+                  >
+                    {initialsOf(order.driver.fullName)}
+                  </span>
+                )}
+                <p className="truncate text-sm font-medium">{order.driver.fullName}</p>
+              </div>
+              <a href={`tel:${order.driver.contactPhone}`}>
+                <Button variant="outline" size="sm">
+                  <Phone />{' '}
+                  <span className="data-mono">{displayPhone(order.driver.contactPhone)}</span>
+                </Button>
+              </a>
+            </div>
           </CardContent>
         </Card>
       )}

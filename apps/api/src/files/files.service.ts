@@ -60,7 +60,32 @@ export class FilesService {
     if (!file) throw AppException.notFound('File not found');
 
     if (file.purpose === 'DRIVER_FACE' || file.purpose === 'DRIVER_BIKE') {
-      const allowed = requester.role === 'ADMIN' || requester.userId === file.ownerUserId;
+      // NOT ownerUserId: these are uploaded by the ADMIN filling in the driver
+      // form, so the owner is that admin. The photo keys on the driver row are
+      // the only honest link between a file and the person in it.
+      const driver =
+        requester.role === 'ADMIN'
+          ? null
+          : await this.prisma.driver.findFirst({
+              where: { OR: [{ facePhotoKey: key }, { bikePhotoKey: key }] },
+              select: { id: true, userId: true },
+            });
+
+      const allowed =
+        requester.role === 'ADMIN' ||
+        // The driver themselves.
+        (requester.role === 'DRIVER' && driver?.userId === requester.userId) ||
+        // A vendor this driver has actually carried an order for — and ONLY
+        // the face, which answers "is this the right person at my counter".
+        // The bike photo stays with the platform.
+        (file.purpose === 'DRIVER_FACE' &&
+          requester.role === 'VENDOR' &&
+          !!requester.vendorId &&
+          !!driver &&
+          (await this.prisma.order.count({
+            where: { vendorId: requester.vendorId, driverId: driver.id },
+          })) > 0);
+
       if (!allowed) throw AppException.notFound('File not found'); // no existence leak
     }
 

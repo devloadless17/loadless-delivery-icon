@@ -85,6 +85,7 @@ export default function AdminDriversPage() {
                 <TableHead>Duty</TableHead>
                 <TableHead>Commission</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Bike</TableHead>
                 <TableHead>Joined</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -129,6 +130,20 @@ export default function AdminDriversPage() {
                     <Badge variant={driver.status === 'ACTIVE' ? 'success' : 'destructive'}>
                       {driver.status === 'ACTIVE' ? 'Active' : 'Suspended'}
                     </Badge>
+                  </TableCell>
+                  {/* Admin-only: the bike photo is collected for the platform's own
+                      checks and is deliberately not shown to vendors. Rendering it here
+                      is what stops it being stored and never looked at. */}
+                  <TableCell>
+                    {driver.bikePhotoKey ? (
+                      <img
+                        src={fileUrl(driver.bikePhotoKey)}
+                        alt={`${driver.fullName}'s bike`}
+                        className="h-9 w-14 rounded-md border object-cover"
+                      />
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    )}
                   </TableCell>
                   <TableCell className="text-muted-foreground">{displayDate(driver.createdAt)}</TableCell>
                   <TableCell className="text-right">

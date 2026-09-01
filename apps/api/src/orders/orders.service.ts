@@ -34,7 +34,12 @@ const VENDOR_ORDER_SELECT = {
   deliveredAt: true,
   cancelledAt: true,
   customer: { select: { id: true, name: true, normalizedPhone: true } },
-  driver: { select: { id: true, fullName: true, contactPhone: true } },
+  // The FACE photo rides along so the vendor can check who is at their counter
+  // before handing over — null until a driver accepts, because the relation
+  // itself is. The bike photo deliberately does NOT: it is admin-only for now.
+  driver: {
+    select: { id: true, fullName: true, contactPhone: true, facePhotoKey: true },
+  },
 } as const;
 
 /**
@@ -110,6 +115,16 @@ const DRIVER_FEED_SELECT = {
 
 const ADMIN_ORDER_SELECT = {
   ...VENDOR_ORDER_SELECT,
+  // The platform sees the bike too; vendors do not.
+  driver: {
+    select: {
+      id: true,
+      fullName: true,
+      contactPhone: true,
+      facePhotoKey: true,
+      bikePhotoKey: true,
+    },
+  },
   commissionBps: true,
   platformCommissionAmount: true,
   driverEarnings: true,
