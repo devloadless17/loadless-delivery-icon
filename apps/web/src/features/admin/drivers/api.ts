@@ -46,3 +46,16 @@ export function useUpdateDriver() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'drivers'] }),
   });
 }
+
+/**
+ * Deletes a driver who has never carried an order. One who has is refused with
+ * DRIVER_HAS_ORDERS: orders.driver_id is ON DELETE SET NULL, so removing them
+ * would silently detach their earnings from the deliveries they were paid for.
+ */
+export function useDeleteDriver() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.delete<{ id: string }>(`/admin/drivers/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'drivers'] }),
+  });
+}

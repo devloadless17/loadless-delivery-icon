@@ -55,6 +55,22 @@ export class FilesService {
    * Authorization by purpose: logos are visible to any signed-in user;
    * driver photos only to admins and the driver they belong to.
    */
+  /**
+   * Drop a file and its row. Used when the entity that referenced it is being
+   * deleted, so it never fails the caller: a stranded blob is untidy, but an
+   * owner row that survives because its logo could not be unlinked is worse.
+   * Callers must already have authorised the delete of the OWNING entity —
+   * there is no per-file permission check here.
+   */
+  async removeByKey(key: string): Promise<void> {
+    try {
+      await this.storage.delete(key);
+    } catch {
+      // Already gone, or the backend is unhappy — the row still goes.
+    }
+    await this.prisma.fileObject.deleteMany({ where: { key } });
+  }
+
   async download(key: string, requester: AuthUser): Promise<StorageDownload> {
     const file = await this.prisma.fileObject.findUnique({ where: { key } });
     if (!file) throw AppException.notFound('File not found');

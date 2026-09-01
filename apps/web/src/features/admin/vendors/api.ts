@@ -42,3 +42,16 @@ export function useUpdateVendor() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'vendors'] }),
   });
 }
+
+/**
+ * Deletes a vendor who has never taken an order. One who has is refused by the
+ * API with VENDOR_HAS_ORDERS — the caller shows that message and offers to
+ * suspend instead, which is the operation that keeps the money record.
+ */
+export function useDeleteVendor() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.delete<{ id: string }>(`/admin/vendors/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'vendors'] }),
+  });
+}

@@ -11,6 +11,7 @@ import { Prisma, type AddressLabel } from '@prisma/client';
 import { AppException } from '../common/app.exception';
 import { offsetArgs, offsetMeta } from '../common/pagination';
 import { PrismaService } from '../prisma/prisma.service';
+import { AuditService } from '../audit/audit.service';
 import type { AuthUser } from '../auth/auth.types';
 import {
   ADDRESS_SELECT,
@@ -43,7 +44,10 @@ type Tx = Prisma.TransactionClient;
  */
 @Injectable()
 export class CustomersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
+  ) {}
 
   async findByPhone(normalizedPhone: string) {
     return this.prisma.customer.findUnique({
@@ -473,6 +477,56 @@ export class CustomersService {
       }
       throw err;
     }
+  }
+
+  /**
+   * Delete a customer outright — allowed only while they have no orders.
+   *
+   * An order names the customer it was delivered to, and their phone IS the
+   * identity of that record; `orders.customer_id` is ON DELETE RESTRICT, so the
+   * database refuses too. Unlike vendors and drivers there is no suspension to
+   * fall back on, because a customer has no account to disable — so for anyone
+   * who has ever ordered this is simply a refusal, and the right cleanup is to
+   * correct their details rather than remove them.
+   *
+   * With no orders there is nothing to preserve: a wrong number typed during a
+   * call is just noise. Their addresses and change history go with them
+   * (both ON DELETE RESTRICT, so they must be removed first, in the same
+   * transaction), and the vendor-relationship rows cascade.
+   */
+  async adminRemove(id: string, actor: AuthUser) {
+    const customer = await this.prisma.customer.findUnique({
+      where: { id },
+      select: { id: true, name: true, normalizedPhone: true },
+    });
+    if (!customer) throw AppException.notFound('Customer not found');
+
+    const orderCount = await this.prisma.order.count({ where: { customerId: id } });
+    if (orderCount > 0) {
+      throw AppException.conflict(
+        ERROR_CODES.CUSTOMER_HAS_ORDERS,
+        `${customer.name} is named on ${orderCount} order${orderCount === 1 ? '' : 's'}, ` +
+          `which are the record of deliveries that happened. Edit their details instead — ` +
+          `a customer with history cannot be removed.`,
+      );
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      // Both are ON DELETE RESTRICT, so they go first or the delete is refused.
+      await tx.customerChangeHistory.deleteMany({ where: { customerId: id } });
+      await tx.customerAddress.deleteMany({ where: { customerId: id } });
+      // customer_vendors cascades.
+      await tx.customer.delete({ where: { id } });
+    });
+
+    this.audit.log({
+      actor,
+      action: 'CUSTOMER_DELETED',
+      entityType: 'Customer',
+      entityId: id,
+      metadata: { name: customer.name, phone: customer.normalizedPhone },
+    });
+    return { id };
   }
 
   /**

@@ -1,15 +1,4 @@
-import {
-  Body,
-  Controller,
-  Delete,
-  Get,
-  HttpCode,
-  Param,
-  Patch,
-  Post,
-  Put,
-  Query,
-} from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Put, Query } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import {
   addCustomerAddressSchema,
@@ -249,5 +238,14 @@ export class AdminCustomersController {
   ) {
     await this.customers.adminUpdate(id, body, user);
     return this.profiles.build(id, user); // same full shape as every read
+  }
+
+  /**
+   * Removes a customer with no orders. One with history is refused with
+   * CUSTOMER_HAS_ORDERS — see CustomersService.adminRemove.
+   */
+  @Delete(':id')
+  remove(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.customers.adminRemove(id, user);
   }
 }

@@ -25,6 +25,7 @@ import {
 } from '@/components/ui/select';
 import { useVendors } from '@/features/admin/vendors/api';
 import { CustomerManageDialog } from '@/features/admin/customers/manage-dialog';
+import { CustomerDeleteDialog } from '@/features/admin/customers/customer-delete-dialog';
 import { CustomerCreateDialog } from '@/features/customers/customer-create-dialog';
 import { displayDate, displayPhone } from '@/lib/format';
 import { useDebouncedValue } from '@/lib/use-debounced-value';
@@ -56,6 +57,7 @@ export default function AdminCustomersPage() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [managingId, setManagingId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<AdminCustomer | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [vendorId, setVendorId] = useState('ALL');
   const q = useDebouncedValue(search, 300);
@@ -147,6 +149,14 @@ export default function AdminCustomersPage() {
                     <Button variant="ghost" size="sm" onClick={() => setManagingId(customer.id)}>
                       Manage
                     </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      onClick={() => setDeleting(customer)}
+                    >
+                      Delete
+                    </Button>
                   </TableCell>
                 </TableRow>
               ))}
@@ -166,6 +176,10 @@ export default function AdminCustomersPage() {
       <CustomerManageDialog
         customerId={managingId}
         onOpenChange={(open) => !open && setManagingId(null)}
+      />
+      <CustomerDeleteDialog
+        customer={deleting}
+        onOpenChange={(open) => !open && setDeleting(null)}
       />
       <CustomerCreateDialog
         open={createOpen}

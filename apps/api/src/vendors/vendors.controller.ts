@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import {
   createVendorSchema,
   offsetPaginationSchema,
@@ -52,6 +52,16 @@ export class AdminVendorsController {
     @CurrentUser() user: AuthUser,
   ) {
     return this.vendors.update(id, body, user);
+  }
+
+  /**
+   * Removes a vendor who has never taken an order. One who has is refused with
+   * VENDOR_HAS_ORDERS — see VendorsService.remove for why that is an accounting
+   * rule rather than a permissions one.
+   */
+  @Delete(':id')
+  remove(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.vendors.remove(id, user);
   }
 }
 

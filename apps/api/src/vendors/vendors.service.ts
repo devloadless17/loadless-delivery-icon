@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { ERROR_CODES } from '@loadless/shared';
 import type {
   CreateVendorInput,
   OffsetPagination,
@@ -11,6 +12,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuthService } from '../auth/auth.service';
 import { UsersService } from '../users/users.service';
 import { AuditService } from '../audit/audit.service';
+import { FilesService } from '../files/files.service';
 import type { AuthUser } from '../auth/auth.types';
 
 const VENDOR_LIST_SELECT = {
@@ -29,6 +31,7 @@ export class VendorsService {
     private readonly users: UsersService,
     private readonly auth: AuthService,
     private readonly audit: AuditService,
+    private readonly files: FilesService,
   ) {}
 
   async create(input: CreateVendorInput, actor: AuthUser) {
@@ -112,6 +115,66 @@ export class VendorsService {
       },
     });
     return updated;
+  }
+
+  /**
+   * Delete a vendor outright — allowed only while they have never taken an
+   * order.
+   *
+   * The restriction is an accounting one, not a permissions one. Every order
+   * carries the commission snapshot taken at driver acceptance and the earnings
+   * derived from it, plus its own status history: the record of money the
+   * platform charged and money a driver is owed. Deleting a vendor who has
+   * traded would erase the counterparty of real deliveries (and the order FK
+   * refuses it anyway). SUSPENDED stops a vendor trading and ends their
+   * sessions while that record survives, which is the right operation there.
+   *
+   * With no orders there is nothing to preserve — a vendor typed in wrongly is
+   * just noise — so this removes them and their login completely.
+   *
+   * What goes: the vendor, their user (so the account cannot sign in), their
+   * sessions (FK cascade) and their customer-relationship rows (FK cascade),
+   * plus the logo file. What STAYS: customers and addresses they added. Those
+   * belong to the platform, not to the vendor who happened to type them in
+   * (CLAUDE.md) — they simply lose their "added by" attribution via SetNull.
+   */
+  async remove(id: string, actor: AuthUser) {
+    const vendor = await this.prisma.vendor.findUnique({
+      where: { id },
+      select: { id: true, userId: true, businessName: true, logoKey: true },
+    });
+    if (!vendor) throw AppException.notFound('Vendor not found');
+
+    const orderCount = await this.prisma.order.count({ where: { vendorId: id } });
+    if (orderCount > 0) {
+      throw AppException.conflict(
+        ERROR_CODES.VENDOR_HAS_ORDERS,
+        `${vendor.businessName} has ${orderCount} order${orderCount === 1 ? '' : 's'} on record, ` +
+          `which carry the commission and driver earnings for deliveries that actually happened. ` +
+          `Suspend the vendor instead — that stops them trading and ends their sessions, ` +
+          `while the money record survives.`,
+      );
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      // Vendor before user: vendor.userId has no cascade, so the user cannot go
+      // first — the FK would refuse it.
+      await tx.vendor.delete({ where: { id } });
+      await tx.user.delete({ where: { id: vendor.userId } });
+    });
+
+    // After commit, and never allowed to fail the delete: the vendor is already
+    // gone, so a stranded blob is the lesser problem.
+    if (vendor.logoKey) await this.files.removeByKey(vendor.logoKey);
+
+    this.audit.log({
+      actor,
+      action: 'VENDOR_DELETED',
+      entityType: 'Vendor',
+      entityId: id,
+      metadata: { businessName: vendor.businessName },
+    });
+    return { id };
   }
 
   async selfGet(vendorId: string) {

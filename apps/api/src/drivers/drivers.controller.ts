@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import {
   createDriverSchema,
   DUTY_STATUSES,
@@ -54,6 +54,17 @@ export class AdminDriversController {
     @CurrentUser() user: AuthUser,
   ) {
     return this.drivers.update(id, body, user);
+  }
+
+  /**
+   * Removes a driver who has never carried an order. One who has is refused
+   * with DRIVER_HAS_ORDERS — see DriversService.remove: orders.driver_id is
+   * ON DELETE SET NULL, so this check is the only thing preventing earnings
+   * being silently detached from the person who earned them.
+   */
+  @Delete(':id')
+  remove(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.drivers.remove(id, user);
   }
 }
 

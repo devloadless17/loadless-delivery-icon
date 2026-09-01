@@ -19,6 +19,7 @@ import { displayDate, fileUrl } from '@/lib/format';
 import { useDebouncedValue } from '@/lib/use-debounced-value';
 import { useVendors, type AdminVendor } from '@/features/admin/vendors/api';
 import { VendorFormDialog } from '@/features/admin/vendors/vendor-form-dialog';
+import { VendorDeleteDialog } from '@/features/admin/vendors/vendor-delete-dialog';
 
 export default function AdminVendorsPage() {
   const [page, setPage] = useState(1);
@@ -26,6 +27,7 @@ export default function AdminVendorsPage() {
   const q = useDebouncedValue(search, 300);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<AdminVendor | null>(null);
+  const [deleting, setDeleting] = useState<AdminVendor | null>(null);
 
   const { data, isPending } = useVendors(page, q);
 
@@ -111,6 +113,14 @@ export default function AdminVendorsPage() {
                     <Button variant="ghost" size="sm" onClick={() => openEdit(vendor)}>
                       Edit
                     </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      onClick={() => setDeleting(vendor)}
+                    >
+                      Delete
+                    </Button>
                   </TableCell>
                 </TableRow>
               ))}
@@ -136,6 +146,7 @@ export default function AdminVendorsPage() {
       )}
 
       <VendorFormDialog open={dialogOpen} onOpenChange={setDialogOpen} vendor={editing} />
+      <VendorDeleteDialog vendor={deleting} onOpenChange={(o) => !o && setDeleting(null)} />
     </div>
   );
 }
