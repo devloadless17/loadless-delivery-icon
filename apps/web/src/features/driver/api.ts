@@ -147,6 +147,14 @@ export function useMyOwed() {
   });
 }
 
+/** One past handover, scoped to the signed-in driver by the API (foreign = 404). */
+export function useMySettlement(id: string) {
+  return useQuery({
+    queryKey: ['driver', 'settlements', id],
+    queryFn: ({ signal }) => api.get<SettlementView>(`/driver/settlements/${id}`, signal),
+  });
+}
+
 export function useMySettlements() {
   return useQuery({
     queryKey: ['driver', 'settlements'],

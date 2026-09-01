@@ -4,6 +4,7 @@ import type { Currency, Prisma } from '@prisma/client';
 import {
   CURRENCIES,
   ERROR_CODES,
+  SETTLEMENT_ORDER_LIST_LIMIT,
   adjustmentSignedMinor,
   formatMoney,
   toMinorUnits,
@@ -179,7 +180,7 @@ export class SettlementsService {
         where: unsettledWhere(driverId, cutoff),
         select: SETTLEMENT_ORDER_SELECT,
         orderBy: { deliveredAt: 'desc' },
-        take: 200,
+        take: SETTLEMENT_ORDER_LIST_LIMIT,
       }),
     ]);
 
@@ -274,7 +275,6 @@ export class SettlementsService {
         );
         return {
           currency: adjustment.currency,
-          type: adjustment.type,
           amount: signed,
           reason: adjustment.reason,
           createdByUserId: actor.userId,
@@ -754,10 +754,19 @@ export class SettlementsService {
    */
   async owedByDriver(driverId: string): Promise<DriverOwedView> {
     const cutoff = new Date();
-    const [swept, balances, previous] = await Promise.all([
+    const [swept, balances, previous, orders] = await Promise.all([
       this.sweep(this.prisma, driverId, cutoff),
       this.balances(this.prisma, driverId),
       this.previousSettlement(this.prisma, driverId),
+      // The itemised deliveries travel WITH the figure. A driver asked to hand
+      // over cash should not have to take the number on trust, and the dispute
+      // happens before any settlement exists to print.
+      this.prisma.order.findMany({
+        where: unsettledWhere(driverId, cutoff),
+        select: SETTLEMENT_ORDER_SELECT,
+        orderBy: { deliveredAt: 'desc' },
+        take: SETTLEMENT_ORDER_LIST_LIMIT,
+      }),
     ]);
 
     const sweptBy = new Map(swept.map((s) => [s.currency, s]));
@@ -780,6 +789,7 @@ export class SettlementsService {
 
     return {
       lines,
+      orders: orders.map(projectSettlementOrder),
       clear: lines.length === 0,
       lastSettledAt: previous?.settledAt.toISOString() ?? null,
     };

@@ -110,10 +110,13 @@ describe('driver settlements (integration)', () => {
     currency: Currency;
     status?: OrderStatus;
     deliveredAt?: Date;
+    /** Basis points for THIS delivery; defaults to the platform's 30%. */
+    bps?: number;
   }) {
     const [{ nextval }] = await prisma.$queryRaw<[{ nextval: bigint }]>`
       SELECT nextval('order_number_seq')`;
-    const commission = (opts.charge * 3000n + 5000n) / 10000n;
+    const bps = BigInt(opts.bps ?? 3000);
+    const commission = (opts.charge * bps + 5000n) / 10000n;
     const status = opts.status ?? 'DELIVERED';
     return prisma.order.create({
       data: {
@@ -125,7 +128,7 @@ describe('driver settlements (integration)', () => {
         deliveryAddressText: 'Hamra, Beirut',
         deliveryCharge: opts.charge,
         currency: opts.currency,
-        commissionBps: 3000,
+        commissionBps: opts.bps ?? 3000,
         platformCommissionAmount: commission,
         driverEarnings: opts.charge - commission,
         assignedAt: new Date(),
@@ -217,6 +220,83 @@ describe('driver settlements (integration)', () => {
     // And the driver is clear.
     const after = await previewOf(driver.id).expect(200);
     expect(after.body.data.lines).toHaveLength(0);
+  });
+
+  // ------------------------------------------- itemisation ("why this much?")
+
+  it('itemises every delivery behind the figure, and the rows add up to it', async () => {
+    // The dispute at the counter: the driver asks why he owes this. Both the
+    // admin's preview and the driver's own phone must be able to answer, and
+    // the itemised rows must reconcile exactly with the total being collected.
+    const { driver, token } = await makeDriver('Itemised Driver');
+    await prisma.driver.update({
+      where: { id: driver.id },
+      data: { commissionOverrideBps: 2500 }, // a negotiated rate, not the default
+    });
+    await seedOrder({ driverId: driver.id, charge: 150_000n, currency: 'LBP', bps: 2500 });
+    await seedOrder({ driverId: driver.id, charge: 90_000n, currency: 'LBP', bps: 2500 });
+    await seedOrder({ driverId: driver.id, charge: 2000n, currency: 'USD', bps: 2500 });
+
+    const preview = await previewOf(driver.id).expect(200);
+    const owed = await request(server)
+      .get('/api/v1/driver/settlements/current')
+      .set(auth(token))
+      .expect(200);
+
+    for (const [label, body] of [
+      ['admin preview', preview.body.data],
+      ['driver phone', owed.body.data],
+    ] as const) {
+      const orders: Array<{ currency: string; platformCommissionAmount: string; commissionBps: number }> =
+        body.orders;
+      expect(orders.length).toBe(3);
+
+      // The rate travels with every row — without it a driver on 25% cannot
+      // tell a correct figure from a wrong one.
+      expect(orders.every((o) => o.commissionBps === 2500)).toBe(true);
+
+      // Per currency, the itemised rows reconcile with the stated commission.
+      for (const currency of ['LBP', 'USD'] as const) {
+        const rows = orders.filter((o) => o.currency === currency);
+        const summed = rows.reduce((t, o) => t + BigInt(o.platformCommissionAmount), 0n);
+        const line = (body.lines as Array<Record<string, string>>).find(
+          (l) => l.currency === currency,
+        )!;
+        // The admin preview names it commissionDue; the driver view names it
+        // unsettledCommission. Same figure, two audiences.
+        const statedRaw = line.commissionDue ?? line.unsettledCommission;
+        expect(statedRaw).toBeDefined();
+        const stated = BigInt(statedRaw!);
+        expect(`${label} ${currency}: ${summed}`).toBe(`${label} ${currency}: ${stated}`);
+      }
+    }
+
+    // 25% of 240,000 LBP and 25% of $20.00 — never added together.
+    expect(lineFor(preview.body.data, 'LBP')).toMatchObject({ commissionDue: '60000' });
+    expect(lineFor(preview.body.data, 'USD')).toMatchObject({ commissionDue: '500' });
+  });
+
+  it('gives the driver his own receipt for a past handover', async () => {
+    const { driver, token } = await makeDriver('Receipt Reader');
+    await seedOrder({ driverId: driver.id, charge: 100_000n, currency: 'LBP' });
+    const preview = await previewOf(driver.id).expect(200);
+    const settled = await request(server)
+      .post(`/api/v1/admin/drivers/${driver.id}/settlements`)
+      .set(auth(adminToken))
+      .send(settleBody(preview.body.data.lines, { LBP: '30000' }))
+      .expect(201);
+
+    const receipt = await request(server)
+      .get(`/api/v1/driver/settlements/${settled.body.data.id}`)
+      .set(auth(token))
+      .expect(200);
+
+    expect(receipt.body.data.orders).toHaveLength(1);
+    expect(receipt.body.data.orders[0]).toMatchObject({
+      commissionBps: 3000,
+      platformCommissionAmount: '30000',
+      deliveryCharge: '100000',
+    });
   });
 
   // -------------------------------------------------- what may be settled
@@ -366,7 +446,7 @@ describe('driver settlements (integration)', () => {
 
   // ---------------------------------------------------------- adjustments
 
-  it('applies a fine and a bonus with the sign fixed by the type', async () => {
+  it('applies a charge and a credit, with the sign coming from the direction', async () => {
     const { driver } = await makeDriver('Adjusted Driver');
     await seedOrder({ driverId: driver.id, charge: 150_000n, currency: 'LBP' });
     const preview = await previewOf(driver.id).expect(200);
@@ -379,14 +459,12 @@ describe('driver settlements (integration)', () => {
         adjustments: [
           {
             currency: 'LBP',
-            type: 'FINE',
             direction: 'DEBIT',
             amount: '5000',
             reason: 'Late to the pickup',
           },
           {
             currency: 'LBP',
-            type: 'BONUS',
             direction: 'CREDIT',
             amount: '10000',
             reason: 'Twenty deliveries this week',
@@ -407,22 +485,24 @@ describe('driver settlements (integration)', () => {
     expect(res.body.data.adjustments).toHaveLength(2);
   });
 
-  it('rejects a fine pointed the wrong way', async () => {
-    const { driver } = await makeDriver('Bad Sign Driver');
+  it('rejects an adjustment with no amount or no reason', async () => {
+    // There is no category to get wrong any more; what must not be skippable is
+    // the sentence that explains the charge to the person paying it.
+    const { driver } = await makeDriver('Bad Adjustment Driver');
     await seedOrder({ driverId: driver.id, charge: 150_000n, currency: 'LBP' });
     const preview = await previewOf(driver.id).expect(200);
 
-    const res = await request(server)
-      .post(`/api/v1/admin/drivers/${driver.id}/settlements`)
-      .set(auth(adminToken))
-      .send({
-        ...settleBody(preview.body.data.lines),
-        adjustments: [
-          { currency: 'LBP', type: 'FINE', direction: 'CREDIT', amount: '5000', reason: 'Nope' },
-        ],
-      })
-      .expect(400);
-    expect(res.body.error.code).toBe('VALIDATION_FAILED');
+    for (const bad of [
+      { currency: 'LBP', direction: 'DEBIT', amount: '0', reason: 'Zero is not an adjustment' },
+      { currency: 'LBP', direction: 'DEBIT', amount: '5000', reason: 'no' },
+    ]) {
+      const res = await request(server)
+        .post(`/api/v1/admin/drivers/${driver.id}/settlements`)
+        .set(auth(adminToken))
+        .send({ ...settleBody(preview.body.data.lines), adjustments: [bad] })
+        .expect(400);
+      expect(res.body.error.code).toBe('VALIDATION_FAILED');
+    }
   });
 
   // ---------------------------------------------------------- concurrency
@@ -506,7 +586,6 @@ describe('driver settlements (integration)', () => {
         adjustments: [
           {
             currency: 'LBP',
-            type: 'FINE',
             direction: 'DEBIT',
             amount: '5000',
             reason: 'Lost the thermal bag',

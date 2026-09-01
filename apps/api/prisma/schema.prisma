@@ -65,13 +65,6 @@ enum SettlementStatus {
   VOIDED
 }
 
-enum AdjustmentType {
-  FINE
-  BONUS
-  ADVANCE
-  CORRECTION
-}
-
 // ---------------------------------------------------------------------------
 // Auth identity
 // ---------------------------------------------------------------------------
@@ -428,9 +421,10 @@ model SettlementAdjustment {
   settlementId String           @map("settlement_id")
   settlement   DriverSettlement @relation(fields: [settlementId], references: [id], onDelete: Cascade)
   currency     Currency
-  type         AdjustmentType
   /// Signed minor units in "what the driver owes" terms: positive increases the
-  /// debt, negative reduces it. The sign is DB-checked against the type.
+  /// debt, negative reduces it. The sign IS the category — there is no separate
+  /// type, because every such line is only ever one of those two things and the
+  /// reason says more than a label could.
   amount       BigInt
   reason       String
 

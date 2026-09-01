@@ -7,8 +7,14 @@ Full architecture plan: `~/.claude/plans/delivery-platform-squishy-wall.md`.
 the manifest, every page title and the brand mark. "Loadless" survives only as
 infrastructure that users never see and that costs more to rename than it is
 worth: the npm scopes (`@loadless/api`, `@loadless/web`, `@loadless/shared`), the
-Postgres role and database, the deploy directory, the Docker Hub repositories and
-the `delivery.loadless.site` hostname. Never put "Loadless" in user-facing copy.
+Postgres role and database, the deploy directory and the Docker Hub
+repositories. Never put "Loadless" in user-facing copy.
+
+The live hostname is **`flashdelivery.loadless.site`** (187.77.167.2). The older
+`delivery.loadless.site` is NOT ours any more — it resolves to an unrelated
+Fortinet appliance that answers 403, so a health check aimed at it fails in a
+way that looks exactly like production being down. `FRONTEND_DOMAIN` in the
+server's `.env` is the authority.
 
 ## Stack & layout
 

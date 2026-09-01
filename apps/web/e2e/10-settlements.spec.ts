@@ -1,5 +1,13 @@
 import { expect, test } from '@playwright/test';
-import { ADMIN, DRIVER1_PHONE, loginAs } from './helpers';
+import {
+  ADMIN,
+  DRIVER1_PHONE,
+  VENDOR,
+  apiPost,
+  createOrderUI,
+  ensureDuty,
+  loginAs,
+} from './helpers';
 
 /**
  * The end-of-day cash handover.
@@ -29,6 +37,37 @@ test.describe('driver settlements', () => {
       .getByRole('row')
       .filter({ hasText: DRIVER_NAME });
 
+  /**
+   * Give the driver a USD delivery on top of the LBP ones the earlier specs
+   * produced, so everything below is exercised against a driver who owes in
+   * BOTH currencies at once. That is the case the arithmetic must never merge,
+   * and the only way to prove it on real screens is to actually create it.
+   */
+  test('setup: the driver also delivers a USD order', async ({ browser }) => {
+    const vendorCtx = await browser.newContext();
+    const vendor = await vendorCtx.newPage();
+    await loginAs(vendor, VENDOR, '/vendor');
+    const { orderId } = await createOrderUI(vendor, { charge: '20.00', currency: 'USD' });
+
+    // Driven through the API rather than the feed: the feed card does not show
+    // the order number, so clicking "Accept" there would take whichever card
+    // happened to be first and this setup must land on THIS order.
+    const driverCtx = await browser.newContext();
+    const driver = await driverCtx.newPage();
+    await loginAs(driver, DRIVER1_PHONE, '/driver');
+    await ensureDuty(driver, true);
+    await apiPost(driver, `/driver/orders/${orderId}/accept`);
+    await apiPost(driver, `/driver/orders/${orderId}/pickup`);
+    await apiPost(driver, `/driver/orders/${orderId}/deliver`);
+
+    // Confirm it really landed, in the UI, before anything below relies on it.
+    await driver.goto('/driver/earnings');
+    await expect(driver.getByText(/USD/).first()).toBeVisible();
+
+    await vendorCtx.close();
+    await driverCtx.close();
+  });
+
   test('admin sees who is holding the platform’s money', async ({ page }) => {
     await loginAs(page, ADMIN, '/admin');
     await page.goto('/admin/settlements');
@@ -36,8 +75,37 @@ test.describe('driver settlements', () => {
 
     const row = owingRow(page);
     await expect(row).toBeVisible();
-    // The amount is shown per currency with its code — never a bare number.
-    await expect(row.getByText(/LBP/)).toBeVisible();
+    // Two currencies, two amounts, each carrying its own code — never summed
+    // into one number. This is the invariant the whole feature rests on.
+    await expect(row.getByText(/[\d,]+ LBP/)).toBeVisible();
+    await expect(row.getByText(/[\d,.]+ USD/)).toBeVisible();
+  });
+
+  test('the driver can see WHAT he owes for, per currency, before paying', async ({ page }) => {
+    // The dispute at the counter. He must be able to answer "why this amount?"
+    // himself, on his own phone, BEFORE any cash moves — which is why this runs
+    // before the settlement below stamps his deliveries.
+    await loginAs(page, DRIVER1_PHONE, '/driver');
+    await page.goto('/driver/earnings');
+    await expect(page.getByText('To hand over')).toBeVisible();
+
+    // Both currencies are owed, and each gets its OWN figure and its own
+    // itemised list. Nothing anywhere adds an LBP amount to a USD one.
+    await expect(page.getByText(/[\d,]+ LBP/).first()).toBeVisible();
+    await expect(page.getByText(/[\d,.]+ USD/).first()).toBeVisible();
+
+    const explainers = page.getByText('What is this for?');
+    await expect(explainers).toHaveCount(2); // one per currency
+
+    for (let i = 0; i < 2; i++) {
+      await explainers.nth(i).click();
+    }
+
+    // Each delivery shows its own arithmetic: charge x rate = commission.
+    await expect(page.getByText(/ORD-\d{4}-\d{6}/).first()).toBeVisible();
+    await expect(page.getByText(/×\s*\d+(\.\d+)?%/).first()).toBeVisible();
+    // One reconciling subtotal per currency — two lists, never one merged sum.
+    await expect(page.getByText('Commission from these')).toHaveCount(2);
   });
 
   test('a short payment is recorded as such and carried to next time', async ({ page }) => {
@@ -49,12 +117,19 @@ test.describe('driver settlements', () => {
 
     const dialog = page.getByRole('dialog');
     await expect(dialog.getByText(`Settle with ${DRIVER_NAME}`)).toBeVisible();
-    await expect(dialog.getByText('Total due')).toBeVisible();
 
-    // Hand over far less than is owed.
-    const collected = dialog.getByLabel('Collected').first();
-    await collected.fill('1000');
-    await expect(dialog.getByText(/Short by/)).toBeVisible();
+    // He owes in BOTH currencies, so there are two independent cards, each with
+    // its own sum and its own cash box. Counting them is the assertion: a single
+    // merged total would be the bug this whole feature is built to avoid.
+    await expect(dialog.getByText('Total due')).toHaveCount(2);
+    const collected = dialog.getByLabel('Collected');
+    await expect(collected).toHaveCount(2);
+
+    // Short-pay the FIRST currency only, and leave the second at its full
+    // default — the two must settle independently of each other.
+    await collected.first().fill('1000');
+    await expect(dialog.getByText(/Short by/)).toHaveCount(1);
+    await expect(dialog.getByText('Paid in full')).toHaveCount(1);
 
     await dialog.getByRole('button', { name: 'Record payment' }).click();
     await expect(page.getByText(/Settled — STL-\d{4}-\d{6}/)).toBeVisible();
@@ -80,6 +155,9 @@ test.describe('driver settlements', () => {
     await row.getByRole('button', { name: 'Settle' }).click();
 
     const dialog = page.getByRole('dialog');
+    // Only the short-paid currency is left; the other was cleared outright last
+    // time and correctly has no card at all now.
+    await expect(dialog.getByText('Total due')).toHaveCount(1);
     // The box defaults to the full amount owed, carried debt included. This
     // second handover collects only that debt — every delivery was already
     // stamped by the first one — which is exactly the point of carrying it.
@@ -113,6 +191,17 @@ test.describe('driver settlements', () => {
     await expect(page.getByText('Deliveries covered')).toBeVisible();
     await expect(page.getByText('Total due')).toBeVisible();
     await expect(page.getByText('Collected')).toBeVisible();
+  });
+
+  test('the driver can open his own receipt for a past handover', async ({ page }) => {
+    await loginAs(page, DRIVER1_PHONE, '/driver');
+    await page.goto('/driver/earnings');
+    await page.getByRole('link', { name: /STL-\d{4}-\d{6}/ }).first().click();
+    await page.waitForURL(/\/driver\/settlements\/[a-z0-9]{20,}$/);
+
+    await expect(page.getByText('Total due')).toBeVisible();
+    await expect(page.getByText('You paid')).toBeVisible();
+    await expect(page.getByText(/ORD-\d{4}-\d{6}/).first()).toBeVisible();
   });
 
   test('voiding reverses a settlement without erasing it', async ({ page }) => {

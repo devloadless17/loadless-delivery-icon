@@ -5,6 +5,7 @@ import { CheckCircle2, Wallet } from 'lucide-react';
 import { formatMoney } from '@loadless/shared';
 import { Skeleton } from '@/components/ui/skeleton';
 import { displayDateTime, displayMoney } from '@/lib/format';
+import { OrderBreakdown } from '@/features/settlements/order-breakdown';
 import { useMyOwed, useMySettlements } from './api';
 
 /**
@@ -43,7 +44,7 @@ export function OwedPanel() {
         <Wallet className="size-5 shrink-0 text-warning" aria-hidden />
         <p className="font-semibold text-warning">To hand over</p>
       </div>
-      <div className="mt-3 space-y-3">
+      <div className="mt-3 space-y-4">
         {data.lines.map((line) => (
           // Stacked per currency, never added together — LBP and USD are
           // separate piles of cash and the driver counts them separately.
@@ -57,6 +58,22 @@ export function OwedPanel() {
               {BigInt(line.broughtForward) !== 0n &&
                 ` · includes ${displayMoney(line.broughtForward, line.currency)} carried over`}
             </p>
+
+            {/* Every delivery behind the figure, on his own phone, before he
+                hands anything over. He should never have to take the number on
+                trust or wait for a receipt to find out what it was for. */}
+            <OrderBreakdown
+              orders={data.orders}
+              currency={line.currency}
+              expectedCount={line.unsettledOrderCount}
+              expectedTotal={line.unsettledCommission}
+            />
+            {BigInt(line.broughtForward) !== 0n && (
+              <p className="mt-2 text-xs text-muted-foreground">
+                Plus {displayMoney(line.broughtForward, line.currency)} left over from your last
+                handover.
+              </p>
+            )}
           </div>
         ))}
       </div>
@@ -76,7 +93,11 @@ export function MySettlements() {
       <h2 className="pt-2 text-base font-semibold">Handovers</h2>
       <ul className="space-y-2">
         {data.data.map((settlement) => (
-          <li key={settlement.id} className="rounded-lg border bg-card px-4 py-3">
+          <li key={settlement.id} className="rounded-lg border bg-card">
+            <Link
+              href={`/driver/settlements/${settlement.id}`}
+              className="block px-4 py-3 active:bg-muted/50"
+            >
             <div className="flex items-center justify-between gap-3">
               <span className="data-mono text-sm font-semibold">
                 {settlement.settlementNumber}
@@ -101,12 +122,10 @@ export function MySettlements() {
                 ))}
               </div>
             )}
+            </Link>
           </li>
         ))}
       </ul>
-      <Link href="/driver/earnings" className="sr-only">
-        Earnings
-      </Link>
     </>
   );
 }

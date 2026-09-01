@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
+import { formatBps } from '@loadless/shared';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -132,17 +133,20 @@ export default function SettlementDetailPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Type</TableHead>
-                <TableHead>Reason</TableHead>
+                <TableHead>Adjustment</TableHead>
                 <TableHead className="text-right">Amount</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {data.adjustments.map((adjustment) => (
                 <TableRow key={adjustment.id}>
-                  <TableCell className="capitalize">{adjustment.type.toLowerCase()}</TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
-                    {adjustment.reason}
+                  <TableCell>
+                    <div>{adjustment.reason}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {adjustment.direction === 'DEBIT'
+                        ? 'Added to what they owed'
+                        : 'Taken off what they owed'}
+                    </div>
                   </TableCell>
                   <TableCell className="data-mono text-right">
                     {displayMoney(adjustment.amount, adjustment.currency)}
@@ -165,6 +169,7 @@ export default function SettlementDetailPage() {
                 <TableHead>Order</TableHead>
                 <TableHead>Delivered</TableHead>
                 <TableHead className="text-right">Charge</TableHead>
+                <TableHead className="text-right">Rate</TableHead>
                 <TableHead className="text-right">Commission</TableHead>
               </TableRow>
             </TableHeader>
@@ -184,6 +189,13 @@ export default function SettlementDetailPage() {
                   </TableCell>
                   <TableCell className="data-mono text-right">
                     {displayMoney(order.deliveryCharge, order.currency)}
+                  </TableCell>
+                  {/* The rate makes each row check out on its own: charge x
+                      rate = commission, at THIS driver's negotiated
+                      percentage. Every amount carries its own currency code,
+                      so LBP and USD rows never read as one another. */}
+                  <TableCell className="data-mono text-right">
+                    {formatBps(order.commissionBps)}
                   </TableCell>
                   <TableCell className="data-mono text-right">
                     {displayMoney(order.platformCommissionAmount, order.currency)}

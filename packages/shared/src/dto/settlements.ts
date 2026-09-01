@@ -1,11 +1,8 @@
 import { z } from 'zod';
 import {
-  ADJUSTMENT_DIRECTION_BY_TYPE,
   ADJUSTMENT_DIRECTIONS,
-  ADJUSTMENT_TYPES,
   SETTLEMENT_STATUSES,
   type AdjustmentDirection,
-  type AdjustmentType,
 } from '../enums';
 import { CURRENCIES, toMinorUnits, type Currency } from '../money';
 import { cuidSchema, offsetPaginationSchema, reasonSchema } from './common';
@@ -49,7 +46,6 @@ function refineAmount(
 export const settlementAdjustmentSchema = z
   .object({
     currency: z.enum(CURRENCIES),
-    type: z.enum(ADJUSTMENT_TYPES),
     direction: z.enum(ADJUSTMENT_DIRECTIONS),
     /** Always a positive magnitude — the sign comes from `direction`. */
     amount: majorAmount,
@@ -57,13 +53,6 @@ export const settlementAdjustmentSchema = z
   })
   .superRefine((value, ctx) => {
     refineAmount(value, ctx, { allowZero: false });
-    if (!ADJUSTMENT_DIRECTION_BY_TYPE[value.type].includes(value.direction)) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['direction'],
-        message: `A ${value.type.toLowerCase()} cannot be a ${value.direction.toLowerCase()}`,
-      });
-    }
   });
 export type SettlementAdjustmentInput = z.infer<typeof settlementAdjustmentSchema>;
 
@@ -80,11 +69,6 @@ export function adjustmentSignedMinor(input: {
   const minor = toMinorUnits(input.amount, input.currency);
   if (minor === null) return null;
   return input.direction === 'DEBIT' ? minor : -minor;
-}
-
-/** The default direction for a type, for pre-filling the form. */
-export function defaultDirectionFor(type: AdjustmentType): AdjustmentDirection {
-  return ADJUSTMENT_DIRECTION_BY_TYPE[type][0]!;
 }
 
 // ---------- recording a settlement ----------
@@ -212,6 +196,16 @@ export const outstandingQuerySchema = offsetPaginationSchema.extend({
 });
 export type OutstandingQuery = z.infer<typeof outstandingQuerySchema>;
 
+/**
+ * How many itemised deliveries a preview or "what I owe" carries.
+ *
+ * Generous next to a day's work, so in practice the list IS the whole story.
+ * A driver who has not settled in weeks can exceed it, and a truncated list
+ * whose amounts do not add up to the total is worse than no list — so the UI
+ * compares its length against the true count and says so.
+ */
+export const SETTLEMENT_ORDER_LIST_LIMIT = 200;
+
 // ---------- views (all money is BigInt serialised as a string) ----------
 
 export interface SettlementLineView {
@@ -230,7 +224,6 @@ export interface SettlementLineView {
 export interface SettlementAdjustmentView {
   id: string;
   currency: Currency;
-  type: AdjustmentType;
   direction: AdjustmentDirection;
   /** Signed minor units, in "what the driver owes" terms. */
   amount: string;
@@ -238,12 +231,23 @@ export interface SettlementAdjustmentView {
   createdAt: string;
 }
 
+/**
+ * One delivery, itemised — the answer to "why do I owe this?".
+ *
+ * Carries the RATE as well as the two amounts, so the arithmetic proves itself
+ * on screen: charge x rate = commission. Without the rate a driver on a
+ * negotiated 25% has no way to tell a correct figure from a wrong one, and the
+ * platform default is not the same number for everybody.
+ */
 export interface SettlementOrderView {
   id: string;
   orderNumber: string;
   currency: Currency;
   deliveryCharge: string;
+  /** Basis points applied to THIS delivery — 2500 = 25%. */
+  commissionBps: number;
   platformCommissionAmount: string;
+  driverEarnings: string;
   deliveredAt: string;
 }
 
@@ -292,7 +296,13 @@ export interface DriverOutstandingView {
   lastSettledAt: string | null;
 }
 
-/** The driver's own answer to "how much is on me right now?". */
+/**
+ * The driver's own answer to "how much is on me right now, and for what?".
+ *
+ * The totals alone are not enough. The dispute happens at the counter, BEFORE
+ * a settlement exists to print — so the itemised deliveries have to travel with
+ * the figure the admin is about to collect, on the driver's own phone.
+ */
 export interface DriverOwedView {
   lines: Array<{
     currency: Currency;
@@ -301,6 +311,12 @@ export interface DriverOwedView {
     broughtForward: string;
     totalDue: string;
   }>;
+  /**
+   * Every delivery making up the commission above, newest first. Capped — see
+   * SETTLEMENT_ORDER_LIST_LIMIT — so compare its length per currency against
+   * `unsettledOrderCount` before implying the list is the whole story.
+   */
+  orders: SettlementOrderView[];
   /** True when every currency is square — nothing owed, nothing in credit. */
   clear: boolean;
   lastSettledAt: string | null;

@@ -42,7 +42,6 @@ export const SETTLEMENT_DETAIL_SELECT = {
     select: {
       id: true,
       currency: true,
-      type: true,
       amount: true,
       reason: true,
       createdAt: true,
@@ -56,7 +55,11 @@ export const SETTLEMENT_ORDER_SELECT = {
   orderNumber: true,
   currency: true,
   deliveryCharge: true,
+  // The rate is what turns a list of amounts into an explanation: charge x rate
+  // = commission, checkable on the spot by the person being charged.
+  commissionBps: true,
   platformCommissionAmount: true,
+  driverEarnings: true,
   deliveredAt: true,
 } as const;
 
@@ -75,7 +78,6 @@ interface RawLine {
 interface RawAdjustment {
   id: string;
   currency: Currency;
-  type: 'FINE' | 'BONUS' | 'ADVANCE' | 'CORRECTION';
   amount: bigint;
   reason: string;
   createdAt: Date;
@@ -86,7 +88,9 @@ interface RawOrder {
   orderNumber: string;
   currency: Currency;
   deliveryCharge: bigint;
+  commissionBps: number | null;
   platformCommissionAmount: bigint | null;
+  driverEarnings: bigint | null;
   deliveredAt: Date | null;
 }
 
@@ -108,8 +112,7 @@ export function projectAdjustment(adjustment: RawAdjustment): SettlementAdjustme
   return {
     id: adjustment.id,
     currency: adjustment.currency,
-    type: adjustment.type,
-    // The sign is the record; direction is how a human reads it back.
+    // The signed amount IS the record; direction is only how a human reads it.
     direction: adjustment.amount >= 0n ? 'DEBIT' : 'CREDIT',
     amount: adjustment.amount.toString(),
     reason: adjustment.reason,
@@ -123,8 +126,11 @@ export function projectSettlementOrder(order: RawOrder): SettlementOrderView {
     orderNumber: order.orderNumber,
     currency: order.currency,
     deliveryCharge: order.deliveryCharge.toString(),
+    commissionBps: order.commissionBps ?? 0,
     platformCommissionAmount: (order.platformCommissionAmount ?? 0n).toString(),
-    // A settled order is always DELIVERED, so deliveredAt is always set.
+    driverEarnings: (order.driverEarnings ?? 0n).toString(),
+    // A settleable order is always DELIVERED, and order_delivered_has_timestamp
+    // makes the timestamp structural, so this fallback is unreachable.
     deliveredAt: (order.deliveredAt ?? new Date(0)).toISOString(),
   };
 }

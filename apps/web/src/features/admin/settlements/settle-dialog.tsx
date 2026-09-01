@@ -4,14 +4,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { Plus, Trash2, TriangleAlert } from 'lucide-react';
 import { toast } from 'sonner';
 import {
-  ADJUSTMENT_TYPES,
   CURRENCIES,
   adjustmentSignedMinor,
-  defaultDirectionFor,
   formatMoney,
   fromMinorUnits,
   toMinorUnits,
-  type AdjustmentType,
+  type AdjustmentDirection,
   type Currency,
   type SettlementAdjustmentInput,
 } from '@loadless/shared';
@@ -32,9 +30,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Segmented } from '@/components/ui/segmented';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ApiError } from '@/lib/api-client';
 import { displayMoney } from '@/lib/format';
+import { OrderBreakdown } from '@/features/settlements/order-breakdown';
 import { useSettleDriver, useSettlementPreview } from './api';
 
 type DraftAdjustment = SettlementAdjustmentInput & { key: string };
@@ -216,6 +216,17 @@ export function SettleDialog({
                   </div>
                 </dl>
 
+                {/* The itemisation sits with the figure it defends. The driver
+                    is standing here asking why; the answer should not be on a
+                    receipt he can only see after he has already paid. */}
+                <OrderBreakdown
+                  orders={preview.data?.orders ?? []}
+                  currency={row.currency}
+                  expectedCount={row.orderCount}
+                  expectedTotal={row.commissionDue}
+                  label="Show the deliveries"
+                />
+
                 <div className="mt-3 space-y-1.5">
                   <Label htmlFor={`collected-${row.currency}`}>Collected</Label>
                   <Input
@@ -320,8 +331,7 @@ function AdjustmentEditor({
       {
         key: crypto.randomUUID(),
         currency: 'LBP',
-        type: 'FINE',
-        direction: defaultDirectionFor('FINE'),
+        direction: 'DEBIT',
         amount: '',
         reason: '',
       },
@@ -334,30 +344,21 @@ function AdjustmentEditor({
     <div className="space-y-2">
       {value.map((adjustment) => (
         <div key={adjustment.key} className="rounded-lg border border-dashed p-3">
-          <div className="flex flex-wrap items-end gap-2">
-            <div className="min-w-28 flex-1 space-y-1">
-              <Label>Type</Label>
-              <Select
-                value={adjustment.type}
-                onValueChange={(next) =>
-                  update(adjustment.key, {
-                    type: next as AdjustmentType,
-                    direction: defaultDirectionFor(next as AdjustmentType),
-                  })
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {ADJUSTMENT_TYPES.map((type) => (
-                    <SelectItem key={type} value={type}>
-                      {ADJUSTMENT_LABELS[type]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+          {/* One decision, two options. Every adjustment either adds to what the
+              driver owes or takes away from it — and WHY is the sentence below,
+              which tells him more than any category label would. */}
+          <Segmented
+            options={[
+              { value: 'DEBIT', label: 'They owe more' },
+              { value: 'CREDIT', label: 'They owe less' },
+            ]}
+            value={adjustment.direction}
+            onChange={(next) =>
+              update(adjustment.key, { direction: next as AdjustmentDirection })
+            }
+          />
+
+          <div className="mt-2 flex flex-wrap items-end gap-2">
             <div className="w-24 space-y-1">
               <Label>Currency</Label>
               <Select
@@ -394,38 +395,25 @@ function AdjustmentEditor({
               <Trash2 className="size-4" />
             </Button>
           </div>
+
           <div className="mt-2 space-y-1">
             <Label>Reason</Label>
             <Input
               value={adjustment.reason}
               onChange={(e) => update(adjustment.key, { reason: e.target.value })}
-              placeholder={ADJUSTMENT_PLACEHOLDERS[adjustment.type]}
+              placeholder={
+                adjustment.direction === 'DEBIT'
+                  ? 'Lost the thermal bag'
+                  : 'Bonus — twenty deliveries this week'
+              }
             />
           </div>
-          <p className="mt-1.5 text-xs text-muted-foreground">
-            {adjustment.direction === 'DEBIT'
-              ? 'Increases what the driver owes.'
-              : 'Reduces what the driver owes.'}
-          </p>
         </div>
       ))}
+
       <Button variant="outline" size="sm" onClick={add}>
         <Plus className="size-4" /> Add adjustment
       </Button>
     </div>
   );
 }
-
-const ADJUSTMENT_LABELS: Record<AdjustmentType, string> = {
-  FINE: 'Fine',
-  BONUS: 'Bonus',
-  ADVANCE: 'Cash advance',
-  CORRECTION: 'Correction',
-};
-
-const ADJUSTMENT_PLACEHOLDERS: Record<AdjustmentType, string> = {
-  FINE: 'Late to the pickup',
-  BONUS: 'Twenty deliveries this week',
-  ADVANCE: 'Fuel money handed over on Tuesday',
-  CORRECTION: 'Why this correction is needed',
-};

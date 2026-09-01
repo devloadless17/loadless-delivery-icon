@@ -32,27 +32,13 @@ export const SETTLEMENT_STATUSES = ['SETTLED', 'VOIDED'] as const;
 export type SettlementStatus = (typeof SETTLEMENT_STATUSES)[number];
 
 /**
- * Non-order money on a settlement. The TYPE carries the meaning; the DIRECTION
- * carries the sign, so no amount is ever entered as a negative number.
+ * Non-order money on a settlement: a fine, a bonus, fuel money, a correction.
+ *
+ * There is deliberately no category list. Every such line is only ever one of
+ * two things — it either adds to what the driver owes or takes away from it —
+ * and WHY is a sentence, not a dropdown. Making someone pick "Fine" vs
+ * "Correction" before they can write "lost the thermal bag" adds a decision,
+ * adds a wrong answer, and tells the driver less than the sentence does.
  */
-export const ADJUSTMENT_TYPES = ['FINE', 'BONUS', 'ADVANCE', 'CORRECTION'] as const;
-export type AdjustmentType = (typeof ADJUSTMENT_TYPES)[number];
-
-/** DEBIT: the driver owes more. CREDIT: the driver owes less. */
 export const ADJUSTMENT_DIRECTIONS = ['DEBIT', 'CREDIT'] as const;
 export type AdjustmentDirection = (typeof ADJUSTMENT_DIRECTIONS)[number];
-
-/**
- * Which way each adjustment type may point. A fine can only ever increase what
- * a driver owes and a bonus can only ever reduce it; only a correction is free
- * to go either way. Mirrored by the adjustment_sign_by_type DB CHECK.
- */
-export const ADJUSTMENT_DIRECTION_BY_TYPE: Record<
-  AdjustmentType,
-  ReadonlyArray<AdjustmentDirection>
-> = {
-  FINE: ['DEBIT'],
-  ADVANCE: ['DEBIT'],
-  BONUS: ['CREDIT'],
-  CORRECTION: ['DEBIT', 'CREDIT'],
-};
