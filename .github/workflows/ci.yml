@@ -87,14 +87,23 @@ jobs:
           bash apps/web/e2e/prepare.sh
           pnpm --filter @loadless/web e2e
 
+
+  # ---------------------------------------------------------------
+  # Ship + deploy. Gated on the production branch, so neither a PR nor a push
+  # to main can reach the server, and `needs: verify` means nothing ships
+  # unless lint/typecheck/tests/e2e are green.
+  # Release with: git push origin main:production
+  # ---------------------------------------------------------------
   deploy:
     needs: verify
-    if: github.ref == 'refs/heads/production'
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/production'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
+      # Fail fast with the list of missing names rather than a confusing error
+      # halfway through the deploy.
       - name: Validate required secrets
         env:
           DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
@@ -106,15 +115,10 @@ jobs:
           ACME_EMAIL: ${{ secrets.ACME_EMAIL }}
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
-          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
-          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          R2_BUCKET: ${{ secrets.R2_BUCKET }}
         run: |
           missing=""
           for name in DOCKER_USERNAME DOCKER_SECRET VPS_HOST VPS_USER VPS_SSH_KEY_B64 \
-                      FRONTEND_DOMAIN ACME_EMAIL JWT_SECRET POSTGRES_PASSWORD \
-                      R2_ACCOUNT_ID R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_BUCKET; do
+                      FRONTEND_DOMAIN ACME_EMAIL JWT_SECRET POSTGRES_PASSWORD; do
             [ -z "$(eval echo \"\$$name\")" ] && missing="$missing $name"
           done
           if [ -n "$missing" ]; then echo "Missing secrets:$missing" >&2; exit 1; fi
@@ -180,10 +184,6 @@ jobs:
           ACME_EMAIL: ${{ secrets.ACME_EMAIL }}
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
-          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
-          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          R2_BUCKET: ${{ secrets.R2_BUCKET }}
           DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
         run: |
           # Single-quote every value — compose's env parser expands $ in
@@ -194,6 +194,18 @@ jobs:
             case "$2" in *"'"*) echo "Value of $1 contains a single quote — regenerate it without one" >&2; exit 1;; esac
             printf "%s='%s'\n" "$1" "$2"
           }
+          # POSTGRES_PASSWORD is interpolated RAW into DATABASE_URL below. A '/'
+          # terminates the URL's authority section and '@' ':' '?' '#' split it,
+          # so such a password produces a VALID-LOOKING url pointing somewhere
+          # else — Prisma then fails with a confusing host/database error rather
+          # than "bad password". `openssl rand -base64` emits '/' and '+' often,
+          # so this is a live trap on every rotation. Reject it loudly here.
+          case "$POSTGRES_PASSWORD" in
+            *[/@:?\#]*)
+              echo "POSTGRES_PASSWORD contains a URL-unsafe character (one of / @ : ? #)." >&2
+              echo "Regenerate it with: openssl rand -hex 32" >&2
+              exit 1;;
+          esac
           {
             put NODE_ENV production
             put PORT 4100
@@ -202,11 +214,14 @@ jobs:
             put JWT_SECRET "$JWT_SECRET"
             put APP_ORIGIN "https://${FRONTEND_DOMAIN}"
             put SOCKET_REDIS_ADAPTER false
-            put STORAGE_DRIVER r2
-            put R2_ACCOUNT_ID "$R2_ACCOUNT_ID"
-            put R2_ACCESS_KEY_ID "$R2_ACCESS_KEY_ID"
-            put R2_SECRET_ACCESS_KEY "$R2_SECRET_ACCESS_KEY"
-            put R2_BUCKET "$R2_BUCKET"
+            # Uploads live on the VPS disk (CLAUDE.md product decision): the R2
+            # adapter exists but stays unused until volume demands it. This path
+            # is the `uploads_data` named volume mounted in docker-compose.prod.yml
+            # — without that mount every driver photo dies on the next redeploy.
+            put STORAGE_DRIVER local
+            put LOCAL_STORAGE_DIR /app/uploads
+            # Caddy is directly internet-facing: exactly one proxy hop. A wrong
+            # value silently breaks rate limiting, IP allowlists and audit logs.
             put TRUSTED_PROXY_HOPS 1
             put POSTGRES_USER loadless
             put POSTGRES_PASSWORD "$POSTGRES_PASSWORD"
@@ -214,6 +229,10 @@ jobs:
             put FRONTEND_DOMAIN "$FRONTEND_DOMAIN"
             put ACME_EMAIL "$ACME_EMAIL"
             put DOCKER_USERNAME "$DOCKER_USERNAME"
+            # Pin to THIS commit's immutable tag, not floating :latest. Two
+            # payoffs: `up -d` always sees a changed image ref so api/web are
+            # reliably recreated, and the tag IS the version, so rollback is
+            # just redeploying the previous SHA.
             put IMAGE_TAG "${{ github.sha }}"
           } > prod.env
           chmod 600 prod.env
@@ -232,35 +251,97 @@ jobs:
             prod.env "$VPS_USER@$VPS_HOST:~/loadless/.env"
           $SSH 'chmod 600 ~/loadless/.env'
 
-      - name: Deploy on VPS (pull, migrate, up, health gate)
+      - name: Deploy on VPS (login, pull, migrate, up, health gate)
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
           VPS_PORT: ${{ secrets.VPS_PORT || '22' }}
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          DOCKER_SECRET: ${{ secrets.DOCKER_SECRET }}
         run: |
-          ssh -i ~/.ssh/deploy_key -p "$VPS_PORT" -o StrictHostKeyChecking=accept-new \
-            "$VPS_USER@$VPS_HOST" bash -s <<'REMOTE'
+          set -euo pipefail
+          # The remote script is captured into a variable so DOCKER_SECRET can be
+          # prepended over STDIN instead of riding the ssh argv — argv is
+          # world-readable via `ps` on the VPS for the whole deploy.
+          REMOTE_SCRIPT="$(cat <<'REMOTE'
           set -euo pipefail
           cd ~/loadless
+
+          # The images may be private (a fresh Docker Hub repo inherits the
+          # account default), and the deploy user's ~/.docker/config.json starts
+          # empty — so an anonymous `pull` would fail with an auth error that
+          # reads like the tag doesn't exist. Log in every time; it is cheap.
+          echo "$DOCKER_SECRET" | docker login -u "$DOCKER_USERNAME" --password-stdin
+
+          # Tag currently running (empty on the first deploy). If the new release
+          # proves healthy this becomes the rollback target.
+          PREV_TAG="$(cat .deploy_current 2>/dev/null || true)"
+          NEW_TAG="$(grep -E '^IMAGE_TAG=' .env | cut -d= -f2 | tr -d "'")"
+
+          echo "==> Pulling images"
           docker compose -f docker-compose.prod.yml pull
-          # Start data services first so migrate has a database
+
+          # Data services first, so the migration has a database to talk to.
+          echo "==> Starting postgres + redis"
           docker compose -f docker-compose.prod.yml up -d postgres redis
           for i in $(seq 1 20); do
-            [ "$(docker compose -f docker-compose.prod.yml ps --format '{{.Health}}' postgres)" = "healthy" ] && break
+            h="$(docker compose -f docker-compose.prod.yml ps --format '{{.Health}}' postgres 2>/dev/null || echo starting)"
+            [ "$h" = "healthy" ] && break
             sleep 3
           done
-          # Migrations run from the freshly pulled api image (prisma CLI is a prod dep)
-          docker compose -f docker-compose.prod.yml run --rm api npx prisma migrate deploy </dev/null
-          docker compose -f docker-compose.prod.yml up -d
-          # Health gate: fail loudly with logs on timeout
+
+          # `-T` AND `</dev/null` are both load-bearing. This whole script is
+          # piped into `bash -s`, so the remote bash reads it from stdin;
+          # `compose run` attaches and DRAINS stdin, swallowing the rest of this
+          # script — `up -d` and everything below would never run and the deploy
+          # would go green with the old containers still serving.
+          # prisma is a PROD dependency of @loadless/api, so this resolves inside
+          # the image with no network fetch.
+          echo "==> Applying migrations"
+          docker compose -f docker-compose.prod.yml run --rm -T api npx prisma migrate deploy </dev/null
+
+          echo "==> Starting the stack"
+          docker compose -f docker-compose.prod.yml up -d --remove-orphans
+
+          echo "==> Health gate"
           for i in $(seq 1 30); do
-            api_h="$(docker compose -f docker-compose.prod.yml ps --format '{{.Health}}' api)"
-            web_h="$(docker compose -f docker-compose.prod.yml ps --format '{{.Health}}' web)"
-            echo "api=$api_h web=$web_h"
-            [ "$api_h" = "healthy" ] && [ "$web_h" = "healthy" ] && { echo "DEPLOY OK"; exit 0; }
+            api_h="$(docker compose -f docker-compose.prod.yml ps --format '{{.Health}}' api 2>/dev/null || echo starting)"
+            web_h="$(docker compose -f docker-compose.prod.yml ps --format '{{.Health}}' web 2>/dev/null || echo starting)"
+            echo "  ($i/30) api=$api_h web=$web_h"
+            if [ "$api_h" = "healthy" ] && [ "$web_h" = "healthy" ]; then
+              echo "==> Healthy"
+
+              # Record the rollback pointer, then drop images we no longer need.
+              # Keep the new release, the previous one, and :latest; remove the
+              # rest so the disk doesn't grow unbounded (these images are ~1-3 GB
+              # each — the retired project accumulated 16 GB in five weeks).
+              echo "$NEW_TAG" > .deploy_current
+              if [ -n "$PREV_TAG" ] && [ "$PREV_TAG" != "$NEW_TAG" ]; then
+                echo "$PREV_TAG" > .deploy_previous
+              fi
+              KEEP=" $NEW_TAG $PREV_TAG latest "
+              for repo in "$DOCKER_USERNAME/loadless-api" "$DOCKER_USERNAME/loadless-web"; do
+                docker images "$repo" --format '{{.Tag}}' | sort -u | while read -r t; do
+                  case "$KEEP" in
+                    *" $t "*) : ;;
+                    *) docker rmi "$repo:$t" >/dev/null 2>&1 || true ;;
+                  esac
+                done
+              done
+              docker image prune -f >/dev/null 2>&1 || true
+
+              docker compose -f docker-compose.prod.yml ps
+              echo "DEPLOY OK"
+              exit 0
+            fi
             sleep 5
           done
           echo "Health gate FAILED — recent logs:" >&2
           docker compose -f docker-compose.prod.yml logs --tail 80 api web >&2
+          echo "The previous images are still on the box: roll back by setting IMAGE_TAG to the value in ~/loadless/.deploy_previous and running 'up -d'." >&2
           exit 1
           REMOTE
+          )"
+          { printf 'DOCKER_SECRET=%q\n' "$DOCKER_SECRET"; printf '%s\n' "$REMOTE_SCRIPT"; } | \
+            ssh -i ~/.ssh/deploy_key -p "$VPS_PORT" -o StrictHostKeyChecking=accept-new \
+              "$VPS_USER@$VPS_HOST" "DOCKER_USERNAME='$DOCKER_USERNAME' bash -s"

@@ -8,13 +8,22 @@ services:
     ports:
       - '80:80'
       - '443:443'
-      # 443/udp (HTTP/3) only after the playbook §7 UDP measurement passes:
-      # - '443:443/udp'
+      # HTTP/3. Measured on this VPS (playbook §7) on 2026-09-01: a UDP datagram
+      # sent to 443 from outside was received by a container listening there, so
+      # Hostinger delivers UDP/443 here. Caddy advertises `alt-svc: h3=":443"` by
+      # DEFAULT, and browsers cache that for up to 30 days — so publishing TCP
+      # only would advertise a protocol we don't accept and intermittently break
+      # some clients while others load fine (the AIPP incident). Both sides must
+      # flip together: if this line is ever removed, pin `servers { protocols h1
+      # h2 }` in the Caddyfile in the same commit.
+      - '443:443/udp'
     environment:
       FRONTEND_DOMAIN: ${FRONTEND_DOMAIN}
       ACME_EMAIL: ${ACME_EMAIL}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # TLS certs + the ACME account key. Losing this means reissuing every
+      # certificate, against Let's Encrypt rate limits.
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
@@ -25,10 +34,22 @@ services:
 
   api:
     image: ${DOCKER_USERNAME}/loadless-api:${IMAGE_TAG:-latest}
+    # Fixed name so ops (and any future health gate) can `docker inspect` it
+    # without guessing Compose's generated name.
+    container_name: loadless_api
     restart: unless-stopped
     init: true
     stop_grace_period: 30s
     env_file: [.env]
+    volumes:
+      # LOAD-BEARING (CLAUDE.md): uploads live on the VPS disk — STORAGE_DRIVER
+      # is `local` and the R2 adapter stays unused until volume demands it. The
+      # Dockerfile creates /app/uploads INSIDE the image, which is destroyed and
+      # recreated on every deploy. Without this named volume, each redeploy
+      # silently deletes every driver photo and vendor logo ever uploaded.
+      # It also means this volume is real data: it belongs in the backup plan
+      # alongside Postgres, not just the database.
+      - uploads_data:/app/uploads
     depends_on:
       postgres:
         condition: service_healthy
@@ -37,12 +58,14 @@ services:
 
   web:
     image: ${DOCKER_USERNAME}/loadless-web:${IMAGE_TAG:-latest}
+    container_name: loadless_web
     restart: unless-stopped
     init: true
     stop_grace_period: 20s
 
   postgres:
     image: postgres:16-alpine
+    container_name: loadless_postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
@@ -58,6 +81,7 @@ services:
 
   redis:
     image: redis:7-alpine
+    container_name: loadless_redis
     restart: unless-stopped
     volumes:
       - redis_data:/data
@@ -72,3 +96,6 @@ volumes:
   caddy_config:
   postgres_data:
   redis_data:
+  # Driver photos and vendor logos. See the api service's comment: this is the
+  # only thing standing between a redeploy and losing all of them.
+  uploads_data:
