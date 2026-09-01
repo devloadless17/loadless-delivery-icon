@@ -22,7 +22,7 @@ image before the server is touched, but it cannot catch a logic regression.
 | | |
 |---|---|
 | Host | `187.77.167.2` (Hostinger, `srv1853164`, Ubuntu 24.04) |
-| Domain | `delivery.loadless.site` |
+| Domain | `flashdelivery.loadless.site` |
 | Deploy dir | `/home/deploy/loadless` |
 | SSH | `ssh deploy@187.77.167.2` (Ali's key), `ssh root@187.77.167.2` for admin |
 
@@ -38,7 +38,7 @@ Infra (fixed names — same across all projects):
 | `VPS_USER` | `deploy` |
 | `VPS_SSH_KEY_B64` | `base64 -w0 ~/.ssh/loadless_deploy \| clip.exe` |
 | `VPS_PORT` | optional, defaults 22 |
-| `FRONTEND_DOMAIN` | bare hostname, no `https://` — `delivery.loadless.site`. The ONLY domain; the API is path-routed under it |
+| `FRONTEND_DOMAIN` | bare hostname, no `https://` — `flashdelivery.loadless.site`. The ONLY domain; the API is path-routed under it |
 | `ACME_EMAIL` | real email — Let's Encrypt expiry notices |
 
 App-specific:
@@ -88,7 +88,13 @@ some clients intermittently while others load fine.
 2. **SSH**: playbook §3 — Ali's key + the per-project CI key
    (`ssh-keygen -t ed25519 -f ~/.ssh/loadless_deploy -N "" -C "github-actions-loadless"`),
    both authorized for `deploy`.
-3. **DNS**: `delivery.loadless.site` A-record → `187.77.167.2`. Done.
+3. **DNS**: `flashdelivery.loadless.site` A-record → `187.77.167.2`. Done.
+   Changing the domain is DNS first, then the secret: Caddy asks Let's Encrypt for
+   a certificate on boot, and if the name still points elsewhere the challenge
+   fails and the site is down on the new host AND no longer served on the old one.
+   Note `*.loadless.site` has a wildcard A-record pointing at another box, so an
+   unconfigured subdomain resolves somewhere real rather than failing — a stale
+   resolver cache will show you that host's certificate, not ours.
 4. Create the secrets above, then `git push origin main:production`.
 
 ## First admin
