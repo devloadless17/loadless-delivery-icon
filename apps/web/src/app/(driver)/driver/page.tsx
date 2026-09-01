@@ -7,6 +7,13 @@ import { toast } from 'sonner';
 import { ApiError } from '@/lib/api-client';
 import { displayDateTime, displayMoney, fileUrl } from '@/lib/format';
 import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useMe } from '@/features/auth/use-me';
 import { useAcceptOrder, useAvailableOrders, type FeedOrder } from '@/features/driver/api';
@@ -15,6 +22,7 @@ import { DutyToggle } from '@/features/driver/duty-toggle';
 function FeedCard({ order }: { order: FeedOrder }) {
   const acceptOrder = useAcceptOrder();
   const [gone, setGone] = useState(false);
+  const [confirming, setConfirming] = useState(false);
 
   async function accept() {
     try {
@@ -67,9 +75,41 @@ function FeedCard({ order }: { order: FeedOrder }) {
             )}
           </span>
         </p>
-        <Button variant="live" size="touch" loading={acceptOrder.isPending} onClick={() => void accept()}>
+        <Button variant="live" size="touch" onClick={() => setConfirming(true)}>
           Accept order
         </Button>
+
+        {/* Accepting is a commitment, not a preference: it takes the order off
+            every other driver's feed and locks the vendor out of cancelling.
+            A mistap while scrolling a live feed one-handed would strand a real
+            delivery, so it asks — the same way delivering does. */}
+        <Dialog open={confirming} onOpenChange={setConfirming}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Take this delivery?</DialogTitle>
+              <DialogDescription>
+                {order.vendor.businessName} ·{' '}
+                {displayAddress(order.deliveryAddressText, order.deliveryMapsUrl)}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" size="lg" onClick={() => setConfirming(false)}>
+                Not now
+              </Button>
+              <Button
+                variant="live"
+                size="lg"
+                loading={acceptOrder.isPending}
+                onClick={() => {
+                  setConfirming(false);
+                  void accept();
+                }}
+              >
+                Yes, accept
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </li>
   );

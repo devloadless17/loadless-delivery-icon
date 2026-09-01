@@ -1,4 +1,21 @@
-name: CI
+# ONLY the `production` branch deploys to the live site. `main` is the safe
+# integration branch: it runs CI but never touches the server.
+#
+#   PR → main|production          → verify only
+#   Push to main                  → verify only (NO deploy)
+#   Push to production            → verify → build both images in parallel →
+#                                   smoke-test them → ship to the VPS →
+#                                   migrate → bootstrap admin → health-gate
+#   Manual run (workflow_dispatch)→ only deploys when run FROM `production`;
+#                                   from main it just runs the checks.
+#
+# Four jobs, each gated so neither a PR nor a push to main can ever reach the
+# server. To release: `git push origin main:production`.
+#
+# SSH auth: the deploy key is stored base64-encoded (single line) in the
+# VPS_SSH_KEY_B64 secret — a single line can't get its newlines mangled on
+# paste. We decode it to a file and use plain ssh/scp.
+name: CI & Deploy to Production
 
 on:
   pull_request:
@@ -8,7 +25,13 @@ on:
 
 concurrency:
   group: deploy-${{ github.ref }}
-  cancel-in-progress: false
+  # Cancel superseded PR runs, but NEVER a deploy: cancelling mid-SSH orphans
+  # half-recreated containers on the VPS.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # Deploy target dir on the VPS (owned by the VPS_USER deploy user).
+  DEPLOY_DIR: /home/deploy/loadless
 
 jobs:
   verify:
@@ -88,97 +111,209 @@ jobs:
           pnpm --filter @loadless/web e2e
 
 
+
   # ---------------------------------------------------------------
-  # Ship + deploy. Gated on the production branch, so neither a PR nor a push
-  # to main can reach the server, and `needs: verify` means nothing ships
-  # unless lint/typecheck/tests/e2e are green.
-  # Release with: git push origin main:production
+  # Build + push the api and web images IN PARALLEL — one matrix leg each, on
+  # its own runner, so the slower (web / next build) doesn't wait behind the
+  # api. Production branch only; needs verify green.
   # ---------------------------------------------------------------
-  deploy:
-    needs: verify
+  build:
+    name: Build & push (${{ matrix.app }})
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/production'
+    needs: verify
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - app: api
+            dockerfile: apps/api/Dockerfile
+          - app: web
+            dockerfile: apps/web/Dockerfile
     steps:
       - uses: actions/checkout@v4
-
-      # Fail fast with the list of missing names rather than a confusing error
-      # halfway through the deploy.
-      - name: Validate required secrets
-        env:
-          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-          DOCKER_SECRET: ${{ secrets.DOCKER_SECRET }}
-          VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_USER: ${{ secrets.VPS_USER }}
-          VPS_SSH_KEY_B64: ${{ secrets.VPS_SSH_KEY_B64 }}
-          FRONTEND_DOMAIN: ${{ secrets.FRONTEND_DOMAIN }}
-          ACME_EMAIL: ${{ secrets.ACME_EMAIL }}
-          JWT_SECRET: ${{ secrets.JWT_SECRET }}
-          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
-          SEED_ADMIN_EMAIL: ${{ secrets.SEED_ADMIN_EMAIL }}
-          SEED_ADMIN_PASSWORD: ${{ secrets.SEED_ADMIN_PASSWORD }}
-        run: |
-          missing=""
-          for name in DOCKER_USERNAME DOCKER_SECRET VPS_HOST VPS_USER VPS_SSH_KEY_B64 \
-                      FRONTEND_DOMAIN ACME_EMAIL JWT_SECRET POSTGRES_PASSWORD \
-                      SEED_ADMIN_EMAIL SEED_ADMIN_PASSWORD; do
-            [ -z "$(eval echo \"\$$name\")" ] && missing="$missing $name"
-          done
-          if [ -n "$missing" ]; then echo "Missing secrets:$missing" >&2; exit 1; fi
-          echo "All required secrets present."
-
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_SECRET }}
 
-      - name: Build and push API image
+      # Tags: latest + commit SHA. The SHA tag is what the deploy pins to, so it
+      # doubles as the rollback unit. Neither image takes a build arg: the web
+      # image is domain-agnostic because the browser talks same-origin and Caddy
+      # path-routes /api and /socket.io, so the SAME image serves any hostname.
+      - name: Build & push ${{ matrix.app }} image
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: apps/api/Dockerfile
+          file: ${{ matrix.dockerfile }}
           push: true
           tags: |
-            ${{ secrets.DOCKER_USERNAME }}/loadless-api:latest
-            ${{ secrets.DOCKER_USERNAME }}/loadless-api:${{ github.sha }}
-          cache-from: type=gha,scope=api
-          cache-to: type=gha,mode=max,scope=api
+            ${{ secrets.DOCKER_USERNAME }}/loadless-${{ matrix.app }}:latest
+            ${{ secrets.DOCKER_USERNAME }}/loadless-${{ matrix.app }}:${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.app }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.app }}
 
-      - name: Build and push web image
-        uses: docker/build-push-action@v6
+  # ---------------------------------------------------------------
+  # Smoke-test the IMAGES THAT WILL SHIP, on the runner, before the VPS is
+  # touched at all. verify proves the source is good; this proves the artefact
+  # is: it pulls both images exactly as the VPS will (so a private-repo pull
+  # failure or a missing tag surfaces here, not mid-deploy), brings up the REAL
+  # docker-compose.prod.yml against throwaway data services, applies migrations,
+  # runs the admin bootstrap against an empty database, and waits on the same
+  # healthchecks the deploy gates on.
+  #
+  # Caddy is deliberately NOT started: it would request a real Let's Encrypt
+  # certificate for the production hostname from a CI runner and burn rate limit.
+  # ---------------------------------------------------------------
+  smoke:
+    name: Smoke test the built images
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/production'
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
         with:
-          context: .
-          file: apps/web/Dockerfile
-          push: true
-          tags: |
-            ${{ secrets.DOCKER_USERNAME }}/loadless-web:latest
-            ${{ secrets.DOCKER_USERNAME }}/loadless-web:${{ github.sha }}
-          cache-from: type=gha,scope=web
-          cache-to: type=gha,mode=max,scope=web
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_SECRET }}
+
+      - name: Render a throwaway .env
+        env:
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+        run: |
+          # Disposable values — this stack lives for ~2 minutes on the runner and
+          # is torn down with its volumes. Nothing here is a real secret.
+          cat > .env <<EOF
+          NODE_ENV='production'
+          PORT='4100'
+          DATABASE_URL='postgresql://loadless:smoke@postgres:5432/loadless?schema=public'
+          REDIS_URL='redis://redis:6379'
+          JWT_SECRET='smoke-test-jwt-secret-at-least-32-characters-long'
+          APP_ORIGIN='https://smoke.invalid'
+          SOCKET_REDIS_ADAPTER='false'
+          STORAGE_DRIVER='local'
+          LOCAL_STORAGE_DIR='/app/uploads'
+          TRUSTED_PROXY_HOPS='1'
+          POSTGRES_USER='loadless'
+          POSTGRES_PASSWORD='smoke'
+          POSTGRES_DB='loadless'
+          FRONTEND_DOMAIN='smoke.invalid'
+          ACME_EMAIL='smoke@invalid'
+          DOCKER_USERNAME='$DOCKER_USERNAME'
+          IMAGE_TAG='${{ github.sha }}'
+          EOF
+
+      - name: Pull the images the VPS will pull
+        run: docker compose -f docker-compose.prod.yml pull api web
+
+      - name: Migrate a fresh database
+        run: |
+          docker compose -f docker-compose.prod.yml up -d postgres redis
+          for i in $(seq 1 20); do
+            h="$(docker compose -f docker-compose.prod.yml ps --format '{{.Health}}' postgres 2>/dev/null || echo starting)"
+            [ "$h" = "healthy" ] && break
+            sleep 3
+          done
+          docker compose -f docker-compose.prod.yml run --rm -T api npx prisma migrate deploy </dev/null
+
+      - name: Bootstrap an admin against the empty database
+        run: |
+          # Catches a broken bootstrap script before it is the only thing standing
+          # between a rebuilt production database and nobody being able to log in.
+          out=$(docker compose -f docker-compose.prod.yml run --rm -T \
+            -e ADMIN_EMAIL='smoke@example.com' -e ADMIN_PASSWORD='smoke-password' \
+            api node dist/scripts/bootstrap-admin.js </dev/null)
+          echo "$out"
+          echo "$out" | grep -q "Admin created" || { echo "::error::bootstrap-admin did not create an admin"; exit 1; }
+
+      - name: Boot api + web and wait on their healthchecks
+        run: |
+          docker compose -f docker-compose.prod.yml up -d api web
+          for i in $(seq 1 30); do
+            api_h="$(docker compose -f docker-compose.prod.yml ps --format '{{.Health}}' api 2>/dev/null || echo starting)"
+            web_h="$(docker compose -f docker-compose.prod.yml ps --format '{{.Health}}' web 2>/dev/null || echo starting)"
+            echo "  ($i/30) api=$api_h web=$web_h"
+            [ "$api_h" = "healthy" ] && [ "$web_h" = "healthy" ] && { echo "images are good"; exit 0; }
+            sleep 5
+          done
+          echo "::error::the freshly built images never became healthy — NOT shipping"
+          docker compose -f docker-compose.prod.yml logs --tail 80 api web
+          exit 1
+
+      - name: Tear down
+        if: always()
+        run: docker compose -f docker-compose.prod.yml down -v --remove-orphans || true
+
+  # ---------------------------------------------------------------
+  # Ship config, render .env, migrate, bootstrap, recreate the stack. Needs the
+  # smoke job, so by the time anything reaches the VPS the exact images being
+  # deployed have already booted and passed their healthchecks once. The
+  # production guard is repeated deliberately (defence in depth): a skipped
+  # `smoke` already skips this, but the condition makes the intent explicit.
+  # ---------------------------------------------------------------
+  deploy:
+    name: Ship & Deploy
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/production'
+    needs: smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      # Fail fast with the list of missing names rather than a confusing error
+      # halfway through the deploy.
+      - name: Validate required secrets
+        env:
+          REQUIRED: |
+            DOCKER_USERNAME DOCKER_SECRET VPS_HOST VPS_USER VPS_SSH_KEY_B64
+            FRONTEND_DOMAIN ACME_EMAIL JWT_SECRET POSTGRES_PASSWORD
+            SEED_ADMIN_EMAIL SEED_ADMIN_PASSWORD
+          SECRETS_JSON: ${{ toJSON(secrets) }}
+        run: |
+          missing=""
+          for key in $REQUIRED; do
+            val=$(printf '%s' "$SECRETS_JSON" | jq -r --arg k "$key" '.[$k] // ""')
+            [ -z "$val" ] && missing="$missing $key"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Missing required GitHub secret(s):$missing"
+            exit 1
+          fi
+          echo "All required secrets present."
+
+      - uses: actions/checkout@v4
 
       - name: Prepare SSH key
         env:
-          VPS_SSH_KEY_B64: ${{ secrets.VPS_SSH_KEY_B64 }}
+          KEY_B64: ${{ secrets.VPS_SSH_KEY_B64 }}
         run: |
           mkdir -p ~/.ssh && chmod 700 ~/.ssh
-          echo "$VPS_SSH_KEY_B64" | base64 -d > ~/.ssh/deploy_key
+          printf '%s' "$KEY_B64" | base64 -d > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           head -1 ~/.ssh/deploy_key | grep -q "BEGIN OPENSSH PRIVATE KEY" \
-            || { echo "VPS_SSH_KEY_B64 does not decode to an OpenSSH key" >&2; exit 1; }
+            || { echo "::error::VPS_SSH_KEY_B64 did not decode to a valid private key"; exit 1; }
+          echo "✓ SSH key decoded"
 
-      - name: Wait for SSH reachability (Hostinger edge can drop runner IPs)
+      # Hostinger runs always-on edge DDoS scrubbing in front of the VPS: GitHub's
+      # shared runner IPs intermittently get flagged and their SYNs are dropped
+      # before reaching the host (→ timeout, invisible to ufw/sshd — no failed
+      # login line). It is IP-based, not port-based. The window is short, so poll
+      # rather than fail; a sustained block exits non-zero and a re-run draws a
+      # fresh runner IP.
+      - name: Wait for VPS SSH to be reachable
         env:
-          VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_PORT: ${{ secrets.VPS_PORT || '22' }}
+          HOST: ${{ secrets.VPS_HOST }}
+          PORT: ${{ secrets.VPS_PORT || '22' }}
         run: |
           for i in $(seq 1 7); do
-            if timeout 8 bash -c "</dev/tcp/$VPS_HOST/$VPS_PORT" 2>/dev/null; then
-              echo "SSH port reachable"; exit 0
+            if timeout 8 bash -c "exec 3<>/dev/tcp/$HOST/$PORT" 2>/dev/null; then
+              echo "✓ $HOST:$PORT reachable (attempt $i/7)"; exit 0
             fi
-            echo "attempt $i failed; retrying in 8s"; sleep 8
+            echo "… $HOST:$PORT unreachable (attempt $i/7) — likely Hostinger edge scrub; retrying in 8s"
+            sleep 8
           done
-          echo "VPS unreachable — rerun the job (a rerun draws a fresh runner IP)" >&2
+          echo "::error::$HOST:$PORT never became reachable (~1 min) — sustained edge scrub. Re-run for a fresh runner IP."
           exit 1
 
       - name: Render production .env
@@ -194,7 +329,7 @@ jobs:
           # there is no escape for a single quote inside single quotes, so a
           # value containing one fails LOUDLY here instead of corrupting.
           put() {
-            case "$2" in *"'"*) echo "Value of $1 contains a single quote — regenerate it without one" >&2; exit 1;; esac
+            case "$2" in *"'"*) echo "::error::Value of $1 contains a single quote — regenerate it without one"; exit 1;; esac
             printf "%s='%s'\n" "$1" "$2"
           }
           # POSTGRES_PASSWORD is interpolated RAW into DATABASE_URL below. A '/'
@@ -205,8 +340,7 @@ jobs:
           # so this is a live trap on every rotation. Reject it loudly here.
           case "$POSTGRES_PASSWORD" in
             *[/@:?\#]*)
-              echo "POSTGRES_PASSWORD contains a URL-unsafe character (one of / @ : ? #)." >&2
-              echo "Regenerate it with: openssl rand -hex 32" >&2
+              echo "::error::POSTGRES_PASSWORD contains a URL-unsafe character (one of / @ : ? #). Regenerate with: openssl rand -hex 32"
               exit 1;;
           esac
           {
@@ -240,31 +374,35 @@ jobs:
           } > prod.env
           chmod 600 prod.env
 
-      - name: Ship files to VPS
+      - name: Ship files to the VPS
         env:
-          VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_USER: ${{ secrets.VPS_USER }}
-          VPS_PORT: ${{ secrets.VPS_PORT || '22' }}
+          HOST: ${{ secrets.VPS_HOST }}
+          SSH_USER: ${{ secrets.VPS_USER }}
+          PORT: ${{ secrets.VPS_PORT || '22' }}
         run: |
-          SSH="ssh -i ~/.ssh/deploy_key -p $VPS_PORT -o StrictHostKeyChecking=accept-new $VPS_USER@$VPS_HOST"
-          $SSH 'mkdir -p ~/loadless'
-          scp -i ~/.ssh/deploy_key -P "$VPS_PORT" -o StrictHostKeyChecking=accept-new \
-            docker-compose.prod.yml Caddyfile "$VPS_USER@$VPS_HOST:~/loadless/"
-          scp -i ~/.ssh/deploy_key -P "$VPS_PORT" -o StrictHostKeyChecking=accept-new \
-            prod.env "$VPS_USER@$VPS_HOST:~/loadless/.env"
-          $SSH 'chmod 600 ~/loadless/.env'
+          set -e
+          KEY=~/.ssh/deploy_key
+          COMMON="-o StrictHostKeyChecking=accept-new"
+          ssh -i "$KEY" -p "$PORT" $COMMON "$SSH_USER@$HOST" "mkdir -p '$DEPLOY_DIR'"
+          scp -i "$KEY" -P "$PORT" $COMMON \
+            docker-compose.prod.yml Caddyfile "$SSH_USER@$HOST:$DEPLOY_DIR/"
+          scp -i "$KEY" -P "$PORT" $COMMON \
+            prod.env "$SSH_USER@$HOST:$DEPLOY_DIR/.env"
+          ssh -i "$KEY" -p "$PORT" $COMMON "$SSH_USER@$HOST" "chmod 600 '$DEPLOY_DIR/.env'"
 
-      - name: Deploy on VPS (login, pull, migrate, up, health gate)
+      - name: Deploy on the VPS (login, pull, migrate, bootstrap, up, health gate)
         env:
-          VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_USER: ${{ secrets.VPS_USER }}
-          VPS_PORT: ${{ secrets.VPS_PORT || '22' }}
+          HOST: ${{ secrets.VPS_HOST }}
+          SSH_USER: ${{ secrets.VPS_USER }}
+          PORT: ${{ secrets.VPS_PORT || '22' }}
           DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
           DOCKER_SECRET: ${{ secrets.DOCKER_SECRET }}
           SEED_ADMIN_EMAIL: ${{ secrets.SEED_ADMIN_EMAIL }}
           SEED_ADMIN_PASSWORD: ${{ secrets.SEED_ADMIN_PASSWORD }}
         run: |
           set -euo pipefail
+          KEY=~/.ssh/deploy_key
+          COMMON="-o StrictHostKeyChecking=accept-new"
           # The remote script is captured into a variable so the secrets can be
           # prepended over STDIN instead of riding the ssh argv — argv is
           # world-readable via `ps` on the VPS for the whole deploy. The admin
@@ -273,7 +411,7 @@ jobs:
           # reason for the long-running api process to hold them in its env.
           REMOTE_SCRIPT="$(cat <<'REMOTE'
           set -euo pipefail
-          cd ~/loadless
+          cd "$DEPLOY_DIR"
 
           # The images may be private (a fresh Docker Hub repo inherits the
           # account default), and the deploy user's ~/.docker/config.json starts
@@ -309,17 +447,32 @@ jobs:
           docker compose -f docker-compose.prod.yml run --rm -T api npx prisma migrate deploy </dev/null
 
           # First-admin bootstrap. NOT a seeded fixture (playbook §9: never seed
-          # dev/e2e fixtures in production) — it is a dedicated script that reads
-          # credentials from env and is idempotent: if any ADMIN already exists it
-          # prints "nothing to do" and returns, so running it on every deploy is
-          # safe and means a rebuilt database is never left unreachable.
-          # Rotating the password is a change in the app, not here: this only ever
-          # creates the FIRST admin.
+          # dev/e2e fixtures in production) — a dedicated script reading
+          # credentials from env, idempotent: if any ADMIN exists it prints
+          # "nothing to do". Safe on every deploy, and it means a rebuilt
+          # database is never left with nobody able to log in. It only ever
+          # creates the FIRST admin; rotating a password is done in the app.
           echo "==> Ensuring the first admin exists"
           docker compose -f docker-compose.prod.yml run --rm -T \
             -e ADMIN_EMAIL="$SEED_ADMIN_EMAIL" -e ADMIN_PASSWORD="$SEED_ADMIN_PASSWORD" \
             api node dist/scripts/bootstrap-admin.js </dev/null
 
+          # Caddy is not recreated by `up -d` (its compose definition is
+          # unchanged), so a freshly-shipped Caddyfile would not load on its own.
+          # Reload it now, while the current api/web are still serving. Reload is
+          # graceful and atomic: an invalid Caddyfile is rejected and the running
+          # config kept, so this can never break the live proxy. `</dev/null` for
+          # the same stdin-draining reason as above.
+          if docker compose -f docker-compose.prod.yml ps --status running caddy 2>/dev/null | grep -q caddy; then
+            echo "==> Reloading Caddy config"
+            docker compose -f docker-compose.prod.yml exec -T caddy \
+              caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile </dev/null \
+              || echo "::warning::caddy reload failed — Caddy kept its previous config; verify the Caddyfile"
+          fi
+
+          # IMAGE_TAG is pinned to this commit's SHA, so only api/web (whose image
+          # ref changed) get recreated. postgres/redis/caddy keep running
+          # untouched — data volumes are never recreated, so nothing is lost.
           echo "==> Starting the stack"
           docker compose -f docker-compose.prod.yml up -d --remove-orphans
 
@@ -356,9 +509,9 @@ jobs:
             fi
             sleep 5
           done
-          echo "Health gate FAILED — recent logs:" >&2
+          echo "::error::Health gate FAILED — the previous images are still on the box."
           docker compose -f docker-compose.prod.yml logs --tail 80 api web >&2
-          echo "The previous images are still on the box: roll back by setting IMAGE_TAG to the value in ~/loadless/.deploy_previous and running 'up -d'." >&2
+          echo "Roll back with: IMAGE_TAG=\$(cat $DEPLOY_DIR/.deploy_previous) then 'up -d'." >&2
           exit 1
           REMOTE
           )"
@@ -366,5 +519,5 @@ jobs:
             printf 'SEED_ADMIN_EMAIL=%q\n' "$SEED_ADMIN_EMAIL"
             printf 'SEED_ADMIN_PASSWORD=%q\n' "$SEED_ADMIN_PASSWORD"
             printf '%s\n' "$REMOTE_SCRIPT"; } | \
-            ssh -i ~/.ssh/deploy_key -p "$VPS_PORT" -o StrictHostKeyChecking=accept-new \
-              "$VPS_USER@$VPS_HOST" "DOCKER_USERNAME='$DOCKER_USERNAME' bash -s"
+            ssh -i "$KEY" -p "$PORT" $COMMON "$SSH_USER@$HOST" \
+              "DEPLOY_DIR='$DEPLOY_DIR' DOCKER_USERNAME='$DOCKER_USERNAME' bash -s"

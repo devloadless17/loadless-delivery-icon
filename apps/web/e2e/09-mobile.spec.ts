@@ -69,6 +69,12 @@ test.describe('on a phone', () => {
     await expect(card).toBeVisible();
     await expectTappable(page, 'Accept order');
     await card.getByRole('button', { name: 'Accept order' }).click();
+    // Confirmed, not instant: a mistap while scrolling one-handed would take
+    // the order off every other driver's feed.
+    const takeIt = page.getByRole('dialog');
+    await expect(takeIt.getByText('Take this delivery?')).toBeVisible();
+    await expectTappable(page, 'Yes, accept');
+    await takeIt.getByRole('button', { name: 'Yes, accept' }).click();
 
     await page.goto('/driver/active');
     await expect(page.getByText(orderNumber)).toBeVisible();
@@ -189,5 +195,36 @@ test.describe('on a phone', () => {
     await expect(page.getByText("You're offline")).toBeVisible();
     await expectNoSidewaysScroll(page, 'offline page');
     await expect(page.getByRole('button', { name: /Try again|Retry/i }).or(page.getByRole('link'))).toBeTruthy();
+  });
+  test('a deploy offers a refresh — and never on first install', async ({ page }) => {
+    await loginAs(page, DRIVER1_PHONE, '/driver');
+    await page.waitForFunction(() => navigator.serviceWorker?.controller !== null, null, {
+      timeout: 20_000,
+    });
+
+    // Nothing yet: taking control for the FIRST time is not an update, and
+    // telling someone who just opened the app that a new version is ready
+    // would be nonsense.
+    await expect(page.getByText('A new version is ready')).toHaveCount(0);
+
+    // A deploy: a replacement worker takes over an app that already had one.
+    await page.evaluate(() =>
+      navigator.serviceWorker.dispatchEvent(new Event('controllerchange')),
+    );
+
+    await expect(page.getByText('A new version is ready')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Refresh' })).toBeVisible();
+    await expectTappable(page, 'Refresh');
+
+    // It stays put rather than vanishing on a timer — a driver mid-delivery
+    // should not lose the offer because they looked away.
+    await page.waitForTimeout(6000);
+    await expect(page.getByText('A new version is ready')).toBeVisible();
+
+    // And taking it actually reloads onto the new build.
+    await page.getByRole('button', { name: 'Refresh' }).click();
+    await page.waitForLoadState('load');
+    await expect(page.getByRole('switch').first()).toBeVisible();
+    await expect(page.getByText('A new version is ready')).toHaveCount(0);
   });
 });

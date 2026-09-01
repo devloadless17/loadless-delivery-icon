@@ -56,6 +56,8 @@ test('vendor creates order → driver delivers it → money is right', async ({ 
   await expect(driver.getByText('E2E Burger House').first()).toBeVisible();
 
   await driver.getByRole('button', { name: 'Accept order' }).first().click();
+  // Accepting asks first — a mistap on a live feed would strand a delivery.
+  await driver.getByRole('dialog').getByRole('button', { name: 'Yes, accept' }).click();
   await expect(driver.getByText(/is yours/)).toBeVisible();
 
   // ---- vendor sees the assignment live (socket-driven refetch) -----------

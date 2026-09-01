@@ -174,6 +174,7 @@ test.describe('order lifecycle', () => {
 
     await driver1.request.post(`/api/v1/driver/orders/${orderId}/accept`); // driver1 wins
     await card.getByRole('button', { name: 'Accept order' }).click();
+    await driver2.getByRole('dialog').getByRole('button', { name: 'Yes, accept' }).click();
     await expect(driver2.getByText('That order was just taken.')).toBeVisible();
 
     await ensureDuty(driver2, false);
