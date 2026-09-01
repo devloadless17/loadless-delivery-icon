@@ -1,16 +1,26 @@
 # ONLY the `production` branch deploys to the live site. `main` is the safe
 # integration branch: it runs CI but never touches the server.
 #
-#   PR → main|production          → verify only
-#   Push to main                  → verify only (NO deploy)
-#   Push to production            → verify → build both images in parallel →
-#                                   smoke-test them → ship to the VPS →
-#                                   migrate → bootstrap admin → health-gate
+#   PR → main|production          → full verify only
+#   Push to main                  → full verify only (NO deploy)
+#   Push to production            → fast lint+typecheck → build both images in
+#                                   parallel → smoke-test them → ship to the VPS
+#                                   → migrate → bootstrap admin → health-gate
 #   Manual run (workflow_dispatch)→ only deploys when run FROM `production`;
 #                                   from main it just runs the checks.
 #
-# Four jobs, each gated so neither a PR nor a push to main can ever reach the
-# server. To release: `git push origin main:production`.
+# WHERE A CHANGE IS PROVED: on main. The heavy suite — migrations against a
+# clean database, unit tests, the browser e2e — runs there. A release is
+# `git push origin main:production`, the identical commit, so re-running all of
+# that on production only re-proved the same SHA and added ~6 minutes to every
+# deploy. production therefore runs lint+typecheck and ships.
+#
+# The trade, stated plainly: nothing mechanically stops an untested commit
+# reaching production. Push production without pushing main, or push it while
+# main is red, and it deploys anyway. Push main, see it green, then release.
+#
+# Every deploy job is gated on the production ref, so neither a PR nor a push to
+# main can reach the server.
 #
 # SSH auth: the deploy key is stored base64-encoded (single line) in the
 # VPS_SSH_KEY_B64 secret — a single line can't get its newlines mangled on
@@ -34,7 +44,22 @@ env:
   DEPLOY_DIR: /home/deploy/loadless
 
 jobs:
+  # ---------------------------------------------------------------
+  # The full gate: lint, typecheck, migrations against a clean database, unit
+  # tests and the browser e2e. Runs on PRs and on main — NOT on production.
+  #
+  # main is where a change is proved. A release is `git push origin
+  # main:production` — the identical commit — so re-running this suite on
+  # production only re-proved the same SHA and added ~6 minutes to every deploy.
+  # production now runs a fast lint+typecheck and ships.
+  #
+  # The trade is deliberate and worth stating: nothing MECHANICALLY stops a
+  # commit reaching production without this suite having passed. Pushing
+  # production without pushing main first, or pushing it while main is red,
+  # deploys untested code. Push main, see it green, then release.
+  # ---------------------------------------------------------------
   verify:
+    if: github.ref != 'refs/heads/production'
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -113,6 +138,29 @@ jobs:
 
 
   # ---------------------------------------------------------------
+  # Production's own quick sanity check. Cheap (~1-2 min, no services, no
+  # browsers) and catches the one class of mistake that could differ between
+  # main and this ref: a bad merge or a hand-edited file on the release branch.
+  # ---------------------------------------------------------------
+  typecheck:
+    name: Typecheck & lint
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/production'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @loadless/shared build
+      - run: pnpm --filter @loadless/api prisma:generate
+      - run: pnpm -r lint
+      - run: pnpm -r typecheck
+
+  # ---------------------------------------------------------------
   # Build + push the api and web images IN PARALLEL — one matrix leg each, on
   # its own runner, so the slower (web / next build) doesn't wait behind the
   # api. Production branch only; needs verify green.
@@ -120,7 +168,7 @@ jobs:
   build:
     name: Build & push (${{ matrix.app }})
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/production'
-    needs: verify
+    needs: typecheck
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:

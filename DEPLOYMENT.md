@@ -2,11 +2,20 @@
 
 Single Hostinger VPS, Docker Hub images, GitHub Actions. One hostname, path-routed
 by Caddy (the only service publishing host ports): `/` → web, `/api/*` and
-`/socket.io/*` → api. Pushing the **`production`** branch deploys (after all checks);
-`main` and PRs only run checks. Redeploy without a commit via *Actions → CI → Run
-workflow* on `production`.
+`/socket.io/*` → api. Redeploy without a commit via *Actions → CI → Run workflow*
+on `production`.
 
-Release: `git push origin main:production`
+Release: **`git push origin main` → watch it go green → `git push origin main:production`**
+
+That order is load-bearing. The full suite — lint, typecheck, migrations against a
+clean database, unit tests and the browser e2e — runs on `main` and on PRs, and is
+where a change is proved. `production` runs only lint+typecheck before building,
+because a release is the identical commit and re-running the suite there just
+re-proved the same SHA at ~6 minutes a deploy.
+
+Nothing mechanically enforces the order: pushing `production` without `main`, or
+while `main` is red, deploys untested code. The smoke job still catches a broken
+image before the server is touched, but it cannot catch a logic regression.
 
 ## Live environment
 
