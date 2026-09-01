@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { Currency, OrderStatus } from '@prisma/client';
-import { beirutDayStart } from '@loadless/shared';
+import { beirutDayStart, beirutRange } from '@loadless/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 
@@ -154,7 +154,11 @@ export class AnalyticsService {
 
   // ---------------------------------------------------------------- vendor
 
-  async vendorStats(vendorId: string, from?: Date, to?: Date) {
+  async vendorStats(vendorId: string, rawFrom?: Date, rawTo?: Date) {
+    // Snapped to Beirut days: a bare date arrives as UTC midnight, which is
+    // 03:00 here, so an unsnapped range reports the wrong three hours of
+    // trade at both ends.
+    const { from, to } = beirutRange(rawFrom, rawTo);
     const createdRange = {
       ...(from ? { gte: from } : {}),
       ...(to ? { lte: to } : {}),
@@ -182,7 +186,8 @@ export class AnalyticsService {
 
   // ---------------------------------------------------------------- driver
 
-  async driverEarnings(driverId: string, from?: Date, to?: Date) {
+  async driverEarnings(driverId: string, rawFrom?: Date, rawTo?: Date) {
+    const { from, to } = beirutRange(rawFrom, rawTo);
     const sums = (gte: Date, lte?: Date) =>
       this.prisma.order.groupBy({
         by: ['currency'],
@@ -221,7 +226,8 @@ export class AnalyticsService {
 
   // --------------------------------------------------------- driver report
 
-  async driverPerformance(from?: Date, to?: Date) {
+  async driverPerformance(rawFrom?: Date, rawTo?: Date) {
+    const { from, to } = beirutRange(rawFrom, rawTo);
     const where = {
       status: 'DELIVERED' as const,
       ...(from || to

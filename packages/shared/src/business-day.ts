@@ -131,3 +131,27 @@ export function beirutDayKey(at: Date = new Date()): string {
   const wall = beirutWallClock(at);
   return `${wall.year}-${String(wall.month).padStart(2, '0')}-${String(wall.day).padStart(2, '0')}`;
 }
+
+/**
+ * Snap a user-picked date range onto real Beirut day boundaries.
+ *
+ * A date picker sends a bare "2026-09-02", which `z.coerce.date()` parses as
+ * UTC midnight — 03:00 on a Beirut wall clock. Fed straight into a `gte`/`lte`
+ * that window runs 03:00 to 03:00: it drops everything from local midnight to
+ * 3am and silently counts three hours of the previous night instead. Worst for
+ * a late shift looking for its own work, which is exactly who filters by date.
+ *
+ * Snapping the end to the LAST instant of its day is also what makes a range
+ * inclusive of the date the user picked, so clients must send the bare date and
+ * let this own the boundary — a client that fakes "T23:59:59" itself will be
+ * snapped into the following day and overshoot by 24 hours.
+ */
+export function beirutRange(
+  from?: Date | null,
+  to?: Date | null,
+): { from?: Date; to?: Date } {
+  return {
+    ...(from ? { from: beirutDayStart(from) } : {}),
+    ...(to ? { to: beirutDayEnd(to) } : {}),
+  };
+}

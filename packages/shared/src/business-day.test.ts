@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { beirutDayEnd, beirutDayKey, beirutDayStart } from './business-day';
+import { beirutDayEnd, beirutDayKey, beirutDayStart, beirutRange } from './business-day';
 
 const beirut = new Intl.DateTimeFormat('en-GB', {
   timeZone: 'Asia/Beirut',
@@ -110,5 +110,39 @@ describe('beirutDayKey', () => {
   it('formats as YYYY-MM-DD', () => {
     expect(beirutDayKey(new Date('2026-09-01T09:00:00Z'))).toBe('2026-09-01');
     expect(beirutDayKey(new Date('2026-01-05T09:00:00Z'))).toBe('2026-01-05');
+  });
+});
+
+describe('beirutRange', () => {
+  it('snaps a bare picked date onto the real Beirut day', () => {
+    // This is what z.coerce.date() produces from "2026-09-02" — UTC midnight,
+    // which is 03:00 on a Beirut wall clock.
+    const picked = new Date('2026-09-02T00:00:00Z');
+    const { from, to } = beirutRange(picked, picked);
+
+    expect(wall(from!)).toBe('02/09/2026, 00:00:00');
+    expect(wall(to!)).toBe('02/09/2026, 23:59:59');
+  });
+
+  it('covers the three hours an unsnapped range silently drops', () => {
+    const picked = new Date('2026-09-02T00:00:00Z');
+    const { from, to } = beirutRange(picked, picked);
+
+    // 00:30 Beirut on the 2nd — inside the day the user picked, but BEFORE the
+    // unsnapped UTC-midnight boundary, so it used to fall out of "today".
+    const earlyMorning = new Date('2026-09-01T21:30:00Z');
+    expect(wall(earlyMorning)).toBe('02/09/2026, 00:30:00');
+    expect(earlyMorning >= from! && earlyMorning <= to!).toBe(true);
+
+    // 01:00 Beirut on the 3rd — the previous night as far as a late shift is
+    // concerned, and an unsnapped range would have counted it as the 2nd.
+    const nextNight = new Date('2026-09-02T22:00:00Z');
+    expect(wall(nextNight)).toBe('03/09/2026, 01:00:00');
+    expect(nextNight <= to!).toBe(false);
+  });
+
+  it('leaves an absent bound absent', () => {
+    expect(beirutRange(undefined, undefined)).toEqual({});
+    expect(beirutRange(new Date('2026-09-02T00:00:00Z'), null).to).toBeUndefined();
   });
 });

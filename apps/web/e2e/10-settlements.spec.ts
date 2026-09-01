@@ -189,8 +189,12 @@ test.describe('driver settlements', () => {
     await page.waitForURL(/\/admin\/settlements\/[a-z0-9]{20,}$/);
 
     await expect(page.getByText('Deliveries covered')).toBeVisible();
-    await expect(page.getByText('Total due')).toBeVisible();
-    await expect(page.getByText('Collected')).toBeVisible();
+    // One card per currency, so these repeat. Assert PRESENCE rather than
+    // uniqueness — this handover swept both LBP and USD deliveries.
+    await expect(page.getByText('Total due').first()).toBeVisible();
+    await expect(page.getByText('Collected').first()).toBeVisible();
+    // And the rate is on every row, which is what makes each line checkable.
+    await expect(page.getByRole('columnheader', { name: 'Rate' })).toBeVisible();
   });
 
   test('the driver can open his own receipt for a past handover', async ({ page }) => {
@@ -199,8 +203,8 @@ test.describe('driver settlements', () => {
     await page.getByRole('link', { name: /STL-\d{4}-\d{6}/ }).first().click();
     await page.waitForURL(/\/driver\/settlements\/[a-z0-9]{20,}$/);
 
-    await expect(page.getByText('Total due')).toBeVisible();
-    await expect(page.getByText('You paid')).toBeVisible();
+    await expect(page.getByText('Total due').first()).toBeVisible();
+    await expect(page.getByText('You paid').first()).toBeVisible();
     await expect(page.getByText(/ORD-\d{4}-\d{6}/).first()).toBeVisible();
   });
 
