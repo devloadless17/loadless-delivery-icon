@@ -51,7 +51,7 @@ test.describe('driver experience and money surfaces', () => {
     const manifest = await page.request.get('/manifest.webmanifest');
     expect(manifest.status()).toBe(200);
     const body = (await manifest.json()) as { name: string; display: string };
-    expect(body.name).toBe('Loadless');
+    expect(body.name).toBe('Flash Delivery');
     expect(body.display).toBe('standalone');
 
     await loginAs(page, DRIVER1_PHONE, '/driver');

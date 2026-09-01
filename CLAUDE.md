@@ -1,7 +1,14 @@
-# Loadless Delivery Platform
+# Flash Delivery
 
 Multi-vendor delivery management platform (Lebanon). Three roles: ADMIN / VENDOR / DRIVER.
 Full architecture plan: `~/.claude/plans/delivery-platform-squishy-wall.md`.
+
+**The product is called Flash Delivery** — that is the name on the installed app,
+the manifest, every page title and the brand mark. "Loadless" survives only as
+infrastructure that users never see and that costs more to rename than it is
+worth: the npm scopes (`@loadless/api`, `@loadless/web`, `@loadless/shared`), the
+Postgres role and database, the deploy directory, the Docker Hub repositories and
+the `delivery.loadless.site` hostname. Never put "Loadless" in user-facing copy.
 
 ## Stack & layout
 

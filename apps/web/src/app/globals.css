@@ -4,7 +4,7 @@
 @custom-variant dark (&:is(.dark *));
 
 /* ---------------------------------------------------------------------------
-   Loadless design tokens — "dispatch board" system.
+   Flash Delivery design tokens — "dispatch board" system.
    Light = daytime counter work; dark = night dispatch (driver-first).
    Orange is reserved for live/in-motion moments only.
 --------------------------------------------------------------------------- */

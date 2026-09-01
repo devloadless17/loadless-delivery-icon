@@ -72,7 +72,7 @@ export function InstallBanner() {
             <strong>Add to Home Screen</strong>.
           </span>
         ) : (
-          <span>Install Loadless for one-tap access and faster loading.</span>
+          <span>Install Flash Delivery for one-tap access and faster loading.</span>
         )}
       </div>
       {promptEvent && (

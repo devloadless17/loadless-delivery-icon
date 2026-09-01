@@ -1,7 +1,7 @@
 import { cn } from '@/lib/utils';
 
 /**
- * The Loadless mark: a parcel square with an orange motion stroke cutting
+ * The Flash Delivery mark: a parcel square with an orange motion stroke cutting
  * through — the same orange the UI reserves for "in motion" states.
  */
 export function BrandMark({ className }: { className?: string }) {
@@ -29,7 +29,7 @@ export function BrandWordmark({ className }: { className?: string }) {
   return (
     <span className={cn('inline-flex items-center gap-2.5', className)}>
       <BrandMark />
-      <span className="font-display text-xl font-bold tracking-tight">Loadless</span>
+      <span className="font-display text-xl font-bold tracking-tight">Flash Delivery</span>
     </span>
   );
 }

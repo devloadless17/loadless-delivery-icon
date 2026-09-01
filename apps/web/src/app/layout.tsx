@@ -6,15 +6,15 @@ import './globals.css';
 
 export const metadata: Metadata = {
   title: {
-    default: 'Loadless',
-    template: '%s · Loadless',
+    default: 'Flash Delivery',
+    template: '%s · Flash Delivery',
   },
   description: 'Delivery operations platform',
-  applicationName: 'Loadless',
+  applicationName: 'Flash Delivery',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
-    title: 'Loadless',
+    title: 'Flash Delivery',
   },
   icons: {
     apple: '/icons/apple-touch-icon.png',

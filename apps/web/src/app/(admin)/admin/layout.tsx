@@ -6,7 +6,7 @@ import { BrandWordmark } from '@/components/brand';
 import { SignOutButton } from '@/components/sign-out-button';
 import { ThemeToggle } from '@/components/theme-toggle';
 
-export const metadata: Metadata = { title: { default: 'Admin', template: '%s · Loadless Admin' } };
+export const metadata: Metadata = { title: { default: 'Admin', template: '%s · Flash Delivery Admin' } };
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
   return (

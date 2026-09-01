@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { VendorHeader } from './header';
 import { RealtimeProvider } from '@/components/realtime-provider';
 
-export const metadata: Metadata = { title: { default: 'Vendor', template: '%s · Loadless' } };
+export const metadata: Metadata = { title: { default: 'Vendor', template: '%s · Flash Delivery' } };
 
 export default function VendorLayout({ children }: { children: ReactNode }) {
   return (

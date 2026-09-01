@@ -2,8 +2,8 @@ import type { MetadataRoute } from 'next';
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'Loadless',
-    short_name: 'Loadless',
+    name: 'Flash Delivery',
+    short_name: 'Flash Delivery',
     description: 'Delivery operations platform',
     id: '/',
     start_url: '/',
