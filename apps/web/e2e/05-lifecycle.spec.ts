@@ -273,6 +273,21 @@ test.describe('order lifecycle', () => {
     const badges = admin.getByRole('table').getByText('Failed');
     expect(await badges.count()).toBeGreaterThan(0);
 
+    // Narrow to ONE vendor: the platform board is unreadable otherwise, and
+    // the API has accepted vendorId all along — only the screen lacked it.
+    await admin.getByRole('combobox').first().click();
+    await admin.getByRole('option', { name: 'All statuses' }).click();
+    const vendorPicker = admin.getByRole('combobox').nth(1);
+    await vendorPicker.click();
+    await admin.getByRole('option', { name: 'E2E Burger House' }).click();
+    await expect(admin.getByRole('table')).toBeVisible();
+    const vendorCells = admin.getByRole('table').getByText('E2E Falafel Corner');
+    expect(await vendorCells.count()).toBe(0); // the other shop is filtered out
+
+    // Clearing brings the whole board back.
+    await admin.getByRole('button', { name: 'Clear filters' }).click();
+    await expect(admin.getByRole('table')).toBeVisible();
+
     // CSV export streams with the right header
     const res = await admin.request.get('/api/v1/admin/analytics/orders.csv');
     expect(res.status()).toBe(200);

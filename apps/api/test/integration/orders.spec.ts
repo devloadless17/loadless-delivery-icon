@@ -426,6 +426,19 @@ describe('orders (integration)', () => {
       }
     });
 
+    it('a driver can see their OWN face on their own profile payload', async () => {
+      // The platform uploads it and the driver never does, which is exactly
+      // why /me has to carry the key: otherwise the person in the photo is the
+      // only one in the system who cannot see it.
+      const me = await request(server)
+        .get('/api/v1/auth/me')
+        .set(auth(driverAToken))
+        .expect(200);
+      expect(me.body.data.user.driver.facePhotoKey).toBe(facePhotoKey);
+      // …and the bike stays with the platform, even for them here.
+      expect(me.body.data.user.driver.bikePhotoKey).toBeUndefined();
+    });
+
     it('the driver sees both of their own; admin sees both of anyone\'s', async () => {
       for (const token of [driverAToken, adminToken]) {
         await request(server).get(`/api/v1/files/${facePhotoKey}`).set(auth(token)).expect(200);

@@ -21,6 +21,7 @@ export interface MeResponse {
       contactPhone: string;
       dutyStatus: 'ON_DUTY' | 'OFF_DUTY';
       status: string;
+      facePhotoKey: string | null;
     } | null;
   };
 }

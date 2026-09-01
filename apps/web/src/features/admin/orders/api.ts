@@ -41,6 +41,10 @@ export interface AdminOrderFilters {
   status?: OrderStatus;
   from?: string;
   to?: string;
+  /** The platform view: whose orders, whose deliveries, which currency. */
+  vendorId?: string;
+  driverId?: string;
+  currency?: Currency;
 }
 
 export function buildAdminOrderParams(filters: AdminOrderFilters): URLSearchParams {
@@ -48,6 +52,9 @@ export function buildAdminOrderParams(filters: AdminOrderFilters): URLSearchPara
   if (filters.status) params.set('status', filters.status);
   if (filters.from) params.set('from', filters.from);
   if (filters.to) params.set('to', endOfDay(filters.to));
+  if (filters.vendorId) params.set('vendorId', filters.vendorId);
+  if (filters.driverId) params.set('driverId', filters.driverId);
+  if (filters.currency) params.set('currency', filters.currency);
   return params;
 }
 

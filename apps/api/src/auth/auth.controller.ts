@@ -111,7 +111,17 @@ export class AuthController {
         role: true,
         vendor: { select: { id: true, businessName: true, logoKey: true, status: true } },
         driver: {
-          select: { id: true, fullName: true, contactPhone: true, dutyStatus: true, status: true },
+          select: {
+            id: true,
+            fullName: true,
+            contactPhone: true,
+            dutyStatus: true,
+            status: true,
+            // Their own face, for their own profile. files.service already
+            // authorises a driver to fetch it; without the key here the app
+            // had no way to ask for it and fell back to a grey icon.
+            facePhotoKey: true,
+          },
         },
       },
     });

@@ -6,7 +6,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { SignOutButton } from '@/components/sign-out-button';
 import { ChangePasswordCard } from '@/components/change-password-card';
 import { ThemeToggle } from '@/components/theme-toggle';
-import { displayPhone } from '@/lib/format';
+import { displayPhone, fileUrl } from '@/lib/format';
 import { useMe } from '@/features/auth/use-me';
 
 export default function DriverProfilePage() {
@@ -22,11 +22,21 @@ export default function DriverProfilePage() {
         <Card>
           <CardContent className="space-y-4 pt-5">
             <div className="flex items-center gap-4">
-              {driver && data?.user ? (
-                <div className="flex size-16 items-center justify-center overflow-hidden rounded-full border bg-muted">
+              {/* Their own face. The platform holds the photo and the driver
+                  never uploads it, which is exactly why showing it back
+                  matters — otherwise the person whose picture it is is the
+                  only one in the system who cannot see it. */}
+              {driver.facePhotoKey ? (
+                <img
+                  src={fileUrl(driver.facePhotoKey)}
+                  alt={driver.fullName}
+                  className="size-16 shrink-0 rounded-full border object-cover"
+                />
+              ) : (
+                <div className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-full border bg-muted">
                   <UserRound className="size-7 text-muted-foreground" aria-hidden />
                 </div>
-              ) : null}
+              )}
               <div>
                 <p className="text-lg font-semibold">{driver.fullName}</p>
                 <p className="data-mono text-sm text-muted-foreground">

@@ -1,7 +1,7 @@
 'use client';
 
-import { ORDER_STATUSES, type OrderStatus } from '@loadless/shared';
-import { Download, PackageSearch } from 'lucide-react';
+import { CURRENCIES, ORDER_STATUSES, type Currency, type OrderStatus } from '@loadless/shared';
+import { Download, PackageSearch, X } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -30,17 +30,46 @@ import {
   type AdminOrderFilters,
 } from '@/features/admin/orders/api';
 import { OrderStatusBadge, STATUS_META } from '@/features/orders/order-status';
+import { useVendors } from '@/features/admin/vendors/api';
+import { useDrivers } from '@/features/admin/drivers/api';
 
 export default function AdminOrdersPage() {
   const [status, setStatus] = useState<OrderStatus | 'ALL'>('ALL');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
+  const [vendorId, setVendorId] = useState('ALL');
+  const [driverId, setDriverId] = useState('ALL');
+  const [currency, setCurrency] = useState<Currency | 'ALL'>('ALL');
+
+  // The lists that fill the two pickers. Page 1 is enough for a platform of
+  // this size, and asking for more would slow the screen for nobody's benefit.
+  const vendors = useVendors(1, '');
+  const drivers = useDrivers(1, '');
 
   const filters: AdminOrderFilters = {
     ...(status !== 'ALL' ? { status } : {}),
     ...(from ? { from } : {}),
     ...(to ? { to } : {}),
+    ...(vendorId !== 'ALL' ? { vendorId } : {}),
+    ...(driverId !== 'ALL' ? { driverId } : {}),
+    ...(currency !== 'ALL' ? { currency } : {}),
   };
+  const anyFilter =
+    status !== 'ALL' ||
+    from !== '' ||
+    to !== '' ||
+    vendorId !== 'ALL' ||
+    driverId !== 'ALL' ||
+    currency !== 'ALL';
+
+  function clearFilters() {
+    setStatus('ALL');
+    setFrom('');
+    setTo('');
+    setVendorId('ALL');
+    setDriverId('ALL');
+    setCurrency('ALL');
+  }
   const { data, isPending, fetchNextPage, hasNextPage, isFetchingNextPage } =
     useAdminOrders(filters);
   const orders = data?.pages.flatMap((p) => p.data) ?? [];
@@ -86,6 +115,62 @@ export default function AdminOrdersPage() {
           <Label htmlFor="ao-to">To</Label>
           <DateField id="ao-to" className="w-44" value={to} onValueChange={setTo} clearLabel="to date" />
         </div>
+        {/* The platform view: the API has accepted these three all along — only
+            the screen was missing them, so "show me this shop's week" meant
+            reading the whole board. */}
+        <div className="space-y-1.5">
+          <Label>Vendor</Label>
+          <Select value={vendorId} onValueChange={setVendorId}>
+            <SelectTrigger className="h-10 w-48">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">All vendors</SelectItem>
+              {(vendors.data?.data ?? []).map((v) => (
+                <SelectItem key={v.id} value={v.id}>
+                  {v.businessName}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label>Driver</Label>
+          <Select value={driverId} onValueChange={setDriverId}>
+            <SelectTrigger className="h-10 w-48">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">All drivers</SelectItem>
+              {(drivers.data?.data ?? []).map((d) => (
+                <SelectItem key={d.id} value={d.id}>
+                  {d.fullName}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label>Currency</Label>
+          <Select value={currency} onValueChange={(v) => setCurrency(v as Currency | 'ALL')}>
+            <SelectTrigger className="h-10 w-32">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">Any</SelectItem>
+              {CURRENCIES.map((c) => (
+                <SelectItem key={c} value={c}>
+                  {c}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        {anyFilter && (
+          <Button variant="ghost" className="h-10" onClick={clearFilters}>
+            <X /> Clear filters
+          </Button>
+        )}
       </div>
 
       {isPending ? (
