@@ -12,7 +12,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 
-const ITEMS = [
+export const ADMIN_NAV_ITEMS = [
   { href: '/admin', label: 'Dashboard', icon: LayoutDashboard, exact: true },
   { href: '/admin/orders', label: 'Orders', icon: Package },
   { href: '/admin/vendors', label: 'Vendors', icon: Store },
@@ -21,19 +21,33 @@ const ITEMS = [
   { href: '/admin/settings', label: 'Settings', icon: Settings },
 ];
 
-export function AdminNav() {
+/**
+ * The links themselves, shared by the desktop sidebar and the mobile drawer so
+ * a new admin section can never appear in one and be missing from the other.
+ * `onNavigate` lets the drawer close itself on a tap.
+ */
+export function AdminNavLinks({
+  onNavigate,
+  className,
+}: {
+  onNavigate?: () => void;
+  className?: string;
+}) {
   const pathname = usePathname();
   return (
-    <nav className="flex-1 space-y-1 p-3" aria-label="Admin">
-      {ITEMS.map(({ href, label, icon: Icon, exact }) => {
+    <nav className={cn('flex-1 space-y-1 p-3', className)} aria-label="Admin">
+      {ADMIN_NAV_ITEMS.map(({ href, label, icon: Icon, exact }) => {
         const active = exact ? pathname === href : pathname.startsWith(href);
         return (
           <Link
             key={href}
             href={href}
+            onClick={onNavigate}
             aria-current={active ? 'page' : undefined}
             className={cn(
-              'relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150',
+              // min-h-11 keeps every row a comfortable tap target on a phone;
+              // on the desktop sidebar it is indistinguishable from before.
+              'relative flex min-h-11 items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150',
               active
                 ? 'bg-primary/10 text-primary shadow-none'
                 : 'text-muted-foreground hover:bg-muted hover:text-foreground',
@@ -52,4 +66,8 @@ export function AdminNav() {
       })}
     </nav>
   );
+}
+
+export function AdminNav() {
+  return <AdminNavLinks />;
 }

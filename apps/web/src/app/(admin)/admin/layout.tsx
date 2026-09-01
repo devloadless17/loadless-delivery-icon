@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 import { AdminNav } from './nav';
+import { AdminMobileNav } from './mobile-nav';
 import { RealtimeProvider } from '@/components/realtime-provider';
 import { BrandWordmark } from '@/components/brand';
 import { SignOutButton } from '@/components/sign-out-button';
@@ -29,7 +30,10 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-16 items-center justify-between gap-3 border-b bg-card px-4 lg:hidden">
-          <BrandWordmark />
+          <div className="flex min-w-0 items-center gap-1">
+            <AdminMobileNav />
+            <BrandWordmark />
+          </div>
           <div className="flex items-center">
             <ThemeToggle />
             <SignOutButton iconOnly />
