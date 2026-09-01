@@ -33,7 +33,7 @@ test.describe('driver settlements', () => {
    */
   const owingRow = (page: import('@playwright/test').Page) =>
     page
-      .getByRole('table', { name: 'Drivers with money outstanding' })
+      .getByRole('table', { name: 'Drivers with an open balance' })
       .getByRole('row')
       .filter({ hasText: DRIVER_NAME });
 

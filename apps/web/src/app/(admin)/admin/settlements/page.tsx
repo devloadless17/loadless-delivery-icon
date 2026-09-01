@@ -55,8 +55,12 @@ export default function SettlementsPage() {
       </div>
 
       <section className="space-y-3">
+        {/* Not "Outstanding": a negative balance means the driver OVERPAID and
+            the platform owes him. Filing that under "outstanding", as a
+            negative amount in a column headed "Owed", said the opposite of the
+            truth about somebody's money. */}
         <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-          Outstanding
+          Open balances
         </h2>
 
         {isPending ? (
@@ -69,11 +73,11 @@ export default function SettlementsPage() {
           <>
             {/* Named so the two tables on this page are tellable apart: both
                 list driver names, and an unscoped row query matches either. */}
-            <Table aria-label="Drivers with money outstanding">
+            <Table aria-label="Drivers with an open balance">
               <TableHeader>
                 <TableRow>
                   <TableHead>Driver</TableHead>
-                  <TableHead>Owed</TableHead>
+                  <TableHead>Balance</TableHead>
                   <TableHead className="text-right">Deliveries</TableHead>
                   <TableHead>Last settled</TableHead>
                   <TableHead className="text-right">Action</TableHead>
@@ -94,7 +98,7 @@ export default function SettlementsPage() {
         ) : (
           <div className="rounded-lg border border-dashed p-10 text-center">
             <Wallet className="mx-auto mb-3 size-8 text-muted-foreground" />
-            <p className="font-medium">Everyone is settled up</p>
+            <p className="font-medium">Everyone is square</p>
             <p className="text-sm text-muted-foreground">
               No driver is holding the platform&apos;s commission right now.
             </p>
@@ -131,18 +135,35 @@ function OutstandingRow({
       <TableCell>
         {/* One amount per currency, stacked. LBP and USD are never added up. */}
         <div className="space-y-0.5">
-          {row.lines.map((line) => (
-            <div key={line.currency} className="flex items-center gap-2">
-              <span className="data-mono font-medium">
-                {displayMoney(line.totalDue, line.currency)}
-              </span>
-              {BigInt(line.broughtForward) !== 0n && (
-                <Badge variant="warning">
-                  carried {displayMoney(line.broughtForward, line.currency)}
-                </Badge>
-              )}
-            </div>
-          ))}
+          {row.lines.map((line) => {
+            const due = BigInt(line.totalDue);
+            const carried = BigInt(line.broughtForward);
+            return (
+              <div key={line.currency} className="flex flex-wrap items-center gap-2">
+                {due < 0n ? (
+                  // Read it out the way it actually is, rather than showing a
+                  // minus sign under a column that claims he owes it.
+                  <span className="data-mono font-medium text-accent">
+                    {displayMoney(-due, line.currency)} in credit
+                  </span>
+                ) : (
+                  <span className="data-mono font-medium">
+                    {displayMoney(due, line.currency)}
+                  </span>
+                )}
+                {carried > 0n && (
+                  <Badge variant="warning">
+                    carried {displayMoney(carried, line.currency)}
+                  </Badge>
+                )}
+                {carried < 0n && (
+                  <Badge variant="accent">
+                    overpaid {displayMoney(-carried, line.currency)}
+                  </Badge>
+                )}
+              </div>
+            );
+          })}
         </div>
       </TableCell>
       <TableCell className="data-mono text-right">{deliveries}</TableCell>

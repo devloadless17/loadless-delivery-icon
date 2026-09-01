@@ -823,6 +823,117 @@ describe('driver settlements (integration)', () => {
       .expect(403);
   });
 
+  // ------------------------------------------------------ the driver in credit
+
+  it('a driver who overpaid goes into credit, and can still be settled', async () => {
+    // Found by Ali using it: an overpayment leaves a NEGATIVE balance, and the
+    // settle screen defaulted its cash box to that negative. "-10000" is not a
+    // parseable amount, so the confirm button stayed disabled and the driver
+    // became impossible to settle at all. Nobody hands over a negative amount
+    // of cash; the API side of that is asserted here.
+    const { driver, token } = await makeDriver('Overpaid Driver');
+    await seedOrder({ driverId: driver.id, charge: 100_000n, currency: 'LBP' });
+
+    const first = await previewOf(driver.id).expect(200);
+    const overpaid = await request(server)
+      .post(`/api/v1/admin/drivers/${driver.id}/settlements`)
+      .set(auth(adminToken))
+      .send(settleBody(first.body.data.lines, { LBP: '40000' })) // owes 30,000
+      .expect(201);
+    expect(lineFor(overpaid.body.data, 'LBP')).toMatchObject({
+      totalDue: '30000',
+      amountCollected: '40000',
+      carriedForward: '-10000', // the platform owes him 10,000
+    });
+
+    // The balance is negative, and both audiences report it as credit rather
+    // than as a debt with a minus sign in front of it.
+    const balance = await prisma.driverBalance.findUniqueOrThrow({
+      where: { driverId_currency: { driverId: driver.id, currency: 'LBP' } },
+    });
+    expect(balance.outstanding).toBe(-10_000n);
+
+    const owed = await request(server)
+      .get('/api/v1/driver/settlements/current')
+      .set(auth(token))
+      .expect(200);
+    expect(lineFor(owed.body.data, 'LBP')).toMatchObject({ totalDue: '-10000' });
+
+    // He can still be settled: collecting nothing is valid, and the credit
+    // simply carries on.
+    const second = await previewOf(driver.id).expect(200);
+    expect(lineFor(second.body.data, 'LBP')).toMatchObject({ totalDue: '-10000' });
+
+    const carried = await request(server)
+      .post(`/api/v1/admin/drivers/${driver.id}/settlements`)
+      .set(auth(adminToken))
+      .send(settleBody(second.body.data.lines, { LBP: '0' }))
+      .expect(201);
+    expect(lineFor(carried.body.data, 'LBP')).toMatchObject({
+      amountCollected: '0',
+      carriedForward: '-10000',
+    });
+
+    // Or the credit can be spent against a charge, landing him back at square.
+    const third = await previewOf(driver.id).expect(200);
+    const cleared = await request(server)
+      .post(`/api/v1/admin/drivers/${driver.id}/settlements`)
+      .set(auth(adminToken))
+      .send({
+        ...settleBody(third.body.data.lines),
+        adjustments: [
+          { currency: 'LBP', direction: 'DEBIT', amount: '10000', reason: 'Lost the thermal bag' },
+        ],
+        collections: [{ currency: 'LBP', amountCollected: '0' }],
+      })
+      .expect(201);
+    expect(lineFor(cleared.body.data, 'LBP')).toMatchObject({
+      broughtForward: '-10000',
+      adjustmentsTotal: '10000',
+      totalDue: '0',
+      carriedForward: '0',
+    });
+
+    const finalOwed = await request(server)
+      .get('/api/v1/driver/settlements/current')
+      .set(auth(token))
+      .expect(200);
+    expect(finalOwed.body.data.clear).toBe(true);
+  });
+
+  // ------------------------------------------------------- deleting a driver
+
+  it('refuses to delete a driver who has settlements but no orders', async () => {
+    // The gap this closes is narrow but real, and now reachable: an
+    // adjustment-only settlement needs no deliveries at all, so a driver CAN
+    // hold a record of cash that changed hands while having zero orders. The
+    // orders guard alone would let him be deleted, taking that record with him.
+    const { driver } = await makeDriver('Fined But Orderless');
+    await request(server)
+      .post(`/api/v1/admin/drivers/${driver.id}/settlements`)
+      .set(auth(adminToken))
+      .send({
+        cutoffAt: new Date().toISOString(),
+        expected: [],
+        adjustments: [
+          { currency: 'LBP', direction: 'DEBIT', amount: '5000', reason: 'Lost the thermal bag' },
+        ],
+        collections: [{ currency: 'LBP', amountCollected: '5000' }],
+      })
+      .expect(201);
+
+    expect(await prisma.order.count({ where: { driverId: driver.id } })).toBe(0);
+
+    const res = await request(server)
+      .delete(`/api/v1/admin/drivers/${driver.id}`)
+      .set(auth(adminToken))
+      .expect(409);
+    expect(res.body.error.code).toBe('DRIVER_HAS_SETTLEMENTS');
+
+    // And he is still there, with his record.
+    expect(await prisma.driver.count({ where: { id: driver.id } })).toBe(1);
+  });
+
   // ------------------------------------------------------------ immutability
 
   it('refuses to mutate or delete a recorded settlement', async () => {

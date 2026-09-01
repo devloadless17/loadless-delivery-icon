@@ -75,10 +75,14 @@ export function SettleDialog({
     if (!preview.data) return;
     setCollections(
       Object.fromEntries(
-        preview.data.lines.map((line) => [
-          line.currency,
-          fromMinorUnits(line.totalDue, line.currency),
-        ]),
+        preview.data.lines.map((line) => {
+          // Clamped at zero: a driver in credit has a NEGATIVE total due, and
+          // defaulting the box to "-10000" made it unparseable, which disabled
+          // the confirm button and left him impossible to settle at all.
+          // Nobody ever hands over a negative amount of cash.
+          const due = BigInt(line.totalDue);
+          return [line.currency, fromMinorUnits(due > 0n ? due : 0n, line.currency)];
+        }),
       ),
     );
     setAdjustments([]);
@@ -117,6 +121,28 @@ export function SettleDialog({
   );
 
   const invalidAmount = computed.some((row) => row.collected === null);
+
+  /**
+   * Per-adjustment problems, named on the field itself.
+   *
+   * The reason is required (three characters, DB-enforced) because it is what
+   * the driver reads to understand a charge. Leaving that to a bare
+   * "Validation failed" toast told an admin nothing about what to fix.
+   */
+  const adjustmentErrors = adjustments.map((a) => {
+    const minor = toMinorUnits(a.amount, a.currency);
+    return {
+      key: a.key,
+      amount:
+        minor === null
+          ? `Enter a valid ${a.currency} amount`
+          : minor === 0n
+            ? 'Enter an amount above zero'
+            : null,
+      reason: a.reason.trim().length < 3 ? 'Say why — the driver sees this' : null,
+    };
+  });
+  const hasAdjustmentErrors = adjustmentErrors.some((e) => e.amount || e.reason);
   const overpaying = computed.some((row) => row.shortfall !== null && row.shortfall < 0n);
   const nothingOwed = !preview.isPending && lines.length === 0 && adjustments.length === 0;
 
@@ -153,7 +179,15 @@ export function SettleDialog({
         void preview.refetch();
         return;
       }
-      toast.error(err instanceof ApiError ? err.message : 'Could not record the settlement');
+      // Field-level detail if the server sent any — "Validation failed" on its
+      // own leaves the admin guessing which box is wrong.
+      const detail =
+        err instanceof ApiError && err.details?.length
+          ? err.details.map((d) => d.message).join('. ')
+          : null;
+      toast.error(
+        detail ?? (err instanceof ApiError ? err.message : 'Could not record the settlement'),
+      );
     }
   }
 
@@ -273,7 +307,11 @@ export function SettleDialog({
               </div>
             ))}
 
-            <AdjustmentEditor value={adjustments} onChange={setAdjustments} />
+            <AdjustmentEditor
+              value={adjustments}
+              onChange={setAdjustments}
+              errors={adjustmentErrors}
+            />
 
             <div className="space-y-1.5">
               <Label htmlFor="settle-note">Note (optional)</Label>
@@ -293,7 +331,13 @@ export function SettleDialog({
           </Button>
           <Button
             onClick={onSubmit}
-            disabled={settle.isPending || preview.isPending || nothingOwed || invalidAmount}
+            disabled={
+              settle.isPending ||
+              preview.isPending ||
+              nothingOwed ||
+              invalidAmount ||
+              hasAdjustmentErrors
+            }
           >
             {settle.isPending ? 'Recording…' : overpaying ? 'Record overpayment' : 'Record payment'}
           </Button>
@@ -318,12 +362,20 @@ function Row({ label, value, muted }: { label: string; value: string; muted?: bo
  * The amount is always typed as a positive figure — the TYPE decides whether it
  * adds to or subtracts from what the driver owes.
  */
+interface AdjustmentError {
+  key: string;
+  amount: string | null;
+  reason: string | null;
+}
+
 function AdjustmentEditor({
   value,
   onChange,
+  errors,
 }: {
   value: DraftAdjustment[];
   onChange: (next: DraftAdjustment[]) => void;
+  errors: AdjustmentError[];
 }) {
   const add = () =>
     onChange([
@@ -342,7 +394,9 @@ function AdjustmentEditor({
 
   return (
     <div className="space-y-2">
-      {value.map((adjustment) => (
+      {value.map((adjustment) => {
+        const error = errors.find((e) => e.key === adjustment.key);
+        return (
         <div key={adjustment.key} className="rounded-lg border border-dashed p-3">
           {/* One decision, two options. Every adjustment either adds to what the
               driver owes or takes away from it — and WHY is the sentence below,
@@ -406,10 +460,18 @@ function AdjustmentEditor({
                   ? 'Lost the thermal bag'
                   : 'Bonus — twenty deliveries this week'
               }
+              aria-invalid={error?.reason ? true : undefined}
             />
           </div>
+
+          {(error?.amount || error?.reason) && (
+            <p className="mt-1.5 text-xs text-destructive">
+              {[error.amount, error.reason].filter(Boolean).join('. ')}
+            </p>
+          )}
         </div>
-      ))}
+        );
+      })}
 
       <Button variant="outline" size="sm" onClick={add}>
         <Plus className="size-4" /> Add adjustment
