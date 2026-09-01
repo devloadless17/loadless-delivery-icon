@@ -276,6 +276,20 @@ export function SettleDialog({
                     <p className="text-xs text-destructive">
                       Enter a valid {row.currency} amount
                     </p>
+                  ) : row.totalDue < 0n ? (
+                    // He is ALREADY in credit. Taking nothing from him is not
+                    // "overpaying" — calling it that would describe the driver
+                    // as having done something he has not done.
+                    row.collected === 0n ? (
+                      <p className="text-xs text-success">
+                        Nothing to collect — {formatMoney(-row.totalDue, row.currency)} in credit
+                        carries forward
+                      </p>
+                    ) : (
+                      <p className="text-xs text-warning">
+                        They owe nothing — this adds to their credit
+                      </p>
+                    )
                   ) : row.shortfall! > 0n ? (
                     <p className="text-xs text-warning">
                       Short by {formatMoney(row.shortfall!, row.currency)} — carried to next time

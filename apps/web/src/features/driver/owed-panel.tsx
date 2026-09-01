@@ -23,7 +23,14 @@ export function OwedPanel() {
   if (isPending) return <Skeleton className="h-28 w-full" />;
   if (!data) return null;
 
-  if (data.clear) {
+  // A driver who OVERPAID has a negative balance. Rendering that under "To
+  // hand over" told him to hand over minus ten thousand pounds — the same
+  // inversion that showed on the admin's worklist, and worse here, because
+  // this is the screen he checks before walking in to pay.
+  const owedLines = data.lines.filter((line) => BigInt(line.totalDue) > 0n);
+  const creditLines = data.lines.filter((line) => BigInt(line.totalDue) < 0n);
+
+  if (owedLines.length === 0) {
     return (
       <div className="flex items-start gap-3 rounded-lg border border-success/30 bg-success/10 p-4">
         <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-success" aria-hidden />
@@ -33,6 +40,12 @@ export function OwedPanel() {
             Nothing is owed to the platform
             {data.lastSettledAt ? ` — last handover ${displayDateTime(data.lastSettledAt)}` : ''}.
           </p>
+          {creditLines.map((line) => (
+            <p key={line.currency} className="mt-1 text-sm font-medium text-success">
+              You paid {displayMoney(-BigInt(line.totalDue), line.currency)} too much last time —
+              it comes off your next handover.
+            </p>
+          ))}
         </div>
       </div>
     );
@@ -45,7 +58,7 @@ export function OwedPanel() {
         <p className="font-semibold text-warning">To hand over</p>
       </div>
       <div className="mt-3 space-y-4">
-        {data.lines.map((line) => (
+        {owedLines.map((line) => (
           // Stacked per currency, never added together — LBP and USD are
           // separate piles of cash and the driver counts them separately.
           <div key={line.currency}>
@@ -75,6 +88,13 @@ export function OwedPanel() {
               </p>
             )}
           </div>
+        ))}
+
+        {creditLines.map((line) => (
+          <p key={line.currency} className="text-sm font-medium text-success">
+            You are {displayMoney(-BigInt(line.totalDue), line.currency)} in credit — it comes off
+            your next handover.
+          </p>
         ))}
       </div>
     </div>
