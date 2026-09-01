@@ -1,7 +1,7 @@
-import { formatLebanesePhone, formatMoney, type Currency } from '@loadless/shared';
+import { displayPhoneNumber, formatMoney, type Currency } from '@loadless/shared';
 
 export function displayPhone(normalized: string): string {
-  return formatLebanesePhone(normalized);
+  return displayPhoneNumber(normalized);
 }
 
 export function displayMoney(amountMinor: string | bigint, currency: Currency): string {

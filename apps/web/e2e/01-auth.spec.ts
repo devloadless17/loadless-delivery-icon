@@ -13,7 +13,7 @@ test.describe('authentication & role routing', () => {
 
   test('malformed identifier is rejected client-side', async ({ page }) => {
     await login(page, 'not-an-email-or-phone', PASSWORD);
-    await expect(page.getByText('Enter a valid email or Lebanese phone number')).toBeVisible();
+    await expect(page.getByText('Enter a valid email or phone number')).toBeVisible();
     expect(page.url()).toContain('/login');
   });
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { normalizeLebanesePhone } from '@loadless/shared';
+import { normalizePhone } from '@loadless/shared';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { ApiError } from '@/lib/api-client';
@@ -51,9 +51,9 @@ export function CustomerCreateDialog({
   }, [open, initialPhone]);
 
   async function submit() {
-    const normalized = normalizeLebanesePhone(phone);
+    const normalized = normalizePhone(phone);
     if (!normalized) {
-      setPhoneError('Enter a valid Lebanese phone number');
+      setPhoneError('Enter a valid number — 03 123 456, or +971… for another country');
       return;
     }
     if (name.trim().length < 2) {
@@ -111,15 +111,15 @@ export function CustomerCreateDialog({
               type="tel"
               inputMode="tel"
               className="data-mono"
-              placeholder="03 123 456"
+              placeholder="03 123 456 or +971 50 123 4567"
               value={phone}
               onChange={(e) => {
                 setPhone(e.target.value);
                 setPhoneError(null);
               }}
               onBlur={() => {
-                if (phone && !normalizeLebanesePhone(phone)) {
-                  setPhoneError('Enter a valid Lebanese phone number');
+                if (phone && !normalizePhone(phone)) {
+                  setPhoneError('Enter a valid number — 03 123 456, or +971… for another country');
                 }
               }}
               aria-invalid={!!phoneError}

@@ -15,7 +15,7 @@ import type {
   VendorCustomerRow,
   PlatformCustomerMatch,
 } from '@loadless/shared';
-import { phoneSearchDigits, PLATFORM_LOOKUP_MIN_DIGITS } from '@loadless/shared';
+import { platformLookupPrefix } from '@loadless/shared';
 import { api } from '@/lib/api-client';
 
 export type CustomerAddress = CustomerProfileView['addresses'][number];
@@ -91,13 +91,14 @@ export function useCustomerSearch(normalizedPhone: string | null) {
  * a lookup rather than a listing; letters never reach it.
  */
 export function usePlatformLookup(typed: string) {
-  const digits = phoneSearchDigits(typed);
-  const enabled = digits.length >= PLATFORM_LOOKUP_MIN_DIGITS;
+  // One shared rule decides whether a partial number is specific enough.
+  const prefix = platformLookupPrefix(typed);
+  const enabled = prefix !== null;
   return useQuery({
-    queryKey: ['customers', 'lookup', digits],
+    queryKey: ['customers', 'lookup', prefix],
     queryFn: () =>
       api.get<{ matches: PlatformCustomerMatch[]; hasMore: boolean }>(
-        `/customers/lookup?q=${encodeURIComponent(digits)}`,
+        `/customers/lookup?q=${encodeURIComponent(prefix ?? '')}`,
       ),
     enabled,
     staleTime: 30_000,

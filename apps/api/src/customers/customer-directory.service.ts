@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import {
-  phoneSearchDigits,
+  phoneSearchPrefix,
+  platformLookupPrefix,
   PLATFORM_LOOKUP_LIMIT,
-  PLATFORM_LOOKUP_MIN_DIGITS,
   type MyCustomersFilter,
   type PlatformCustomerMatch,
 } from '@loadless/shared';
@@ -49,12 +49,11 @@ export class CustomerDirectoryService {
     const q = filter.q?.trim();
     // Search as they type: any prefix of a name, or any prefix of a number.
     //
-    // The phone half must go through phoneSearchDigits — numbers are stored as
-    // "+9613123456" with the leading 0 dropped, so matching the literal typed
-    // "03 12" would find nothing. Anchored with a prefix LIKE rather than a
-    // contains: people read numbers left to right, and '+961…%' can ride the
-    // index instead of scanning.
-    const digits = q ? phoneSearchDigits(q) : '';
+    // phoneSearchPrefix returns the STORED prefix, country code included, so
+    // this works for a customer on a foreign number too — and so that "+961"
+    // is not assumed here. Anchored with a prefix LIKE rather than a contains:
+    // people read numbers left to right, and it can ride the index.
+    const phonePrefix = q ? phoneSearchPrefix(q) : '';
     const like = `%${q}%`;
     // Split rather than COALESCE(display_name, name): each side can then use
     // its own trigram index, and a vendor who renamed someone can still find
@@ -62,7 +61,7 @@ export class CustomerDirectoryService {
     const search = q
       ? Prisma.sql`AND (
           c."name" ILIKE ${like} OR cv."display_name" ILIKE ${like}
-          ${digits ? Prisma.sql`OR c."normalized_phone" LIKE ${'+961' + digits + '%'}` : Prisma.empty}
+          ${phonePrefix ? Prisma.sql`OR c."normalized_phone" LIKE ${phonePrefix + '%'}` : Prisma.empty}
         )`
       : Prisma.empty;
     // The count must stay ANCHORED on customer_vendors. Written as a join with
@@ -72,7 +71,7 @@ export class CustomerDirectoryService {
     const countSearch = q
       ? Prisma.sql`AND (
           cv."display_name" ILIKE ${like}
-          ${digits ? Prisma.sql`OR c."normalized_phone" LIKE ${'+961' + digits + '%'}` : Prisma.empty}
+          ${phonePrefix ? Prisma.sql`OR c."normalized_phone" LIKE ${phonePrefix + '%'}` : Prisma.empty}
           OR EXISTS (SELECT 1 FROM "customers" c2
                       WHERE c2."id" = cv."customer_id" AND c2."name" ILIKE ${like})
         )`
@@ -174,8 +173,10 @@ export class CustomerDirectoryService {
       return { matches: [], hasMore: false };
     }
 
-    const digits = phoneSearchDigits(q);
-    if (digits.length < PLATFORM_LOOKUP_MIN_DIGITS) return { matches: [], hasMore: false };
+    // One shared rule decides "specific enough to ask about", so the client
+    // and the server can never disagree on where the boundary sits.
+    const prefix = platformLookupPrefix(q);
+    if (!prefix) return { matches: [], hasMore: false };
 
     // Prefix scan on the unique index over normalized_phone, minus the
     // caller's own customers — those are already listed above with their real
@@ -191,7 +192,7 @@ export class CustomerDirectoryService {
     // One past the cap, so the UI can say "keep typing" instead of quietly
     // hiding the person the vendor is actually looking for.
     const rows = await this.prisma.customer.findMany({
-      where: { normalizedPhone: { startsWith: `+961${digits}` } },
+      where: { normalizedPhone: { startsWith: prefix } },
       select: {
         id: true,
         name: true,

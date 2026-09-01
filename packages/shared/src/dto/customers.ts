@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { ADDRESS_LABELS, ORDER_STATUSES, type AddressLabel, type OrderStatus } from '../enums';
 import type { Currency } from '../money';
+import { LEBANON_CC, phoneSearchPrefix } from '../phone';
 import { cuidSchema, cursorPaginationSchema, offsetPaginationSchema, phoneSchema } from './common';
 
 export const latitudeSchema = z.coerce.number().min(-90).max(90);
@@ -88,6 +89,20 @@ export type UpdateCustomerAddressInput = z.infer<typeof updateCustomerAddressSch
 export const PLATFORM_LOOKUP_MIN_DIGITS = 6;
 /** Never widen without re-reading the enumeration note above. */
 export const PLATFORM_LOOKUP_LIMIT = 10;
+
+/**
+ * Is this partial number specific enough to ask the platform about?
+ *
+ * Counted on the STORED prefix, country code included, so the bar is the same
+ * whoever the customer is: Lebanon's `+961` plus six national digits. A
+ * country with a shorter code simply has to be more specific, which errs the
+ * safe way — the threshold exists to keep the number space unwalkable.
+ */
+export function platformLookupPrefix(input: string): string | null {
+  const prefix = phoneSearchPrefix(input);
+  const digits = prefix.replace(/\D/g, '').length;
+  return digits >= LEBANON_CC.length + PLATFORM_LOOKUP_MIN_DIGITS ? prefix : null;
+}
 
 export const platformLookupSchema = z.object({
   q: z.string().trim().min(1).max(40),

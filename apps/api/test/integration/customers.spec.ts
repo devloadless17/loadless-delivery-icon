@@ -972,6 +972,82 @@ describe('customers (integration)', () => {
     });
   });
 
+  /**
+   * Lebanon is the DEFAULT country, not the only one — customers live here on
+   * foreign numbers, and refusing them refuses a real delivery.
+   */
+  describe('a customer on a foreign number', () => {
+    it('is created, found and ordered for exactly like a local one', async () => {
+      const created = await request(server)
+        .post('/api/v1/customers')
+        .set(auth(vendorAToken))
+        .send({ phone: '+971 50 123 4567', name: 'Emirati Number' })
+        .expect(200);
+      expect(created.body.data.customer.normalizedPhone).toBe('+971501234567');
+
+      // Every spelling of the same number is the same customer.
+      for (const spelling of ['+971501234567', '00971 50 123 4567', '+971 50 123 45 67']) {
+        const res = await request(server)
+          .get(`/api/v1/customers?phone=${encodeURIComponent(spelling)}`)
+          .set(auth(vendorAToken))
+          .expect(200);
+        expect(res.body.data.customer?.id).toBe(created.body.data.customer.id);
+      }
+
+      // …and it is one row, not one per spelling.
+      expect(await prisma.customer.count({ where: { normalizedPhone: '+971501234567' } })).toBe(1);
+
+      await request(server)
+        .post('/api/v1/vendor/orders')
+        .set(auth(vendorAToken))
+        .send({
+          customerPhone: '00971501234567',
+          deliveryAddressText: 'Hamra, Bldg 3',
+          deliveryCharge: '100000',
+          currency: 'LBP',
+        })
+        .expect(201);
+    });
+
+    it('is searchable by its own prefix, and never by a Lebanese one', async () => {
+      const mine = await request(server)
+        .get(`/api/v1/vendor/customers?q=${encodeURIComponent('+971 50 123')}`)
+        .set(auth(vendorAToken))
+        .expect(200);
+      expect(
+        mine.body.data.some((r: { normalizedPhone: string }) => r.normalizedPhone === '+971501234567'),
+      ).toBe(true);
+
+      // "50 123" with no country reads as a LOCAL number, so it must not
+      // stumble onto the Emirati one.
+      const local = await request(server)
+        .get(`/api/v1/vendor/customers?q=${encodeURIComponent('50 123')}`)
+        .set(auth(vendorAToken))
+        .expect(200);
+      expect(
+        local.body.data.some((r: { normalizedPhone: string }) => r.normalizedPhone === '+971501234567'),
+      ).toBe(false);
+    });
+
+    it('a Lebanese-shaped number typed bare is still Lebanese', async () => {
+      const res = await request(server)
+        .post('/api/v1/customers')
+        .set(auth(vendorAToken))
+        .send({ phone: '03 100 300', name: 'Still Local' })
+        .expect(200);
+      expect(res.body.data.customer.normalizedPhone).toBe('+9613100300');
+    });
+
+    it('the database refuses a malformed number even if the API is bypassed', async () => {
+      await expect(
+        prisma.customer.create({ data: { normalizedPhone: '+961999', name: 'Bad Lebanese' } }),
+      ).rejects.toThrow(); // +961 stays strict
+      await expect(
+        prisma.customer.create({ data: { normalizedPhone: '+0123456789', name: 'Bad Country' } }),
+      ).rejects.toThrow(); // no country code starts with 0
+    });
+  });
+
   describe('platform lookup — the one read that crosses the boundary', () => {
     it('finds a stranger from a partial number, identity ONLY', async () => {
       // vendor B created this one; vendor A has never served them.

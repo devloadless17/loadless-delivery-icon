@@ -6,7 +6,7 @@ import type {
   UpdateCustomerAddressInput,
   UpdateCustomerInput,
 } from '@loadless/shared';
-import { ERROR_CODES, normalizeAddressKey, phoneSearchDigits } from '@loadless/shared';
+import { ERROR_CODES, normalizeAddressKey, phoneSearchPrefix } from '@loadless/shared';
 import { Prisma, type AddressLabel } from '@prisma/client';
 import { AppException } from '../common/app.exception';
 import { offsetArgs, offsetMeta } from '../common/pagination';
@@ -487,11 +487,12 @@ export class CustomersService {
         ? {
             OR: [
               { name: { contains: q, mode: 'insensitive' as const } },
-              // Stored as "+9613123456"; a typed "03 12" must become "312" or
-              // it matches nothing at all. startsWith, because numbers are
-              // read left to right.
-              ...(phoneSearchDigits(q)
-                ? [{ normalizedPhone: { startsWith: `+961${phoneSearchDigits(q)}` } }]
+              // The STORED prefix, country code included: a typed "03 12"
+              // becomes "+961312" and a typed "+971 50" stays "+97150", so
+              // this finds a customer on a foreign number too. startsWith,
+              // because numbers are read left to right.
+              ...(phoneSearchPrefix(q)
+                ? [{ normalizedPhone: { startsWith: phoneSearchPrefix(q) } }]
                 : []),
             ],
           }

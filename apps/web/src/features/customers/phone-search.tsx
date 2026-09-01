@@ -1,6 +1,6 @@
 'use client';
 
-import { normalizeLebanesePhone } from '@loadless/shared';
+import { normalizePhone } from '@loadless/shared';
 import { Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Input } from '@/components/ui/input';
@@ -9,12 +9,13 @@ import { useDebouncedValue } from '@/lib/use-debounced-value';
 
 /**
  * Phone-first lookup input. Emits the normalized phone once the typed value
- * becomes a valid Lebanese number; null while incomplete/invalid.
+ * becomes a valid number — Lebanese by default, any country with a leading
+ * + or 00. Null while incomplete or invalid.
  */
 export function usePhoneSearch() {
   const [raw, setRaw] = useState('');
   const debounced = useDebouncedValue(raw, 300);
-  const normalized = useMemo(() => normalizeLebanesePhone(debounced), [debounced]);
+  const normalized = useMemo(() => normalizePhone(debounced), [debounced]);
   return { raw, setRaw, debounced, normalized, isTyping: raw !== debounced };
 }
 

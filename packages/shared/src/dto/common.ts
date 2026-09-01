@@ -1,14 +1,18 @@
 import { z } from 'zod';
-import { normalizeLebanesePhone } from '../phone';
+import { normalizePhone } from '../phone';
 
-/** Any accepted Lebanese input format -> normalized E.164 string. */
+/** Any accepted input format -> normalized E.164. Lebanese by default; other
+ * countries need an explicit + or 00 prefix. */
 export const phoneSchema = z
   .string()
   .min(1, 'Phone number is required')
   .transform((value, ctx) => {
-    const normalized = normalizeLebanesePhone(value);
+    const normalized = normalizePhone(value);
     if (!normalized) {
-      ctx.addIssue({ code: 'custom', message: 'Enter a valid Lebanese phone number' });
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Enter a valid phone number — 03 123 456, or +971… for another country',
+      });
       return z.NEVER;
     }
     return normalized;
@@ -26,7 +30,7 @@ export const emailSchema = z
 /**
  * Login identifier: drivers use their phone number, admins and vendors use
  * their email. Anything containing "@" is treated as an email; otherwise it
- * must normalize as a Lebanese phone number.
+ * must normalize as a phone number.
  */
 export const loginIdentifierSchema = z
   .string()
@@ -41,9 +45,9 @@ export const loginIdentifierSchema = z
       }
       return parsed.data;
     }
-    const normalized = normalizeLebanesePhone(value);
+    const normalized = normalizePhone(value);
     if (!normalized) {
-      ctx.addIssue({ code: 'custom', message: 'Enter a valid email or Lebanese phone number' });
+      ctx.addIssue({ code: 'custom', message: 'Enter a valid email or phone number' });
       return z.NEVER;
     }
     return normalized;
