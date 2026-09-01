@@ -1312,7 +1312,12 @@ describe('customers (integration)', () => {
 
       expect(res.body.data.created).toBe(false);
       expect(res.body.data.id).toBe(address.id); // the row that already existed
-      expect(res.body.data.ownership).toBe('OTHER'); // still theirs, not mine
+      // Still theirs — checked in the table, since the payload deliberately
+      // tells a vendor nothing about who owns a row.
+      expect(
+        (await prisma.customerAddress.findUniqueOrThrow({ where: { id: address.id } }))
+          .createdByVendorId,
+      ).toBe(vendorBId);
       expect(
         await prisma.customerAddress.count({ where: { customerId: customer.id, isArchived: false } }),
       ).toBe(1);
@@ -1353,7 +1358,10 @@ describe('customers (integration)', () => {
         .send({ label: 'HOME', addressText: 'My completely different description, floor 2' })
         .expect(201);
       expect(retry.body.data.created).toBe(true);
-      expect(retry.body.data.ownership).toBe('MINE');
+      expect(
+        (await prisma.customerAddress.findUniqueOrThrow({ where: { id: retry.body.data.id } }))
+          .createdByVendorId,
+      ).toBe(vendorAId);
     });
 
     it('a vendor may ADD a different address; the existing one is untouched', async () => {
@@ -1364,7 +1372,6 @@ describe('customers (integration)', () => {
         .set(auth(vendorAToken))
         .send({ label: 'HOME', addressText: 'Copy Me street, Bldg 7' })
         .expect(201);
-      expect(res.body.data.ownership).toBe('MINE');
       expect(res.body.data.created).toBe(true); // a genuinely different address
 
       const rows = await prisma.customerAddress.findMany({
@@ -1385,7 +1392,7 @@ describe('customers (integration)', () => {
         .expect(403);
     });
 
-    it('ownership ships as a verdict, and MINE sorts first', async () => {
+    it('A VENDOR LEARNS NOTHING about who else deals with this customer', async () => {
       const { customer } = await seedOwnedAddress('+9613100134', 'Sorted', vendorBId);
       await prisma.customerAddress.create({
         data: {
@@ -1400,16 +1407,27 @@ describe('customers (integration)', () => {
         .get(`/api/v1/customers/${customer.id}`)
         .set(auth(vendorAToken))
         .expect(200);
-      expect(asA.body.data.addresses.map((a: { ownership: string }) => a.ownership)).toEqual([
-        'MINE',
-        'OTHER',
-      ]);
-      // A vendor never learns WHO owns the other row, nor any vendor id.
-      const blob = JSON.stringify(asA.body);
-      expect(blob).not.toContain('Vendor B Shop');
-      expect(blob).not.toContain('createdByVendorId');
-      expect(blob).not.toContain(vendorBId);
 
+      // The addresses are shared and readable — that is the point of the
+      // directory. What they must NOT carry is any statement about which
+      // vendor put them there: 'OTHER' can only mean "a competitor", and no
+      // vendor decision depends on it since they cannot edit addresses.
+      for (const address of asA.body.data.addresses) {
+        expect(address.ownership).toBeUndefined();
+        expect(address.ownerVendorName).toBeUndefined();
+      }
+
+      // Nor may the ORDER of the list imply it — sorting the caller's own to
+      // the top says which rows are theirs and, by elimination, which are not.
+      const texts = asA.body.data.addresses.map((a: { addressText: string }) => a.addressText);
+      expect(texts).toEqual(['Sorted street', 'Mine later']); // oldest first, untouched
+
+      const blob = JSON.stringify(asA.body);
+      for (const leak of ['Vendor B Shop', 'createdByVendorId', 'OTHER', vendorBId]) {
+        expect(blob).not.toContain(leak);
+      }
+
+      // ADMIN, by contrast, is told exactly who added what.
       const asAdmin = await request(server)
         .get(`/api/v1/admin/customers/${customer.id}`)
         .set(auth(adminToken))
@@ -1418,6 +1436,9 @@ describe('customers (integration)', () => {
         (a: { ownerVendorName: string | null }) => a.ownerVendorName,
       );
       expect(names).toContain('Vendor B Shop');
+      expect(asAdmin.body.data.addresses.every((a: { ownership?: string }) => a.ownership)).toBe(
+        true,
+      );
     });
   });
 

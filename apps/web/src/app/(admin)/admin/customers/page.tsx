@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { Search, UserPlus, Users } from 'lucide-react';
+import { Search, SlidersHorizontal, Trash2, UserPlus, Users } from 'lucide-react';
 import { useState } from 'react';
 import { api } from '@/lib/api-client';
 import { Input } from '@/components/ui/input';
@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/table';
 import { Pagination, type PageMeta } from '@/components/pagination';
 import { Button } from '@/components/ui/button';
+import { IconAction } from '@/components/ui/icon-action';
 import {
   Select,
   SelectContent,
@@ -146,17 +147,19 @@ export default function AdminCustomersPage() {
                   </TableCell>
                   <TableCell className="text-muted-foreground">{displayDate(customer.createdAt)}</TableCell>
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="sm" onClick={() => setManagingId(customer.id)}>
-                      Manage
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                      onClick={() => setDeleting(customer)}
-                    >
-                      Delete
-                    </Button>
+                    <div className="flex items-center justify-end gap-0.5">
+                      <IconAction
+                        label="Manage"
+                        icon={SlidersHorizontal}
+                        onClick={() => setManagingId(customer.id)}
+                      />
+                      <IconAction
+                        label="Delete"
+                        icon={Trash2}
+                        tone="destructive"
+                        onClick={() => setDeleting(customer)}
+                      />
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}

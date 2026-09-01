@@ -176,8 +176,12 @@ export interface CustomerAddressView {
   mapsUrl: string | null;
   lat: number | null;
   lng: number | null;
-  ownership: AddressOwnership;
-  /** ADMIN scope only — which vendor owns the row. */
+  /**
+   * ADMIN scope only, both of them. 'OTHER' can only mean "another vendor
+   * added this", so a vendor receiving it would learn that a competitor deals
+   * with this customer — and they cannot edit addresses anyway.
+   */
+  ownership?: AddressOwnership;
   ownerVendorName?: string | null;
   /**
    * Add responses only: did this write actually create a row? The address book

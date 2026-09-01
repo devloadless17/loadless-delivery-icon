@@ -12,12 +12,40 @@
 	# `handle` keeps the path (never handle_path): the API serves under /api/v1
 	# itself, so dev (Next rewrites) and prod behave identically.
 	handle /api/* {
-		reverse_proxy api:4100
+		reverse_proxy api:4100 {
+			# Ride out a deploy instead of failing into it.
+			#
+			# A release replaces the api container, and for the second or two
+			# between the old one stopping and the new one accepting, Caddy's
+			# dial is refused. Without this it answers 502 immediately: the
+			# driver's tap fails, the vendor's list empties, and the app shows an
+			# error for a container swap nobody asked them to care about.
+			#
+			# lb_try_duration makes Caddy hold the request and retry the upstream
+			# for up to 20s, so a deploy costs those requests a short delay
+			# rather than a failure. 20s comfortably covers the gap: the api
+			# image boots and answers its healthcheck in about ten.
+			lb_try_duration 20s
+			lb_try_interval 250ms
+		}
 	}
+
 	handle /socket.io/* {
-		reverse_proxy api:4100
+		reverse_proxy api:4100 {
+			# Same for the websocket handshake. The live connection itself still
+			# drops when the process goes — nothing on a single host can prevent
+			# that — but socket.io reconnects on its own, and this stops the
+			# reconnect attempts themselves being refused while the new
+			# container is still coming up.
+			lb_try_duration 20s
+			lb_try_interval 250ms
+		}
 	}
+
 	handle {
-		reverse_proxy web:3100
+		reverse_proxy web:3100 {
+			lb_try_duration 20s
+			lb_try_interval 250ms
+		}
 	}
 }

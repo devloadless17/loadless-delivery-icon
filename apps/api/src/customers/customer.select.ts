@@ -55,16 +55,22 @@ interface CustomerRow {
   addresses: AddressRow[];
 }
 
-/** Strips the owning vendor's identity down to a verdict the caller may see. */
+/**
+ * Who added an address is ADMIN-ONLY information.
+ *
+ * `ownership: 'OTHER'` can only ever mean "another vendor added this", so
+ * shipping it to a vendor confirms that a competitor deals with this customer —
+ * the one thing the shared-customer model exists to withhold. It bought them
+ * nothing either: a vendor cannot edit or remove a saved address, so there is
+ * no decision the verdict informs.
+ */
 export function projectAddress(actor: AuthUser, row: AddressRow) {
   const { createdByVendorId, createdByVendor, ...rest } = row;
+  if (actor.role !== 'ADMIN') return rest;
   return {
     ...rest,
     ownership: addressOwnership(actor, createdByVendorId),
-    // Only an admin is told WHO owns a row; a vendor gets MINE / OTHER / PLATFORM.
-    ...(actor.role === 'ADMIN'
-      ? { ownerVendorName: createdByVendor?.businessName ?? null }
-      : {}),
+    ownerVendorName: createdByVendor?.businessName ?? null,
   };
 }
 
@@ -73,14 +79,13 @@ export function projectAddress(actor: AuthUser, row: AddressRow) {
  * address, and no foreign vendor ids.
  *
  * `alias` is the caller's private name for this customer (null = follow the
- * global one). Addresses the caller owns sort first — they are the ones with
- * working Edit buttons, and burying them under read-only rows would read as
- * "I can't edit my own data".
+ * global one). Addresses keep their natural (oldest-first) order for everyone:
+ * sorting the caller's own to the top would itself say which rows are theirs
+ * and, by elimination, which are another vendor's.
  */
 export function projectCustomer(actor: AuthUser, row: CustomerRow, alias: string | null) {
   const { createdByVendorId, addresses, name, ...rest } = row;
   const addressViews = addresses.map((a) => projectAddress(actor, a));
-  addressViews.sort((a, b) => Number(b.ownership === 'MINE') - Number(a.ownership === 'MINE'));
   return {
     ...rest,
     ...resolveCustomerName(actor, { name, createdByVendorId }, alias),

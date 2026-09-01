@@ -1,9 +1,10 @@
 'use client';
 
-import { Plus, Search, Store } from 'lucide-react';
+import { Pencil, Plus, Search, Store, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { IconAction } from '@/components/ui/icon-action';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -110,17 +111,15 @@ export default function AdminVendorsPage() {
                   </TableCell>
                   <TableCell className="text-muted-foreground">{displayDate(vendor.createdAt)}</TableCell>
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="sm" onClick={() => openEdit(vendor)}>
-                      Edit
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                      onClick={() => setDeleting(vendor)}
-                    >
-                      Delete
-                    </Button>
+                    <div className="flex items-center justify-end gap-0.5">
+                      <IconAction label="Edit" icon={Pencil} onClick={() => openEdit(vendor)} />
+                      <IconAction
+                        label="Delete"
+                        icon={Trash2}
+                        tone="destructive"
+                        onClick={() => setDeleting(vendor)}
+                      />
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}

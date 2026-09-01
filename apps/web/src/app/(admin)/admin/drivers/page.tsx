@@ -1,10 +1,11 @@
 'use client';
 
-import { Bike, Plus, Search } from 'lucide-react';
+import { Bike, Pencil, Plus, Search, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { formatBps } from '@loadless/shared';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { IconAction } from '@/components/ui/icon-action';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -149,17 +150,15 @@ export default function AdminDriversPage() {
                   </TableCell>
                   <TableCell className="text-muted-foreground">{displayDate(driver.createdAt)}</TableCell>
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="sm" onClick={() => openEdit(driver)}>
-                      Edit
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                      onClick={() => setDeleting(driver)}
-                    >
-                      Delete
-                    </Button>
+                    <div className="flex items-center justify-end gap-0.5">
+                      <IconAction label="Edit" icon={Pencil} onClick={() => openEdit(driver)} />
+                      <IconAction
+                        label="Delete"
+                        icon={Trash2}
+                        tone="destructive"
+                        onClick={() => setDeleting(driver)}
+                      />
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
