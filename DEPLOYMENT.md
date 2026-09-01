@@ -37,7 +37,9 @@ App-specific:
 | Secret | What | How to generate |
 |---|---|---|
 | `JWT_SECRET` | access-token signing key (≥32 chars) | `openssl rand -base64 48` |
-| `POSTGRES_PASSWORD` | database password | `openssl rand -base64 48` |
+| `POSTGRES_PASSWORD` | database password | `openssl rand -hex 32` — **hex, not base64**: it is interpolated raw into `DATABASE_URL`, and a `/` would terminate the URL authority |
+| `SEED_ADMIN_EMAIL` | first admin's login email | e.g. `ali@loadless.ai` |
+| `SEED_ADMIN_PASSWORD` | first admin's password (min 8 chars) | `openssl rand -base64 24` |
 
 No R2 secrets: uploads are on the VPS disk (below). `API_DOMAIN` is intentionally unused —
 realtime (Socket.IO) requires the socket to share the frontend hostname, so everything
@@ -80,13 +82,23 @@ some clients intermittently while others load fine.
 3. **DNS**: `delivery.loadless.site` A-record → `187.77.167.2`. Done.
 4. Create the secrets above, then `git push origin main:production`.
 
-## First boot (after the first successful deploy)
+## First admin
 
-Create the first admin (email + password — admins/vendors log in with email, drivers
-with phone):
+The deploy creates it automatically from `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD`.
+`bootstrap-admin.js` is **idempotent** — if any ADMIN already exists it prints
+"nothing to do" — so it runs on every deploy and a rebuilt database is never left
+unreachable. It only ever creates the FIRST admin: changing the secret does not
+change an existing admin's password, so rotate that in the app.
+
+This is a dedicated bootstrap script reading credentials from env, not a seeded
+fixture — playbook §9: never seed dev/e2e fixtures in production. The credentials
+travel over ssh **stdin** and deliberately never enter the rendered `.env`, so the
+long-running api container does not hold them in its environment.
+
+To create it by hand instead:
 
 ```bash
-ssh deploy@187.77.167.2
+ssh loadless
 cd ~/loadless
 docker compose -f docker-compose.prod.yml run --rm -T \
   -e ADMIN_EMAIL='you@example.com' -e ADMIN_PASSWORD='<strong password>' \
@@ -95,10 +107,12 @@ docker compose -f docker-compose.prod.yml run --rm -T \
 
 `-T` and `</dev/null` are both deliberate: `compose run` attaches and drains stdin.
 
-Then in the **deployed browser**: log in → **hard refresh** → perform a write (create a
-vendor). Refresh is the load-bearing step — it forces the app to re-derive its
-credentials the way a cold visitor would, which is what catches cookie/host problems
-local testing cannot reproduce (playbook §9d).
+### Verify in the DEPLOYED browser (playbook §9d)
+
+Log in → **hard refresh** → perform a write (create a vendor). The refresh is the
+load-bearing step: it discards what the app held in memory and forces it to re-derive
+its credentials the way a cold visitor would. Run it after any change to the hosting
+shape — new domain, a CDN in front, cookie settings touched.
 
 ## Rollback
 
