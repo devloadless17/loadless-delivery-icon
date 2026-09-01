@@ -115,10 +115,13 @@ jobs:
           ACME_EMAIL: ${{ secrets.ACME_EMAIL }}
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          SEED_ADMIN_EMAIL: ${{ secrets.SEED_ADMIN_EMAIL }}
+          SEED_ADMIN_PASSWORD: ${{ secrets.SEED_ADMIN_PASSWORD }}
         run: |
           missing=""
           for name in DOCKER_USERNAME DOCKER_SECRET VPS_HOST VPS_USER VPS_SSH_KEY_B64 \
-                      FRONTEND_DOMAIN ACME_EMAIL JWT_SECRET POSTGRES_PASSWORD; do
+                      FRONTEND_DOMAIN ACME_EMAIL JWT_SECRET POSTGRES_PASSWORD \
+                      SEED_ADMIN_EMAIL SEED_ADMIN_PASSWORD; do
             [ -z "$(eval echo \"\$$name\")" ] && missing="$missing $name"
           done
           if [ -n "$missing" ]; then echo "Missing secrets:$missing" >&2; exit 1; fi
@@ -258,11 +261,16 @@ jobs:
           VPS_PORT: ${{ secrets.VPS_PORT || '22' }}
           DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
           DOCKER_SECRET: ${{ secrets.DOCKER_SECRET }}
+          SEED_ADMIN_EMAIL: ${{ secrets.SEED_ADMIN_EMAIL }}
+          SEED_ADMIN_PASSWORD: ${{ secrets.SEED_ADMIN_PASSWORD }}
         run: |
           set -euo pipefail
-          # The remote script is captured into a variable so DOCKER_SECRET can be
+          # The remote script is captured into a variable so the secrets can be
           # prepended over STDIN instead of riding the ssh argv — argv is
-          # world-readable via `ps` on the VPS for the whole deploy.
+          # world-readable via `ps` on the VPS for the whole deploy. The admin
+          # credentials go the same way, and deliberately NOT into the rendered
+          # .env: they are needed for one one-off container, so there is no
+          # reason for the long-running api process to hold them in its env.
           REMOTE_SCRIPT="$(cat <<'REMOTE'
           set -euo pipefail
           cd ~/loadless
@@ -299,6 +307,18 @@ jobs:
           # the image with no network fetch.
           echo "==> Applying migrations"
           docker compose -f docker-compose.prod.yml run --rm -T api npx prisma migrate deploy </dev/null
+
+          # First-admin bootstrap. NOT a seeded fixture (playbook §9: never seed
+          # dev/e2e fixtures in production) — it is a dedicated script that reads
+          # credentials from env and is idempotent: if any ADMIN already exists it
+          # prints "nothing to do" and returns, so running it on every deploy is
+          # safe and means a rebuilt database is never left unreachable.
+          # Rotating the password is a change in the app, not here: this only ever
+          # creates the FIRST admin.
+          echo "==> Ensuring the first admin exists"
+          docker compose -f docker-compose.prod.yml run --rm -T \
+            -e ADMIN_EMAIL="$SEED_ADMIN_EMAIL" -e ADMIN_PASSWORD="$SEED_ADMIN_PASSWORD" \
+            api node dist/scripts/bootstrap-admin.js </dev/null
 
           echo "==> Starting the stack"
           docker compose -f docker-compose.prod.yml up -d --remove-orphans
@@ -342,6 +362,9 @@ jobs:
           exit 1
           REMOTE
           )"
-          { printf 'DOCKER_SECRET=%q\n' "$DOCKER_SECRET"; printf '%s\n' "$REMOTE_SCRIPT"; } | \
+          { printf 'DOCKER_SECRET=%q\n' "$DOCKER_SECRET"
+            printf 'SEED_ADMIN_EMAIL=%q\n' "$SEED_ADMIN_EMAIL"
+            printf 'SEED_ADMIN_PASSWORD=%q\n' "$SEED_ADMIN_PASSWORD"
+            printf '%s\n' "$REMOTE_SCRIPT"; } | \
             ssh -i ~/.ssh/deploy_key -p "$VPS_PORT" -o StrictHostKeyChecking=accept-new \
               "$VPS_USER@$VPS_HOST" "DOCKER_USERNAME='$DOCKER_USERNAME' bash -s"
