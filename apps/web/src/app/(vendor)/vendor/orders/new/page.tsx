@@ -41,7 +41,6 @@ function NewOrderForm() {
   const [charge, setCharge] = useState('');
   const [currency, setCurrency] = useState<Currency>('LBP');
   const [instructions, setInstructions] = useState('');
-  const [notes, setNotes] = useState('');
   const autoSelected = useRef(false);
   /** ?addressId= — one saved address to preselect, applied once, then dropped. */
   const preselectAddressId = useRef<string | null>(null);
@@ -124,7 +123,6 @@ function NewOrderForm() {
       ...(deliver.mapsUrl.trim() ? { deliveryMapsUrl: deliver.mapsUrl.trim() } : {}),
       currency,
       deliveryCharge: charge.trim(),
-      ...(notes.trim() ? { notes: notes.trim() } : {}),
       ...(instructions.trim() ? { deliveryInstructions: instructions.trim() } : {}),
     };
     const parsed = createOrderSchema.safeParse(input);
@@ -197,7 +195,7 @@ function NewOrderForm() {
       {/* 2 — where it goes */}
       <DeliverToStep customer={customer} state={deliver} onChange={setDeliver} />
 
-      {/* 3 — charge & notes */}
+      {/* 3 — what it costs */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-base">
@@ -243,15 +241,6 @@ function NewOrderForm() {
               value={instructions}
               onChange={(e) => setInstructions(e.target.value)}
               placeholder="e.g. Call when downstairs, 3rd floor"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="no-notes">Internal notes (optional)</Label>
-            <Input
-              id="no-notes"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Only your team and the platform see this"
             />
           </div>
         </CardContent>

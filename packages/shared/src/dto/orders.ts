@@ -37,7 +37,6 @@ export const createOrderSchema = z.object({
     .trim()
     .min(1, 'Delivery charge is required'),
 
-  notes: z.string().trim().max(1000).optional(),
   deliveryInstructions: z.string().trim().max(1000).optional(),
 })
   .superRefine((order, ctx) => {

@@ -26,7 +26,6 @@ export interface VendorOrder {
   deliveryLng: number | null;
   deliveryCharge: string;
   currency: Currency;
-  notes: string | null;
   deliveryInstructions: string | null;
   cancellationReason: string | null;
   createdAt: string;

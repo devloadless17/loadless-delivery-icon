@@ -265,7 +265,6 @@ model Order {
   deliveryLat         Float?  @map("delivery_lat")
   deliveryLng         Float?  @map("delivery_lng")
 
-  notes                String?
   deliveryInstructions String?    @map("delivery_instructions")
   cancellationReason   String?    @map("cancellation_reason")
   cancelledByType      ActorType? @map("cancelled_by_type")

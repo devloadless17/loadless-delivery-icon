@@ -176,7 +176,6 @@ export default function AdminOrderDetailPage() {
           {order.deliveryInstructions && (
             <p className="text-muted-foreground">“{order.deliveryInstructions}”</p>
           )}
-          {order.notes && <p className="text-muted-foreground">Vendor note: {order.notes}</p>}
           {order.deliveryMapsUrl && <MapsLinkButton url={order.deliveryMapsUrl} size="sm" />}
         </CardContent>
       </Card>

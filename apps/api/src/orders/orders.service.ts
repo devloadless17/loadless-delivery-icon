@@ -26,7 +26,6 @@ const VENDOR_ORDER_SELECT = {
   deliveryLng: true,
   deliveryCharge: true,
   currency: true,
-  notes: true,
   deliveryInstructions: true,
   cancellationReason: true,
   createdAt: true,
@@ -180,7 +179,6 @@ export class OrdersService {
           deliveryLng: input.deliveryLng,
           deliveryCharge: chargeMinor,
           currency: input.currency,
-          notes: input.notes,
           deliveryInstructions: input.deliveryInstructions,
         },
         select: {
