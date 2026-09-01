@@ -269,7 +269,22 @@ export interface SettlementView {
   orders?: SettlementOrderView[];
 }
 
-/** What a settlement WOULD look like — computed, never stored. */
+/**
+ * What a settlement WOULD look like — computed, never stored.
+ *
+ * CAREFUL, for anything consuming this: `totalDue` here is NOT the same
+ * quantity as `totalDue` on a recorded SettlementLineView, despite the shared
+ * name and shape.
+ *
+ *   preview line   totalDue = commissionDue + broughtForward
+ *   recorded line  totalDue = commissionDue + broughtForward + adjustmentsTotal
+ *
+ * That is why `adjustmentsTotal` is Omitted rather than sent as zero: a preview
+ * is taken BEFORE anyone adds a fine or a credit, so on a preview the figure is
+ * definitionally zero and the three numbers shown do add up exactly. Rendering
+ * a preview total as though it were final will understate or overstate the
+ * handover the moment an adjustment is involved.
+ */
 export interface SettlementPreviewView {
   driverId: string;
   driverName: string;
