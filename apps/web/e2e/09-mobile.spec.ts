@@ -103,6 +103,16 @@ test.describe('on a phone', () => {
     // The money must never wrap into the caption on a narrow screen.
     await expect(page.getByText(orderNumber)).toBeVisible();
 
+    // He has just delivered, so he owes commission and the itemised breakdown
+    // is on screen — collapsed. Measuring the page while its widest content is
+    // hidden proves nothing, so open it and measure again: each row carries an
+    // order number, a date, an amount AND "charge x rate" on one line, which is
+    // the densest thing in the whole driver app.
+    await expect(page.getByText('To hand over')).toBeVisible();
+    await page.getByText('What is this for?').first().click();
+    await expect(page.getByText('Commission from these').first()).toBeVisible();
+    await expectNoSidewaysScroll(page, 'driver earnings with the breakdown open');
+
     await vendorCtx.close();
   });
 
