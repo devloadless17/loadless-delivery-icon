@@ -171,6 +171,13 @@ export interface CustomerAddressView {
    * "saved".
    */
   created?: boolean;
+  /**
+   * Add responses only, and only when `created` is false: WHICH rule matched.
+   * 'link' means the Google Maps pin collided — the address text may be
+   * completely different, so a message about the address would send the vendor
+   * to edit the wrong field.
+   */
+  matchedOn?: 'link' | 'text';
 }
 
 /** Money never merges across currencies — one entry per currency. */

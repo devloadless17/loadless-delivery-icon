@@ -1212,6 +1212,44 @@ describe('customers (integration)', () => {
       ).toBe(1);
     });
 
+    it('a shared maps PIN blocks the save, and says it was the pin — not the address', async () => {
+      // The pin is the strongest "same place" signal, so it wins over the text.
+      // Reporting that as "the address already exists" sent vendors off editing
+      // a field that was already different.
+      const customer = await makeCustomer('+9613100136', 'Same Pin', vendorAId);
+      await prisma.customerAddress.create({
+        data: {
+          customerId: customer.id,
+          label: 'HOME',
+          addressText: 'Their description, floor 1',
+          mapsUrl: 'https://maps.app.goo.gl/same-pin',
+          createdByVendorId: vendorBId,
+        },
+      });
+
+      const res = await request(server)
+        .post(`/api/v1/customers/${customer.id}/addresses`)
+        .set(auth(vendorAToken))
+        .send({
+          label: 'HOME',
+          addressText: 'My completely different description, floor 2',
+          mapsUrl: 'https://maps.app.goo.gl/same-pin',
+        })
+        .expect(201);
+
+      expect(res.body.data.created).toBe(false);
+      expect(res.body.data.matchedOn).toBe('link');
+
+      // …and without the pin the same correction saves fine.
+      const retry = await request(server)
+        .post(`/api/v1/customers/${customer.id}/addresses`)
+        .set(auth(vendorAToken))
+        .send({ label: 'HOME', addressText: 'My completely different description, floor 2' })
+        .expect(201);
+      expect(retry.body.data.created).toBe(true);
+      expect(retry.body.data.ownership).toBe('MINE');
+    });
+
     it('"copy & correct" leaves theirs alone and makes me the owner of mine', async () => {
       const { customer, address } = await seedOwnedAddress('+9613100133', 'Copy Me', vendorBId);
 

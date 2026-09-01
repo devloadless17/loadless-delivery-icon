@@ -234,7 +234,7 @@ export class CustomersService {
       label?: AddressLabel;
     },
     actor: AuthUser,
-  ): Promise<{ id: string; created: boolean }> {
+  ): Promise<{ id: string; created: boolean; matchedOn?: 'link' | 'text' }> {
     const existing = await tx.customerAddress.findMany({
       where: { customerId, isArchived: false }, // index [customerId, isArchived]
       select: { id: true, addressText: true, mapsUrl: true },
@@ -242,10 +242,17 @@ export class CustomersService {
 
     const key = normalizeAddressKey(input.addressText);
     const link = input.mapsUrl?.trim() || null;
-    const match =
-      (link ? existing.find((a) => a.mapsUrl?.trim() === link) : undefined) ??
-      // A link-only address has no text key, so it can only match on the link.
-      (key ? existing.find((a) => normalizeAddressKey(a.addressText) === key) : undefined);
+    // The link wins when both could match: a shared pin is the same PLACE
+    // however the two descriptions differ. Which one matched is reported back
+    // — telling someone "that address already exists" when it was their pin
+    // that collided sends them off editing the wrong field.
+    const linkMatch = link ? existing.find((a) => a.mapsUrl?.trim() === link) : undefined;
+    // A link-only address has no text key, so it can only match on the link.
+    const textMatch = key
+      ? existing.find((a) => normalizeAddressKey(a.addressText) === key)
+      : undefined;
+    const match = linkMatch ?? textMatch;
+    const matchedOn = linkMatch ? ('link' as const) : ('text' as const);
 
     if (match) {
       if (link && !match.mapsUrl) {
@@ -261,7 +268,7 @@ export class CustomersService {
           },
         });
       }
-      return { id: match.id, created: false };
+      return { id: match.id, created: false, matchedOn };
     }
 
     // A customer's first saved address is almost always home; the rest default
@@ -332,14 +339,14 @@ export class CustomersService {
    */
   async addAddress(customerId: string, input: CustomerAddressInput, actor: AuthUser) {
     await this.get(customerId); // 404 guard
-    const { id, created } = await this.prisma.$transaction((tx) =>
+    const { id, created, matchedOn } = await this.prisma.$transaction((tx) =>
       this.saveAddressInTx(tx, customerId, input, actor),
     );
     const row = await this.prisma.customerAddress.findUniqueOrThrow({
       where: { id },
       select: ADDRESS_SELECT,
     });
-    return { ...projectAddress(actor, row), created };
+    return { ...projectAddress(actor, row), created, ...(matchedOn ? { matchedOn } : {}) };
   }
 
   /**

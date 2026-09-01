@@ -50,7 +50,11 @@ export function AddressManager({
     setDraft({
       label: address.label,
       addressText: address.addressText ?? '',
-      mapsUrl: address.mapsUrl ?? '',
+      // The pin is deliberately NOT copied. A shared maps link is the strongest
+      // "same place" signal there is, so carrying it over made every correction
+      // collide with the row it was copied from — the affordance failed by
+      // default. The text is what the vendor came here to change.
+      mapsUrl: '',
     });
     setEditing({ kind: 'new', copiedFrom: address.addressText ?? '' });
   }
@@ -75,10 +79,16 @@ export function AddressManager({
       // looking at the list, so say what actually happened and keep the form
       // open — they still have the correction to make.
       if (saved.created === false) {
+        // Name the field that actually collided. A pin can match while the
+        // address text is completely different, and telling someone to "change
+        // the address" then sends them to edit the wrong box — which is
+        // exactly what happened the first time this message existed.
         toast.error(
-          saved.ownership === 'MINE'
-            ? 'You already have this address saved.'
-            : 'This exact address already exists. Change what’s different to save your own.',
+          saved.matchedOn === 'link'
+            ? 'That Google Maps link is already saved for this customer. Clear the link to save your own description of the place.'
+            : saved.ownership === 'MINE'
+              ? 'You already have this address saved.'
+              : 'That exact address text is already saved. Change it to save your own version.',
         );
         return;
       }
@@ -143,8 +153,9 @@ export function AddressManager({
         >
           {editing.copiedFrom !== undefined && (
             <p className="text-xs text-muted-foreground">
-              Copied from an address you don&apos;t own. Correct what&apos;s wrong — it saves as a
-              separate address that you own. Everyone can still see both.
+              Copied from an address you don&apos;t own. Correct what&apos;s wrong and it saves as a
+              separate address that you own — everyone can still see both. The map pin stays with
+              the original; paste a different one if you have it.
             </p>
           )}
           <AddressFields value={draft} onChange={setDraft} idPrefix="new-address" autoFocus />
