@@ -8,24 +8,87 @@ export function displayMoney(amountMinor: string | bigint, currency: Currency): 
   return formatMoney(amountMinor, currency);
 }
 
-const dateFormat = new Intl.DateTimeFormat('en-GB', {
+/**
+ * Every displayed time is Beirut time, in 12-hour form.
+ *
+ * The timezone is PINNED rather than left to the device. This is a Lebanese
+ * operation: a vendor, the driver carrying their order and the admin watching
+ * both must read the same clock, and without an explicit zone each renders in
+ * whatever its own device is set to. A driver whose phone is on the wrong
+ * timezone — or roaming — would see a pickup time that quietly disagrees with
+ * the vendor's by hours, and nothing on screen would say so. Server-rendered
+ * pages would use the container's UTC on top of that.
+ *
+ * 12-hour because that is how the times are said out loud here; en-GB defaults
+ * to 24-hour, which is why hour12 is explicit.
+ */
+const BEIRUT = 'Asia/Beirut';
+
+const dateTimeFormat = new Intl.DateTimeFormat('en-GB', {
   day: 'numeric',
   month: 'short',
-  hour: '2-digit',
+  hour: 'numeric',
   minute: '2-digit',
+  hour12: true,
+  timeZone: BEIRUT,
 });
 const dateFormatWithYear = new Intl.DateTimeFormat('en-GB', {
   day: 'numeric',
   month: 'short',
   year: 'numeric',
+  timeZone: BEIRUT,
+});
+const timeOnlyFormat = new Intl.DateTimeFormat('en-GB', {
+  hour: 'numeric',
+  minute: '2-digit',
+  hour12: true,
+  timeZone: BEIRUT,
+});
+const fullFormat = new Intl.DateTimeFormat('en-GB', {
+  day: 'numeric',
+  month: 'short',
+  year: 'numeric',
+  hour: 'numeric',
+  minute: '2-digit',
+  hour12: true,
+  timeZone: BEIRUT,
 });
 
+/** "1 Sep, 4:05 pm" — Beirut time. */
 export function displayDateTime(iso: string): string {
-  return dateFormat.format(new Date(iso));
+  return dateTimeFormat.format(new Date(iso));
 }
 
+/** "1 Sep 2026" — Beirut time. */
 export function displayDate(iso: string): string {
   return dateFormatWithYear.format(new Date(iso));
+}
+
+/** "4:05 pm" — for timeline rows where the day is already obvious. */
+export function displayTime(iso: string): string {
+  return timeOnlyFormat.format(new Date(iso));
+}
+
+/** "1 Sep 2026, 4:05 pm" — where the exact moment matters. */
+export function displayDateTimeFull(iso: string): string {
+  return fullFormat.format(new Date(iso));
+}
+
+/**
+ * A label for a plain calendar day ("2026-09-01" -> "1 Sept").
+ *
+ * These come off analytics aggregates as dates, not moments. Parsing one as
+ * midnight and then converting the zone can move it to the previous day, so
+ * this anchors at noon: no offset on earth is large enough to push midday
+ * across a date boundary.
+ */
+const dayLabelFormat = new Intl.DateTimeFormat('en-GB', {
+  day: 'numeric',
+  month: 'short',
+  timeZone: BEIRUT,
+});
+export function displayDayLabel(day: string): string {
+  return dayLabelFormat.format(new Date(`${day}T12:00:00Z`));
 }
 
 export function fileUrl(key: string): string {

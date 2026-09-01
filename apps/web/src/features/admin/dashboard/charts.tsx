@@ -12,6 +12,7 @@ import {
 } from 'recharts';
 import type { OrderStatus } from '@loadless/shared';
 import { STATUS_META } from '@/features/orders/order-status';
+import { displayDayLabel } from '@/lib/format';
 import type { AdminDashboard } from './api';
 
 /**
@@ -31,10 +32,7 @@ const tooltipStyle = {
 export function DailyOrdersChart({ data }: { data: AdminDashboard['dailySeries'] }) {
   const series = data.map((d) => ({
     ...d,
-    label: new Date(`${d.day}T00:00:00`).toLocaleDateString('en-GB', {
-      day: 'numeric',
-      month: 'short',
-    }),
+    label: displayDayLabel(d.day),
   }));
   return (
     <ResponsiveContainer width="100%" height={260}>

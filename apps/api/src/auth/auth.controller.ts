@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Post, Req, Res } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Post, Req, Res, UseGuards } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { changePasswordSchema, loginSchema, type ChangePasswordInput, type LoginInput } from '@loadless/shared';
 import type { Request, Response } from 'express';
@@ -8,6 +8,7 @@ import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import { AppException } from '../common/app.exception';
 import { REFRESH_COOKIE } from './auth.constants';
 import { AuthService } from './auth.service';
+import { LoginThrottlerGuard } from './login-throttler.guard';
 import { clearAuthCookies, setAuthCookies } from './cookies';
 import { CurrentUser, Public } from './decorators';
 import type { AuthUser } from './auth.types';
@@ -23,6 +24,9 @@ export class AuthController {
   @Public()
   @Post('login')
   @HttpCode(200)
+  // Per ACCOUNT-on-an-address, not per address — see LoginThrottlerGuard for
+  // why the default per-IP tracker locks out innocent users behind CGNAT.
+  @UseGuards(LoginThrottlerGuard)
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
   async login(
     @Body(new ZodValidationPipe(loginSchema)) body: LoginInput,
