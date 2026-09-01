@@ -901,6 +901,37 @@ describe('driver settlements (integration)', () => {
     expect(finalOwed.body.data.clear).toBe(true);
   });
 
+  it('keeps a driver in credit on the worklist, as a negative rather than a debt', async () => {
+    // The admin still has to see him — an open balance in either direction has
+    // to be settled eventually — but the sign is what tells the UI to render
+    // "in credit" instead of listing him as owing money he does not owe.
+    const { driver } = await makeDriver('Credit On Worklist');
+    await seedOrder({ driverId: driver.id, charge: 100_000n, currency: 'LBP' });
+    const preview = await previewOf(driver.id).expect(200);
+    await request(server)
+      .post(`/api/v1/admin/drivers/${driver.id}/settlements`)
+      .set(auth(adminToken))
+      .send(settleBody(preview.body.data.lines, { LBP: '50000' })) // owes 30,000
+      .expect(201);
+
+    const res = await request(server)
+      .get('/api/v1/admin/settlements/outstanding')
+      .set(auth(adminToken))
+      .expect(200);
+
+    const row = res.body.data.find((r: { driverId: string }) => r.driverId === driver.id);
+    expect(row).toBeDefined();
+    expect(row.lines).toEqual([
+      {
+        currency: 'LBP',
+        unsettledCommission: '0',
+        unsettledOrderCount: 0,
+        broughtForward: '-20000',
+        totalDue: '-20000',
+      },
+    ]);
+  });
+
   // ------------------------------------------------------- deleting a driver
 
   it('refuses to delete a driver who has settlements but no orders', async () => {
