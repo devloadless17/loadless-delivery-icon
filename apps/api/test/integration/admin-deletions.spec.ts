@@ -6,6 +6,7 @@ import { AppModule } from '../../src/app.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { AuthService } from '../../src/auth/auth.service';
 import { TokenService } from '../../src/auth/token.service';
+import { seedOrder } from './order-fixtures';
 
 /**
  * Admin deletions of vendors, drivers and customers. The rule under test is an
@@ -94,27 +95,9 @@ describe('admin deletions (integration)', () => {
     return { vendor, user };
   }
 
-  async function seedOrder(vendorId: string, customerId: string) {
-    const seq = await prisma.$queryRaw<[{ nextval: bigint }]>`SELECT nextval('order_number_seq')`;
-    return prisma.order.create({
-      data: {
-        orderNumber: `ORD-DEL-${seq[0].nextval}`,
-        vendorId,
-        customerId,
-        deliveryAddressText: 'Somewhere in Beirut',
-        deliveryCharge: 100000n,
-        currency: 'LBP',
-        status: 'DELIVERED',
-        driverId,
-        commissionBps: 3000,
-        platformCommissionAmount: 30000n,
-        driverEarnings: 70000n,
-        assignedAt: new Date(),
-        pickedUpAt: new Date(),
-        deliveredAt: new Date(),
-      },
-    });
-  }
+  /** A delivered order carried by this file's shared driver. */
+  const seedDeliveredOrder = (vendorId: string, customerId: string) =>
+    seedOrder(prisma, { vendorId, customerId, driverId, status: 'DELIVERED' });
 
   // ------------------------------------------------------------- authorization
 
@@ -195,7 +178,7 @@ describe('admin deletions (integration)', () => {
     const customer = await prisma.customer.create({
       data: { normalizedPhone: '+96170111222', name: 'A Customer' },
     });
-    await seedOrder(vendor.id, customer.id);
+    await seedDeliveredOrder(vendor.id, customer.id);
 
     const res = await request(server)
       .delete(`/api/v1/admin/vendors/${vendor.id}`)
@@ -217,7 +200,7 @@ describe('admin deletions (integration)', () => {
     const customer = await prisma.customer.create({
       data: { normalizedPhone: '+96170111333', name: 'Another Customer' },
     });
-    await seedOrder(vendor.id, customer.id);
+    await seedDeliveredOrder(vendor.id, customer.id);
 
     await request(server)
       .patch(`/api/v1/admin/vendors/${vendor.id}`)
@@ -276,34 +259,13 @@ describe('admin deletions (integration)', () => {
       return { driver, user };
     }
 
-    /** An order for a specific driver, in a specific status. */
-    async function seedOrderFor(
+    /** Thin wrapper over the shared fixture, keeping this file's call sites short. */
+    const seedOrderFor = (
       vendorId: string,
       customerId: string,
       forDriverId: string,
       status: 'DELIVERED' | 'CANCELLED',
-    ) {
-      const seq = await prisma.$queryRaw<[{ nextval: bigint }]>`SELECT nextval('order_number_seq')`;
-      return prisma.order.create({
-        data: {
-          orderNumber: `ORD-DRV-${seq[0].nextval}`,
-          vendorId,
-          customerId,
-          deliveryAddressText: 'Somewhere',
-          deliveryCharge: 100000n,
-          currency: 'LBP',
-          status,
-          driverId: forDriverId,
-          commissionBps: 3000,
-          platformCommissionAmount: 30000n,
-          driverEarnings: 70000n,
-          assignedAt: new Date(),
-          ...(status === 'DELIVERED'
-            ? { pickedUpAt: new Date(), deliveredAt: new Date() }
-            : { cancelledAt: new Date() }),
-        },
-      });
-    }
+    ) => seedOrder(prisma, { vendorId, customerId, driverId: forDriverId, status });
 
     it('deletes a driver who never carried anything, with their login', async () => {
       const { driver, user } = await makeDriver('Never Rode', '+96171000001');
@@ -415,7 +377,7 @@ describe('admin deletions (integration)', () => {
         data: { normalizedPhone: '+96170333222', name: 'Real Customer' },
       });
       const { vendor } = await makeVendor('Cust Order Shop', 'custorder@vend.local');
-      await seedOrder(vendor.id, customer.id);
+      await seedDeliveredOrder(vendor.id, customer.id);
 
       const res = await request(server)
         .delete(`/api/v1/admin/customers/${customer.id}`)
