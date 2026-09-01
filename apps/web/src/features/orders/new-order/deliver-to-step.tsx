@@ -2,7 +2,6 @@
 
 import { displayAddress, isSameAddress, type AddressLabel } from '@loadless/shared';
 import { History, MapPin, TriangleAlert } from 'lucide-react';
-import { toast } from 'sonner';
 import { MapsLinkField } from '@/components/maps-link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,13 +9,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
-import { ApiError } from '@/lib/api-client';
 import {
   LABEL_ICON,
   LABEL_TEXT,
 } from '@/features/customers/addresses/label-meta';
 import { AddressPicker } from '@/features/customers/addresses/address-picker';
-import { useUpdateAddress, type CustomerAddress, type CustomerProfile } from '@/features/customers/api';
+import { type CustomerAddress, type CustomerProfile } from '@/features/customers/api';
 
 export interface DeliverState {
   mode: 'saved' | 'oneoff';
@@ -51,7 +49,6 @@ export function DeliverToStep({
   state: DeliverState;
   onChange: (next: DeliverState) => void;
 }) {
-  const updateAddress = useUpdateAddress();
   const selected = customer?.addresses.find((a) => a.id === state.selectedAddressId) ?? null;
   const usualAddressText = customer?.stats.topAddress?.addressText ?? null;
 
@@ -74,20 +71,6 @@ export function DeliverToStep({
       // Keep whatever is typed so "edit for this order" is lossless.
       saveToProfile: false,
     });
-  }
-
-  async function saveLinkToProfile() {
-    if (!customer || !selected) return;
-    try {
-      await updateAddress.mutateAsync({
-        customerId: customer.id,
-        addressId: selected.id,
-        input: { mapsUrl: state.mapsUrl.trim() },
-      });
-      toast.success('Maps link saved to their profile');
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Could not save the link.');
-    }
   }
 
   const hasSaved = (customer?.addresses.length ?? 0) > 0;
@@ -179,6 +162,9 @@ export function DeliverToStep({
               <p className="text-xs text-muted-foreground">Maps link ready for the driver.</p>
             ) : (
               // The mid-call repair: the customer is right there, so ask now.
+              // The link goes onto THIS ORDER — which is what the driver taps.
+              // It no longer offers to write it back to the saved address:
+              // that row is the platform's, and a vendor does not edit it.
               <div className="space-y-2 rounded-md border border-warning/30 bg-warning/5 p-3">
                 <p className="flex items-center gap-1.5 text-xs font-medium text-warning">
                   <TriangleAlert className="size-3.5" aria-hidden />
@@ -190,17 +176,6 @@ export function DeliverToStep({
                   value={state.mapsUrl}
                   onChange={(mapsUrl) => onChange({ ...state, mapsUrl })}
                 />
-                {state.mapsUrl.trim() && (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    loading={updateAddress.isPending}
-                    onClick={() => void saveLinkToProfile()}
-                  >
-                    Also save this link to {LABEL_TEXT[selected.label]}
-                  </Button>
-                )}
               </div>
             )}
           </div>

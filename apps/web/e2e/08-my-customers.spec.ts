@@ -211,9 +211,11 @@ test.describe('my customers', () => {
     await vendorA.getByPlaceholder(CUSTOMER_SEARCH).fill(customerPhone);
     await expect(vendorA.getByRole('heading', { name: /Ahmad Original/ })).toBeVisible();
     await expect(vendorA.getByText('Falafel regular')).toHaveCount(0);
-    // A added them, so A holds the pen on the shared name.
+    // A added them and STILL only writes their own label — the shared name is
+    // the platform's, whoever entered it.
     await vendorA.getByRole('button', { name: 'Edit name' }).click();
-    await expect(vendorA.getByText('Everyone on the platform sees this name.')).toBeVisible();
+    await expect(vendorA.getByText(/Only you will see this name/)).toBeVisible();
+    await expect(vendorA.getByText('Everyone on the platform sees this name.')).toHaveCount(0);
     await vendorA.getByRole('button', { name: 'Cancel' }).click();
 
     // B can hand the pen back and follow the shared record again.
@@ -224,7 +226,7 @@ test.describe('my customers', () => {
     await ctxB.close();
   });
 
-  test('an address I did not add is read-only — I save my own version', async ({ browser }) => {
+  test('saved addresses are read-only for every vendor; the order is not', async ({ browser }) => {
     const phone = uniquePhone();
 
     const ctxA = await browser.newContext();
@@ -237,34 +239,44 @@ test.describe('my customers', () => {
     await vendorA.getByRole('button', { name: 'Create customer' }).click();
     await expect(vendorA.getByText('Customer created')).toBeVisible();
 
+    // Even the vendor who added it gets no pen on it.
+    await expect(vendorA.getByRole('button', { name: 'Edit address' })).toHaveCount(0);
+    await expect(vendorA.getByRole('button', { name: 'Remove address' })).toHaveCount(0);
+
     const ctxB = await browser.newContext();
     const vendorB = await ctxB.newPage();
     await loginAs(vendorB, VENDOR2, '/vendor');
     await vendorB.goto('/vendor/customers');
     await vendorB.getByPlaceholder(CUSTOMER_SEARCH).fill(phone);
 
-    // B can READ it — sharing is the point — but not rewrite it.
+    // B reads it — sharing is the point — and cannot rewrite it either.
     await expect(vendorB.getByText('Gemmayze, Gouraud st, Bldg 5')).toBeVisible();
-    await expect(vendorB.getByText('Added by another vendor')).toBeVisible();
     await expect(vendorB.getByRole('button', { name: 'Edit address' })).toHaveCount(0);
     await expect(vendorB.getByRole('button', { name: 'Remove address' })).toHaveCount(0);
+    await expect(vendorB.getByRole('button', { name: 'Copy & correct' })).toHaveCount(0);
 
-    // The way forward: copy it, correct it, own the copy.
-    await vendorB.getByRole('button', { name: 'Copy & correct' }).click();
-    const addForm = vendorB.getByRole('form', { name: 'New address' });
-    await expect(addForm).toBeVisible();
+    // B may still ADD a different place…
+    await vendorB.getByRole('button', { name: 'Add address' }).click();
     await vendorB.locator('#new-address').fill('Gemmayze, Gouraud st, Bldg 5, 2nd floor');
     await vendorB.getByRole('button', { name: 'Save address' }).click();
     await expect(vendorB.getByText('Address saved')).toBeVisible();
+    await expect(vendorB.getByRole('button', { name: 'Edit address' })).toHaveCount(0);
 
-    // Now B owns their copy and can edit it; A's row is still exactly as A left it.
-    await expect(vendorB.getByRole('button', { name: 'Edit address' })).toHaveCount(1);
-
-    await vendorA.goto('/vendor/customers');
+    // …and A's row is exactly as A left it.
+    await vendorA.reload();
     await vendorA.getByPlaceholder(CUSTOMER_SEARCH).fill(phone);
     await expect(vendorA.getByText('Gemmayze, Gouraud st, Bldg 5', { exact: true })).toBeVisible();
-    await expect(vendorA.getByRole('button', { name: 'Edit address' })).toHaveCount(1);
-    await expect(vendorA.getByText('Added by another vendor')).toBeVisible();
+
+    // THE ESCAPE HATCH: the order's own address is the vendor's, freely.
+    await vendorB.goto('/vendor/orders/new');
+    await vendorB.getByPlaceholder(ORDER_PHONE).fill(phone);
+    await expect(vendorB.getByText('Address Owner Test')).toBeVisible();
+    const elsewhere = vendorB.getByRole('button', { name: 'Edit for this order' });
+    if (await elsewhere.count()) await elsewhere.click();
+    await vendorB.getByLabel('Address for THIS order').fill('Anything I want for today');
+    await expect(vendorB.getByLabel('Address for THIS order')).toHaveValue(
+      'Anything I want for today',
+    );
 
     await ctxA.close();
     await ctxB.close();

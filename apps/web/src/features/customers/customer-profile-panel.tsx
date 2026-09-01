@@ -128,8 +128,9 @@ export function CustomerProfilePanel({
           <RecentOrders customer={profile} />
         )}
         <p className="text-xs text-muted-foreground">
-          {displayPhone(profile.normalizedPhone)} is shared across the platform. You can edit what
-          you added; everything else stays as its owner set it.
+          {isPlatform
+            ? `${displayPhone(profile.normalizedPhone)} is shared across the platform — these edits reach every vendor.`
+            : `${displayPhone(profile.normalizedPhone)} is managed by the platform. You can add an address, and set each order's address to whatever you need.`}
         </p>
       </div>
     </Card>

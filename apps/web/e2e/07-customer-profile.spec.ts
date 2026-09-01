@@ -125,7 +125,7 @@ test.describe('customer profile', () => {
     await expect(page.getByLabel('Amount')).toHaveValue('');
   });
 
-  test('an address can be corrected in place, mid-call', async ({ page }) => {
+  test('a vendor cannot correct a saved address — the platform can', async ({ page, browser }) => {
     await loginAs(page, VENDOR, '/vendor');
     const phone = uniquePhone();
 
@@ -135,13 +135,32 @@ test.describe('customer profile', () => {
     await page.getByLabel('Address (optional)').fill('Hamra steet, Bldg 3');
     await page.getByRole('button', { name: 'Create customer' }).click();
     await expect(page.getByText('Customer created')).toBeVisible();
+    await expect(page.getByText('Hamra steet, Bldg 3')).toBeVisible();
 
-    // Editing happens inline — no modal to sit through while on a call.
-    await page.getByRole('button', { name: 'Edit address' }).click();
-    const field = page.locator('input[value="Hamra steet, Bldg 3"]');
-    await field.fill('Hamra street, Bldg 3');
-    await page.getByRole('button', { name: 'Save', exact: true }).click();
-    await expect(page.getByText('Address updated')).toBeVisible();
+    // The vendor added it, and still gets no pen on it.
+    await expect(page.getByRole('button', { name: 'Edit address' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Remove address' })).toHaveCount(0);
+
+    // Admin corrects it for everyone, inline in the manage dialog.
+    const adminCtx = await browser.newContext();
+    const admin = await adminCtx.newPage();
+    await loginAs(admin, ADMIN, '/admin');
+    await admin.goto('/admin/customers');
+    await admin.getByPlaceholder('Search by name or phone').fill(phone);
+    await admin
+      .getByRole('row')
+      .filter({ hasText: 'Typo Customer' })
+      .getByRole('button', { name: 'Manage' })
+      .click();
+    await admin.getByRole('button', { name: 'Edit address' }).click();
+    await admin.locator('input[value="Hamra steet, Bldg 3"]').fill('Hamra street, Bldg 3');
+    await admin.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(admin.getByText('Address updated')).toBeVisible();
+    await adminCtx.close();
+
+    // …and the vendor sees the corrected version.
+    await page.reload();
+    await page.getByPlaceholder(CUSTOMER_SEARCH).fill(phone);
     await expect(page.getByText('Hamra street, Bldg 3')).toBeVisible();
   });
 

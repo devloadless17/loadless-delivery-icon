@@ -36,8 +36,8 @@ export function IdentityHeader({
   const setDisplayName = useSetDisplayName();
   const clearDisplayName = useClearDisplayName();
 
-  // GLOBAL: you added them (or you're admin), so your edit is everyone's.
-  // MINE: another vendor added them — you can only label them for yourself.
+  // GLOBAL only for ADMIN: the shared record is the platform's to keep
+  // correct. A vendor's pen reaches their own private label and nothing else.
   const isGlobal = customer.nameScope === 'GLOBAL';
   const saving = updateName.isPending || setDisplayName.isPending;
 
@@ -137,7 +137,7 @@ export function IdentityHeader({
             <p className="text-xs text-muted-foreground">
               {isGlobal
                 ? 'Everyone on the platform sees this name.'
-                : `Only you will see this name. Everyone else keeps “${customer.baseName}”.`}
+                : `Only you will see this name — the platform record keeps “${customer.baseName}”.`}
             </p>
             </div>
           ) : (

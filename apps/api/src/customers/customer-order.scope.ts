@@ -80,8 +80,8 @@ export function adminVendorLinkFilter(vendorId?: string): Prisma.CustomerWhereIn
 
 /**
  * Resolve the name to show and whose name a save would rewrite.
- * A vendor with no alias FOLLOWS the base name — that is deliberate: when the
- * vendor who added a customer corrects a typo, everyone benefits.
+ * A vendor with no alias FOLLOWS the base name, so an admin's correction
+ * reaches every shop that has not chosen its own label.
  */
 export function resolveCustomerName(
   actor: AuthUser,
@@ -89,15 +89,15 @@ export function resolveCustomerName(
   alias: string | null,
 ) {
   const isAdmin = actor.role === 'ADMIN';
-  const addedByYou = !isAdmin && !!actor.vendorId && base.createdByVendorId === actor.vendorId;
   return {
     name: alias ?? base.name,
     baseName: base.name,
     displayName: alias,
-    // Admin and the creating vendor write the global name; everyone else can
-    // only ever write their own private label.
-    nameScope: (isAdmin || addedByYou ? 'GLOBAL' : 'MINE') as 'GLOBAL' | 'MINE',
-    addedByYou,
+    // Only ADMIN writes the shared name. A vendor's pen reaches their own
+    // private label and nothing else — whether or not they added the customer.
+    nameScope: (isAdmin ? 'GLOBAL' : 'MINE') as 'GLOBAL' | 'MINE',
+    // Informational only now: it drives the "Added by you" badge.
+    addedByYou: !isAdmin && !!actor.vendorId && base.createdByVendorId === actor.vendorId,
   };
 }
 

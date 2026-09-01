@@ -1,7 +1,7 @@
 'use client';
 
 import { displayAddress } from '@loadless/shared';
-import { CopyPlus, ExternalLink, Lock, Pencil, Trash2, TriangleAlert } from 'lucide-react';
+import { ExternalLink, Pencil, Trash2, TriangleAlert } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { ApiError } from '@/lib/api-client';
@@ -26,7 +26,6 @@ export function AddressRow({
   mode,
   onModeChange,
   onStartOrder,
-  onCopyAndCorrect,
   canManageAll,
 }: {
   customerId: string;
@@ -35,9 +34,7 @@ export function AddressRow({
   mode: RowMode;
   onModeChange: (mode: RowMode) => void;
   onStartOrder?: (address: CustomerAddress) => void;
-  /** Offered on rows the caller cannot edit: copy it, correct it, own the copy. */
-  onCopyAndCorrect?: (address: CustomerAddress) => void;
-  /** ADMIN: the platform can correct any row, whoever added it. */
+  /** ADMIN only. Vendors add addresses but never edit or remove them. */
   canManageAll?: boolean;
 }) {
   const updateAddress = useUpdateAddress();
@@ -49,11 +46,10 @@ export function AddressRow({
   });
 
   const Icon = LABEL_ICON[address.label];
-  // You may rewrite only what you added. Another vendor's row stays readable —
-  // sharing is the whole point — but untouchable, so their screen never
-  // changes under them. `onCopyAndCorrect` is the way forward: copy it,
-  // correct it, own the copy.
-  const canEdit = canManageAll || address.ownership === 'MINE';
+  // Saved addresses are the platform's to keep correct. A vendor reads them,
+  // adds to them, and otherwise leaves them alone — if this one is wrong for
+  // today's delivery they change it on the ORDER, where it is theirs alone.
+  const canEdit = !!canManageAll;
 
   function beginEdit() {
     setDraft({
@@ -185,56 +181,31 @@ export function AddressRow({
                 </button>
               )
             )}
-            {!canEdit ? (
-              <p className="mt-0.5 inline-flex items-center gap-1 text-xs text-muted-foreground">
-                <Lock className="size-3" aria-hidden />
-                {address.ownership === 'OTHER'
-                  ? 'Added by another vendor'
-                  : 'Managed by the platform'}
+            {/* Admin only: WHO added the row. A vendor cannot act on it, so
+                showing them a lock and an owner would be noise. */}
+            {canEdit && address.ownerVendorName && (
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Added by {address.ownerVendorName}
               </p>
-            ) : (
-              // Admin only: WHO owns the row. Vendors never see another
-              // vendor's name anywhere in a customer payload.
-              address.ownerVendorName && (
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  Added by {address.ownerVendorName}
-                </p>
-              )
             )}
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-0.5">
-          {canEdit ? (
-            <>
-              <Button variant="ghost" size="icon" aria-label="Edit address" onClick={beginEdit}>
-                <Pencil />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="Remove address"
-                className="text-muted-foreground hover:text-destructive"
-                onClick={() => onModeChange('confirmRemove')}
-              >
-                <Trash2 />
-              </Button>
-            </>
-          ) : (
-            onCopyAndCorrect && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-muted-foreground"
-                // "Save my version" promised a private copy. There is no such
-                // thing — one row per place, visible to all — and saving an
-                // identical copy does nothing. This says what it does.
-                onClick={() => onCopyAndCorrect(address)}
-              >
-                <CopyPlus /> Copy &amp; correct
-              </Button>
-            )
-          )}
-        </div>
+        {canEdit && (
+          <div className="flex shrink-0 items-center gap-0.5">
+            <Button variant="ghost" size="icon" aria-label="Edit address" onClick={beginEdit}>
+              <Pencil />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Remove address"
+              className="text-muted-foreground hover:text-destructive"
+              onClick={() => onModeChange('confirmRemove')}
+            >
+              <Trash2 />
+            </Button>
+          </div>
+        )}
       </div>
       {onStartOrder && (
         <div className={cn('mt-2 flex justify-end')}>

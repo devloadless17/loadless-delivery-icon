@@ -28,18 +28,18 @@ type Tx = Prisma.TransactionClient;
  * Any active vendor may look one up by phone and add addresses; every edit
  * leaves a change-history diff.
  *
- * What a vendor may CHANGE is narrower, because shared master data that anyone
- * can rewrite is data nobody can trust ("I need my customer's data to stay how
- * I set it"):
+ * A vendor ADDS customers and addresses; only ADMIN edits them afterwards. The
+ * shared record is the platform's to keep correct, which is the only way it
+ * stays trustworthy for every shop reading it:
  *
- *   phone (identity)      -> ADMIN only
- *   the global name       -> ADMIN, or the vendor who added the customer
- *   your private name     -> you only, and only you ever see it
- *   an address you added  -> you (+ ADMIN); everyone still reads it
- *   an address others own -> nobody but them; you save your own version
+ *   phone (identity)     -> ADMIN only
+ *   the global name      -> ADMIN only
+ *   any saved address    -> ADMIN edits and archives; any vendor may ADD one
+ *   your private name    -> you only, and only you ever see it
+ *   THIS ORDER's address -> the vendor's, freely, touching no shared row
  *
- * So `createdByVendorId` is no longer bare attribution: on customers it grants
- * the global-name pen, and on addresses it is ownership.
+ * That last line is what makes the rest affordable: a vendor never needs to
+ * edit the profile to get a delivery to the right door.
  */
 @Injectable()
 export class CustomersService {
@@ -134,30 +134,16 @@ export class CustomersService {
   }
 
   /**
-   * Rewrite the name EVERY vendor sees.
+   * Rewrite the name EVERY vendor sees. ADMIN only — the route enforces it.
    *
-   * Restricted to the vendor who added the customer (and admin). A second
-   * vendor who wants a different name sets their own alias instead — that way
-   * the first vendor's screen never changes under them, which is the whole
-   * point. It stays creator-editable rather than alias-only on purpose: when
-   * the vendor who entered a typo fixes it, everyone should get the fix.
+   * A vendor who wants a different name sets their own alias instead, so the
+   * shared record never moves under anyone.
    */
   async update(id: string, input: UpdateCustomerInput, actor: AuthUser) {
     const existing = await this.get(id);
     const alias = await this.myAlias(id, actor);
     if (input.name === undefined || input.name === existing.name) {
       return projectCustomer(actor, existing, alias);
-    }
-
-    if (
-      actor.role !== 'ADMIN' &&
-      (!actor.vendorId || existing.createdByVendorId !== actor.vendorId)
-    ) {
-      throw new AppException(
-        ERROR_CODES.NAME_NOT_YOURS,
-        'Only the vendor who added this customer can change the name everyone sees. Set your own name for them instead.',
-        HttpStatus.FORBIDDEN,
-      );
     }
 
     const [updated] = await this.prisma.$transaction([
@@ -255,7 +241,10 @@ export class CustomersService {
     const matchedOn = linkMatch ? ('link' as const) : ('text' as const);
 
     if (match) {
-      if (link && !match.mapsUrl) {
+      // Filling a blank maps link on an EXISTING row is still a write to a
+      // shared address, so it is admin-only like every other address edit. A
+      // vendor's link still rides on the order, which is what the driver taps.
+      if (link && !match.mapsUrl && actor.role === 'ADMIN') {
         await tx.customerAddress.update({ where: { id: match.id }, data: { mapsUrl: link } });
         await tx.customerChangeHistory.create({
           data: {
@@ -349,28 +338,8 @@ export class CustomersService {
     return { ...projectAddress(actor, row), created, ...(matchedOn ? { matchedOn } : {}) };
   }
 
-  /**
-   * May the caller rewrite this address row?
-   *
-   * Deliberately 403 and not 404. Everywhere else a resource the caller cannot
-   * touch is "not found", because saying "forbidden" would confirm it exists.
-   * Here it is already on their screen, listed in the profile they just
-   * loaded — pretending it vanished would be a lie they can disprove, and it
-   * would hide the actual affordance ("save your own version").
-   */
-  private assertAddressOwner(ownerVendorId: string | null, actor: AuthUser) {
-    if (actor.role === 'ADMIN') return;
-    if (actor.role === 'VENDOR' && actor.vendorId && ownerVendorId === actor.vendorId) return;
-    throw new AppException(
-      ERROR_CODES.ADDRESS_NOT_YOURS,
-      ownerVendorId === null
-        ? 'This address predates address ownership — ask the platform to change it.'
-        : 'Another vendor added this address and relies on it. Save your own version instead.',
-      HttpStatus.FORBIDDEN,
-    );
-  }
 
-  /** Correct a saved address in place — the gap that forced archive-and-re-add. */
+  /** Correct a saved address in place. ADMIN only (enforced on the route). */
   async updateAddress(
     customerId: string,
     addressId: string,
@@ -385,8 +354,6 @@ export class CustomersService {
         select: ADDRESS_SELECT,
       });
       if (!existing) throw AppException.notFound('Address not found');
-      // Existence first, then ownership: a row on ANOTHER customer stays a 404.
-      this.assertAddressOwner(existing.createdByVendorId, actor);
 
       const diff: Record<string, { old: unknown; new: unknown }> = {};
       for (const key of ['label', 'addressText', 'mapsUrl'] as const) {
@@ -436,10 +403,9 @@ export class CustomersService {
     await this.prisma.$transaction(async (tx) => {
       const existing = await tx.customerAddress.findFirst({
         where: { id: addressId, customerId, isArchived: false },
-        select: { id: true, createdByVendorId: true },
+        select: { id: true },
       });
       if (!existing) throw AppException.notFound('Address not found');
-      this.assertAddressOwner(existing.createdByVendorId, actor);
 
       // Still a conditional updateMany: the read above answers "who owns it",
       // not "is it still unarchived", and only the WHERE can answer that

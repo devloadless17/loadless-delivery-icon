@@ -365,7 +365,9 @@ describe('customers (integration)', () => {
 
   // ------------------------------------------------------------ address editing
 
-  describe('address editing', () => {
+  // Editing a saved address is ADMIN-only: a vendor adds places, the platform
+  // keeps them correct. These cover the platform's path.
+  describe('address editing (admin)', () => {
     it('updates in place and writes exactly one history row', async () => {
       const customer = await makeCustomer('+9613100010', 'Edit Me', vendorAId);
       const address = await prisma.customerAddress.create({
@@ -380,7 +382,7 @@ describe('customers (integration)', () => {
 
       const res = await request(server)
         .patch(`/api/v1/customers/${customer.id}/addresses/${address.id}`)
-        .set(auth(vendorAToken))
+        .set(auth(adminToken))
         .send({ label: 'WORK', addressText: 'Typo street, Bldg 4', mapsUrl: 'https://maps.app.goo.gl/abc' })
         .expect(200);
 
@@ -404,7 +406,7 @@ describe('customers (integration)', () => {
 
       await request(server)
         .patch(`/api/v1/customers/${customer.id}/addresses/${address.id}`)
-        .set(auth(vendorAToken))
+        .set(auth(adminToken))
         .send({ label: address.label, addressText: address.addressText })
         .expect(200);
 
@@ -421,7 +423,7 @@ describe('customers (integration)', () => {
       });
       const res = await request(server)
         .patch(`/api/v1/customers/${customer.id}/addresses/${address.id}`)
-        .set(auth(vendorAToken))
+        .set(auth(adminToken))
         .send({ mapsUrl: null })
         .expect(200);
       expect(res.body.data.mapsUrl).toBeNull();
@@ -453,12 +455,12 @@ describe('customers (integration)', () => {
 
       await request(server)
         .patch(`/api/v1/customers/${mine.id}/addresses/${foreign.id}`)
-        .set(auth(vendorAToken))
+        .set(auth(adminToken))
         .send({ addressText: 'Hijacked' })
         .expect(404);
       await request(server)
         .patch(`/api/v1/customers/${mine.id}/addresses/${archived.id}`)
-        .set(auth(vendorAToken))
+        .set(auth(adminToken))
         .send({ addressText: 'Resurrected' })
         .expect(404);
 
@@ -488,13 +490,13 @@ describe('customers (integration)', () => {
       expect(rows[0]?.addressText).toBe('Hamra Bldg 12'); // first spelling wins
     });
 
-    it('backfills a missing maps link without rewriting the address', async () => {
+    it('backfills a missing maps link without rewriting the address (admin)', async () => {
       const customer = await prisma.customer.findUniqueOrThrow({
         where: { normalizedPhone: '+9613100020' },
       });
       await request(server)
         .post(`/api/v1/customers/${customer.id}/addresses`)
-        .set(auth(vendorAToken))
+        .set(auth(adminToken)) // enriching an existing row is a platform write
         .send({ label: 'HOME', addressText: 'hamra bldg 12', mapsUrl: 'https://maps.app.goo.gl/xyz' })
         .expect(201);
 
@@ -865,7 +867,7 @@ describe('customers (integration)', () => {
       });
       await request(server)
         .patch(`/api/v1/customers/${customer.id}/addresses/${address.id}`)
-        .set(auth(vendorAToken))
+        .set(auth(adminToken)) // only the platform edits a saved address now
         .send({ addressText: 'Corrected spelling, Bldg 2' })
         .expect(200);
 
@@ -915,12 +917,10 @@ describe('customers (integration)', () => {
       expect(asB.body.data.name).toBe('Base Person');
     });
 
-    it('THE ONE EXCEPTION: a missing maps link gets filled in, and it is logged', async () => {
-      // The address book holds ONE row per place per customer (the dedupe
-      // index is not scoped by vendor), so a second vendor cannot keep a
-      // private copy of the same address. When they have the maps link that
-      // row is missing, filling it is strictly additive — it never overwrites
-      // text and it is the only way the link can be recorded at all.
+    it('ADMIN filling a missing maps link enriches the row, and it is logged', async () => {
+      // Filling a blank link on an existing row is still a write to a shared
+      // address, so it follows the same rule as every other address edit:
+      // platform only. A vendor's link rides on the order instead.
       const customer = await makeCustomer('+9613100205', 'Enrich Me', vendorAId);
       const address = await prisma.customerAddress.create({
         data: {
@@ -932,9 +932,24 @@ describe('customers (integration)', () => {
       });
       expect(address.mapsUrl).toBeNull();
 
+      // A VENDOR adding the same place with a link leaves the row alone.
       await request(server)
         .post(`/api/v1/customers/${customer.id}/addresses`)
         .set(auth(vendorBToken))
+        .send({
+          label: 'HOME',
+          addressText: 'Link me street, Bldg 5',
+          mapsUrl: 'https://maps.app.goo.gl/enriched',
+        })
+        .expect(201);
+      expect(
+        (await prisma.customerAddress.findUniqueOrThrow({ where: { id: address.id } })).mapsUrl,
+      ).toBeNull();
+
+      // ADMIN doing the same enriches it.
+      await request(server)
+        .post(`/api/v1/customers/${customer.id}/addresses`)
+        .set(auth(adminToken))
         .send({
           label: 'HOME',
           addressText: 'Link me street, Bldg 5',
@@ -1029,23 +1044,19 @@ describe('customers (integration)', () => {
   });
 
   describe('names — global vs mine', () => {
-    it('only the vendor who added them may rewrite the shared name', async () => {
+    it('NO vendor may rewrite the shared name — not even the one who added them', async () => {
       const customer = await makeCustomer('+9613100120', 'Original Name', vendorAId);
 
-      await request(server)
-        .patch(`/api/v1/customers/${customer.id}`)
-        .set(auth(vendorAToken))
-        .send({ name: 'Corrected Name' })
-        .expect(200);
-
-      const res = await request(server)
-        .patch(`/api/v1/customers/${customer.id}`)
-        .set(auth(vendorBToken))
-        .send({ name: 'Hijacked Name' })
-        .expect(403);
-      expect(res.body.error.code).toBe('NAME_NOT_YOURS');
+      // Vendor A created this customer and still cannot rename them.
+      for (const token of [vendorAToken, vendorBToken]) {
+        await request(server)
+          .patch(`/api/v1/customers/${customer.id}`)
+          .set(auth(token))
+          .send({ name: 'Hijacked Name' })
+          .expect(403);
+      }
       expect((await prisma.customer.findUniqueOrThrow({ where: { id: customer.id } })).name).toBe(
-        'Corrected Name',
+        'Original Name',
       );
 
       await request(server)
@@ -1053,6 +1064,9 @@ describe('customers (integration)', () => {
         .set(auth(adminToken))
         .send({ name: 'Admin Name' })
         .expect(200);
+      expect((await prisma.customer.findUniqueOrThrow({ where: { id: customer.id } })).name).toBe(
+        'Admin Name',
+      );
     });
 
     it('my alias is mine alone — the other vendor keeps the shared name', async () => {
@@ -1076,7 +1090,7 @@ describe('customers (integration)', () => {
         .expect(200);
       expect(asA.body.data.name).toBe('Shared Spelling');
       expect(asA.body.data.displayName).toBeNull();
-      expect(asA.body.data.nameScope).toBe('GLOBAL'); // A added them
+      expect(asA.body.data.nameScope).toBe('MINE'); // no vendor writes the shared name
       expect(JSON.stringify(asA.body)).not.toContain('Nickname');
 
       // The shared record itself never moved.
@@ -1110,10 +1124,10 @@ describe('customers (integration)', () => {
       });
       expect(link.displayName).toBeNull();
 
-      // …so a later correction by the creator still reaches vendor B.
+      // …so a later ADMIN correction still reaches vendor B.
       await request(server)
         .patch(`/api/v1/customers/${customer.id}`)
-        .set(auth(vendorAToken))
+        .set(auth(adminToken))
         .send({ name: 'Fixed Name' })
         .expect(200);
       const asB = await request(server)
@@ -1138,20 +1152,36 @@ describe('customers (integration)', () => {
       return { customer, address };
     }
 
-    it('a vendor may edit and archive what they added', async () => {
+    it('a vendor cannot edit or archive an address — not even one they added', async () => {
       const { customer, address } = await seedOwnedAddress('+9613100130', 'Owned A', vendorAId);
+
       await request(server)
         .patch(`/api/v1/customers/${customer.id}/addresses/${address.id}`)
         .set(auth(vendorAToken))
         .send({ addressText: 'Owned A street, Bldg 1' })
-        .expect(200);
+        .expect(403);
       await request(server)
         .post(`/api/v1/customers/${customer.id}/addresses/${address.id}/archive`)
         .set(auth(vendorAToken))
+        .expect(403);
+
+      const after = await prisma.customerAddress.findUniqueOrThrow({ where: { id: address.id } });
+      expect(after.addressText).toBe('Owned A street');
+      expect(after.isArchived).toBe(false);
+
+      // The platform can do both.
+      await request(server)
+        .patch(`/api/v1/customers/${customer.id}/addresses/${address.id}`)
+        .set(auth(adminToken))
+        .send({ addressText: 'Owned A street, Bldg 1' })
+        .expect(200);
+      await request(server)
+        .post(`/api/v1/customers/${customer.id}/addresses/${address.id}/archive`)
+        .set(auth(adminToken))
         .expect(204);
     });
 
-    it('403 ADDRESS_NOT_YOURS on another vendor\'s row, left byte-identical', async () => {
+    it('403 on another vendor\'s row too, left byte-identical', async () => {
       const { customer, address } = await seedOwnedAddress('+9613100131', 'Owned B', vendorBId);
 
       // Sequential, each request built at the moment it is sent: supertest
@@ -1168,8 +1198,8 @@ describe('customers (integration)', () => {
         .expect(403);
 
       for (const res of [edit, archive]) {
-        expect(res.body.error.code).toBe('ADDRESS_NOT_YOURS');
-        // 403 explains, and it must NOT name the vendor who owns the row.
+        expect(res.body.error.code).toBe('FORBIDDEN');
+        // The refusal must never name the vendor who added the row.
         expect(JSON.stringify(res.body)).not.toContain('Vendor B Shop');
       }
 
@@ -1250,7 +1280,7 @@ describe('customers (integration)', () => {
       expect(retry.body.data.ownership).toBe('MINE');
     });
 
-    it('"copy & correct" leaves theirs alone and makes me the owner of mine', async () => {
+    it('a vendor may ADD a different address; the existing one is untouched', async () => {
       const { customer, address } = await seedOwnedAddress('+9613100133', 'Copy Me', vendorBId);
 
       const res = await request(server)
@@ -1270,6 +1300,13 @@ describe('customers (integration)', () => {
       expect(rows[0]!.addressText).toBe('Copy Me street'); // untouched
       expect(rows[0]!.createdByVendorId).toBe(vendorBId);
       expect(rows[1]!.createdByVendorId).toBe(vendorAId);
+
+      // …and having added it, they still cannot edit it.
+      await request(server)
+        .patch(`/api/v1/customers/${customer.id}/addresses/${rows[1]!.id}`)
+        .set(auth(vendorAToken))
+        .send({ addressText: 'Second thoughts' })
+        .expect(403);
     });
 
     it('ownership ships as a verdict, and MINE sorts first', async () => {

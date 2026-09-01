@@ -111,15 +111,17 @@ export class CustomersController {
   }
 
   /**
-   * The name EVERY vendor sees. Admin, or the vendor who added the customer;
-   * anyone else gets 403 NAME_NOT_YOURS and is pointed at their own alias.
+   * The name EVERY vendor sees — ADMIN ONLY.
    *
-   * Two routes rather than one overloaded one on purpose: "rename for
-   * everybody" and "rename for me" are different acts with different blast
-   * radii, and a single endpoint that silently picks between them would be
-   * exactly the confusion this feature exists to remove.
+   * A vendor adds customers but does not edit them afterwards; the shared
+   * record is the platform's to keep correct. A vendor who wants a different
+   * name uses their own alias below, which nobody else ever sees.
+   *
+   * RolesGuard reads getAllAndOverride([handler, class]), so this narrows the
+   * controller's ADMIN+VENDOR without moving the route.
    */
   @Patch(':id')
+  @Roles('ADMIN')
   async update(
     @Param('id') id: string,
     @Body(new ZodValidationPipe(updateCustomerSchema)) body: UpdateCustomerInput,
@@ -151,6 +153,7 @@ export class CustomersController {
     return this.profiles.build(id, user);
   }
 
+  /** Vendors may ADD — it cannot damage anyone's existing row. */
   @Post(':id/addresses')
   addAddress(
     @Param('id') id: string,
@@ -160,7 +163,13 @@ export class CustomersController {
     return this.customers.addAddress(id, body, user);
   }
 
+  /**
+   * ADMIN ONLY, like archive below. A vendor who needs a different address
+   * either adds one, or types it straight onto the order — where it is theirs
+   * alone and touches no shared row.
+   */
   @Patch(':id/addresses/:addressId')
+  @Roles('ADMIN')
   updateAddress(
     @Param('id') id: string,
     @Param('addressId') addressId: string,
@@ -171,6 +180,7 @@ export class CustomersController {
   }
 
   @Post(':id/addresses/:addressId/archive')
+  @Roles('ADMIN')
   @HttpCode(204)
   async archiveAddress(
     @Param('id') id: string,

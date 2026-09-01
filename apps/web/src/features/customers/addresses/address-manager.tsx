@@ -10,15 +10,14 @@ import { AddressFields, emptyAddressDraft, type AddressDraft } from './address-f
 import { AddressRow, type RowMode } from './address-row';
 import { useAddAddress, type CustomerAddress } from '../api';
 
-type EditTarget =
-  | { kind: 'row'; id: string; mode: RowMode }
-  /** `copiedFrom` = the address text this draft started as, so an unchanged save is caught. */
-  | { kind: 'new'; copiedFrom?: string }
-  | null;
+type EditTarget = { kind: 'row'; id: string; mode: RowMode } | { kind: 'new' } | null;
 
 /**
- * The address book on the profile. A single `editing` slot means two forms can
- * never be open at once — mid-call, one thing at a time is the whole point.
+ * The address book on the profile.
+ *
+ * A vendor may ADD a place and nothing more — editing and removing are the
+ * platform's. A single `editing` slot means two forms can never be open at
+ * once: mid-call, one thing at a time is the whole point.
  */
 export function AddressManager({
   customerId,
@@ -31,33 +30,12 @@ export function AddressManager({
   addresses: CustomerAddress[];
   usualAddressText?: string | null;
   onStartOrder?: (address: CustomerAddress) => void;
-  /** ADMIN: every row is editable, whoever added it. */
+  /** ADMIN: rows are editable and removable. Vendors only ever add. */
   canManageAll?: boolean;
 }) {
   const [editing, setEditing] = useState<EditTarget>(null);
   const [draft, setDraft] = useState<AddressDraft>(emptyAddressDraft);
   const addAddress = useAddAddress();
-
-  /**
-   * Copy an address the caller does not own, so they can correct it and own
-   * the corrected one.
-   *
-   * The address book holds ONE row per place, so this is not a private copy
-   * and saving it unchanged creates nothing — the dedupe returns the existing
-   * row. The form says so, and the toast below refuses to claim otherwise.
-   */
-  function copyAndCorrect(address: CustomerAddress) {
-    setDraft({
-      label: address.label,
-      addressText: address.addressText ?? '',
-      // The pin is deliberately NOT copied. A shared maps link is the strongest
-      // "same place" signal there is, so carrying it over made every correction
-      // collide with the row it was copied from — the affordance failed by
-      // default. The text is what the vendor came here to change.
-      mapsUrl: '',
-    });
-    setEditing({ kind: 'new', copiedFrom: address.addressText ?? '' });
-  }
 
   async function save() {
     if (draft.addressText.trim().length < 3) {
@@ -85,10 +63,8 @@ export function AddressManager({
         // exactly what happened the first time this message existed.
         toast.error(
           saved.matchedOn === 'link'
-            ? 'That Google Maps link is already saved for this customer. Clear the link to save your own description of the place.'
-            : saved.ownership === 'MINE'
-              ? 'You already have this address saved.'
-              : 'That exact address text is already saved. Change it to save your own version.',
+            ? 'That Google Maps link is already saved for this customer. Clear the link to add a separate description of the place.'
+            : 'That address is already saved for this customer.',
         );
         return;
       }
@@ -118,7 +94,7 @@ export function AddressManager({
                 setEditing(mode === 'view' ? null : { kind: 'row', id: address.id, mode })
               }
               {...(onStartOrder ? { onStartOrder } : {})}
-              {...(canManageAll ? { canManageAll } : { onCopyAndCorrect: copyAndCorrect })}
+              {...(canManageAll ? { canManageAll } : {})}
             />
           ))}
         </ul>
@@ -151,13 +127,6 @@ export function AddressManager({
             if (e.key === 'Escape') setEditing(null);
           }}
         >
-          {editing.copiedFrom !== undefined && (
-            <p className="text-xs text-muted-foreground">
-              Copied from an address you don&apos;t own. Correct what&apos;s wrong and it saves as a
-              separate address that you own — everyone can still see both. The map pin stays with
-              the original; paste a different one if you have it.
-            </p>
-          )}
           <AddressFields value={draft} onChange={setDraft} idPrefix="new-address" autoFocus />
           <div className="flex justify-end gap-2">
             <Button type="button" size="sm" variant="ghost" onClick={() => setEditing(null)}>

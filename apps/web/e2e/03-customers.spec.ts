@@ -40,14 +40,15 @@ test.describe('shared customer system', () => {
     await expect(page.getByText('Added by you')).toBeVisible();
     await expect(page.getByText('Ashrafieh, Sassine square')).toBeVisible();
 
-    // edit name (global, with history)
+    // The pen writes the vendor's OWN label — never the shared name, even
+    // though this vendor is the one who added the customer.
     await page.getByRole('button', { name: 'Edit name' }).click();
-    const nameInput = page.locator('input[value="Rana Khoury"]');
-    await nameInput.fill('Rana K. Khoury');
+    await expect(page.getByText(/Only you will see this name/)).toBeVisible();
+    await page.locator('input[value="Rana Khoury"]').fill('Rana the regular');
     await page.getByRole('button', { name: 'Save', exact: true }).click();
-    await expect(page.getByText('Name updated')).toBeVisible();
+    await expect(page.getByText('Saved — only you see this name')).toBeVisible();
 
-    // add a WORK address, then archive it
+    // A vendor ADDS a place…
     await page.getByRole('button', { name: 'Add address' }).click();
     const addForm = page.getByRole('form', { name: 'New address' });
     await addForm.getByRole('combobox').click();
@@ -57,11 +58,10 @@ test.describe('shared customer system', () => {
     await expect(page.getByText('Address saved')).toBeVisible();
     await expect(page.getByText('Downtown, Bank street, Office 12')).toBeVisible();
 
-    const workAddress = page.getByRole('listitem').filter({ hasText: 'Downtown, Bank street' });
-    await workAddress.getByRole('button', { name: 'Remove address' }).click();
-    // Removal confirms inline (no modal) — one extra tap, no focus trap mid-call.
-    await page.getByRole('button', { name: 'Remove', exact: true }).click();
-    await expect(page.getByText('Downtown, Bank street, Office 12')).toHaveCount(0);
+    // …and cannot edit or remove it, or anything else. The platform owns
+    // saved addresses; the vendor's freedom lives on the order.
+    await expect(page.getByRole('button', { name: 'Edit address' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Remove address' })).toHaveCount(0);
 
     // ANOTHER vendor finds the same global customer — the core sharing promise
     await page.getByRole('button', { name: 'Sign out' }).click();
@@ -69,9 +69,10 @@ test.describe('shared customer system', () => {
     await loginAs(page, VENDOR2, '/vendor');
     await page.goto('/vendor/customers');
     await page.getByPlaceholder(CUSTOMER_SEARCH).fill(phone);
-    await expect(page.getByText('Rana K. Khoury')).toBeVisible();
+    // The first vendor's private label never reached them.
+    await expect(page.getByText('Rana Khoury')).toBeVisible();
+    await expect(page.getByText('the regular')).toHaveCount(0);
     await expect(page.getByText('Ashrafieh, Sassine square')).toBeVisible();
-    // …as a customer they did NOT add: the record is shared, the pen is not.
     await expect(page.getByText('Shared customer')).toBeVisible();
     await expect(page.getByText('Added by you')).toHaveCount(0);
   });
