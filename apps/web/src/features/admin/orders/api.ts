@@ -54,13 +54,14 @@ export function buildAdminOrderParams(filters: AdminOrderFilters): URLSearchPara
 export function useAdminOrders(filters: AdminOrderFilters) {
   return useInfiniteQuery({
     queryKey: ['admin', 'orders', filters],
-    queryFn: async ({ pageParam, signal }) => {
+    queryFn: ({ pageParam, signal }) => {
       const params = buildAdminOrderParams(filters);
       params.set('limit', '25');
       if (pageParam) params.set('cursor', pageParam);
-      const res = await fetch(`/api/v1/admin/orders?${params}`, { signal });
-      if (!res.ok) throw new Error('Failed to load orders');
-      return (await res.json()) as { data: AdminOrderRow[]; meta: { nextCursor: string | null } };
+      return api.page<AdminOrderRow[], { nextCursor: string | null }>(
+        `/admin/orders?${params}`,
+        signal,
+      );
     },
     initialPageParam: '',
     getNextPageParam: (last) => last.meta.nextCursor ?? undefined,

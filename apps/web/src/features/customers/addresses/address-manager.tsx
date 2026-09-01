@@ -10,7 +10,11 @@ import { AddressFields, emptyAddressDraft, type AddressDraft } from './address-f
 import { AddressRow, type RowMode } from './address-row';
 import { useAddAddress, type CustomerAddress } from '../api';
 
-type EditTarget = { kind: 'row'; id: string; mode: RowMode } | { kind: 'new' } | null;
+type EditTarget =
+  | { kind: 'row'; id: string; mode: RowMode }
+  /** `copiedFrom` = the address text this draft started as, so an unchanged save is caught. */
+  | { kind: 'new'; copiedFrom?: string }
+  | null;
 
 /**
  * The address book on the profile. A single `editing` slot means two forms can
@@ -35,20 +39,20 @@ export function AddressManager({
   const addAddress = useAddAddress();
 
   /**
-   * "Save my version" of an address another vendor owns.
+   * Copy an address the caller does not own, so they can correct it and own
+   * the corrected one.
    *
-   * No new endpoint: it prefills the add-form from their row, the vendor
-   * corrects whatever was wrong, and the normal save stamps THEM as owner.
-   * Saving it byte-identical is harmless — the dedupe index simply returns the
-   * existing row instead of creating a twin.
+   * The address book holds ONE row per place, so this is not a private copy
+   * and saving it unchanged creates nothing — the dedupe returns the existing
+   * row. The form says so, and the toast below refuses to claim otherwise.
    */
-  function saveMyVersion(address: CustomerAddress) {
+  function copyAndCorrect(address: CustomerAddress) {
     setDraft({
       label: address.label,
       addressText: address.addressText ?? '',
       mapsUrl: address.mapsUrl ?? '',
     });
-    setEditing({ kind: 'new' });
+    setEditing({ kind: 'new', copiedFrom: address.addressText ?? '' });
   }
 
   async function save() {
@@ -57,7 +61,7 @@ export function AddressManager({
       return;
     }
     try {
-      await addAddress.mutateAsync({
+      const saved = await addAddress.mutateAsync({
         customerId,
         input: {
           label: draft.label,
@@ -65,6 +69,19 @@ export function AddressManager({
           ...(draft.mapsUrl.trim() ? { mapsUrl: draft.mapsUrl.trim() } : {}),
         },
       });
+
+      // `created === false` means the dedupe matched something already there.
+      // Saying "Address saved" then is a lie the vendor can disprove by
+      // looking at the list, so say what actually happened and keep the form
+      // open — they still have the correction to make.
+      if (saved.created === false) {
+        toast.error(
+          saved.ownership === 'MINE'
+            ? 'You already have this address saved.'
+            : 'This exact address already exists. Change what’s different to save your own.',
+        );
+        return;
+      }
       setDraft(emptyAddressDraft);
       setEditing(null);
       toast.success('Address saved');
@@ -91,7 +108,7 @@ export function AddressManager({
                 setEditing(mode === 'view' ? null : { kind: 'row', id: address.id, mode })
               }
               {...(onStartOrder ? { onStartOrder } : {})}
-              {...(canManageAll ? { canManageAll } : { onSaveMyVersion: saveMyVersion })}
+              {...(canManageAll ? { canManageAll } : { onCopyAndCorrect: copyAndCorrect })}
             />
           ))}
         </ul>
@@ -124,6 +141,12 @@ export function AddressManager({
             if (e.key === 'Escape') setEditing(null);
           }}
         >
+          {editing.copiedFrom !== undefined && (
+            <p className="text-xs text-muted-foreground">
+              Copied from an address you don&apos;t own. Correct what&apos;s wrong — it saves as a
+              separate address that you own. Everyone can still see both.
+            </p>
+          )}
           <AddressFields value={draft} onChange={setDraft} idPrefix="new-address" autoFocus />
           <div className="flex justify-end gap-2">
             <Button type="button" size="sm" variant="ghost" onClick={() => setEditing(null)}>

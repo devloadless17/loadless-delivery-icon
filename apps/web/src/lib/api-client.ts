@@ -27,6 +27,12 @@ interface RequestOptions {
   skipRefresh?: boolean;
 }
 
+/** A list response exactly as it comes off the wire — `meta` is what pages it. */
+export interface Envelope<T, M> {
+  data: T;
+  meta: M;
+}
+
 let refreshInFlight: Promise<boolean> | null = null;
 
 async function tryRefresh(): Promise<boolean> {
@@ -39,15 +45,33 @@ async function tryRefresh(): Promise<boolean> {
   return refreshInFlight;
 }
 
-async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+function isErrorBody(json: unknown): json is ApiErrorBody {
+  return typeof json === 'object' && json !== null && 'error' in json;
+}
+
+function hasData(json: unknown): json is { data: unknown } {
+  return typeof json === 'object' && json !== null && 'data' in json;
+}
+
+/**
+ * The one transport: the silent refresh, the retry, and the ApiError mapping
+ * all live here so no caller can accidentally opt out of them. It hands back
+ * the whole envelope — `request` unwraps it, `requestPage` keeps `meta`.
+ */
+async function send(
+  path: string,
+  options: RequestOptions,
+): Promise<{ status: number; json: unknown }> {
   const { method = 'GET', body, signal, skipRefresh } = options;
+  // FormData sets its own multipart boundary — never stringify or label it.
+  const isForm = typeof FormData !== 'undefined' && body instanceof FormData;
 
   const doFetch = () =>
     fetch(`/api/v1${path}`, {
       method,
       signal,
-      headers: body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
-      body: body !== undefined ? JSON.stringify(body) : undefined,
+      headers: body !== undefined && !isForm ? { 'Content-Type': 'application/json' } : undefined,
+      body: body === undefined ? undefined : isForm ? (body as FormData) : JSON.stringify(body),
     });
 
   let response = await doFetch();
@@ -57,15 +81,12 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     if (refreshed) response = await doFetch();
   }
 
-  if (response.status === 204) return undefined as T;
+  if (response.status === 204) return { status: 204, json: null };
 
-  const json = (await response.json().catch(() => null)) as
-    | { data: T }
-    | ApiErrorBody
-    | null;
+  const json: unknown = await response.json().catch(() => null);
 
   if (!response.ok) {
-    const err = json && 'error' in json ? json.error : undefined;
+    const err = isErrorBody(json) ? json.error : undefined;
     throw new ApiError(
       response.status,
       err?.code ?? ERROR_CODES.INTERNAL,
@@ -75,16 +96,36 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     );
   }
 
-  if (!json || !('data' in json)) {
-    throw new ApiError(response.status, ERROR_CODES.INTERNAL, 'Malformed response');
+  return { status: response.status, json };
+}
+
+async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const { status, json } = await send(path, options);
+  if (status === 204) return undefined as T;
+  if (!hasData(json)) throw new ApiError(status, ERROR_CODES.INTERNAL, 'Malformed response');
+  return json.data as T;
+}
+
+async function requestPage<T, M>(path: string, signal?: AbortSignal): Promise<Envelope<T, M>> {
+  const { status, json } = await send(path, { signal });
+  if (!hasData(json) || !('meta' in json)) {
+    throw new ApiError(status, ERROR_CODES.INTERNAL, 'Malformed response');
   }
-  return json.data;
+  return json as Envelope<T, M>;
 }
 
 export const api = {
   get: <T>(path: string, signal?: AbortSignal) => request<T>(path, { signal }),
+  /**
+   * A paginated list with its envelope intact — `get` unwraps to `data` alone
+   * and would drop the `meta` a table pages off. Reach for this instead of a
+   * raw fetch: a raw fetch skips the silent refresh above, so an expired
+   * access token turns the list into a permanently empty table.
+   */
+  page: <T, M>(path: string, signal?: AbortSignal) => requestPage<T, M>(path, signal),
   post: <T>(path: string, body?: unknown, opts?: Pick<RequestOptions, 'skipRefresh'>) =>
     request<T>(path, { method: 'POST', body, ...opts }),
+  postForm: <T>(path: string, body: FormData) => request<T>(path, { method: 'POST', body }),
   patch: <T>(path: string, body?: unknown) => request<T>(path, { method: 'PATCH', body }),
   put: <T>(path: string, body?: unknown) => request<T>(path, { method: 'PUT', body }),
   delete: <T>(path: string) => request<T>(path, { method: 'DELETE' }),

@@ -16,19 +16,16 @@ export interface AdminDriver {
   user: { normalizedPhone: string };
 }
 
-async function fetchDrivers(page: number, q: string) {
+function fetchDrivers(page: number, q: string, signal?: AbortSignal) {
   const params = new URLSearchParams({ page: String(page), limit: '20' });
   if (q) params.set('q', q);
-  const res = await fetch(`/api/v1/admin/drivers?${params}`);
-  const json = (await res.json()) as { data: AdminDriver[]; meta: PageMeta };
-  if (!res.ok) throw new Error('Failed to load drivers');
-  return json;
+  return api.page<AdminDriver[], PageMeta>(`/admin/drivers?${params}`, signal);
 }
 
 export function useDrivers(page: number, q: string) {
   return useQuery({
     queryKey: ['admin', 'drivers', page, q],
-    queryFn: () => fetchDrivers(page, q),
+    queryFn: ({ signal }) => fetchDrivers(page, q, signal),
     placeholderData: (prev) => prev,
   });
 }

@@ -1192,7 +1192,27 @@ describe('customers (integration)', () => {
         .expect(200);
     });
 
-    it('"save my version" leaves theirs alone and makes me the owner of mine', async () => {
+    it('saving a BYTE-IDENTICAL copy reports created:false — the UI must not call it saved', async () => {
+      // The address book holds one row per place, so this add legitimately
+      // changes nothing. Without the flag the UI cheerfully said "Address
+      // saved" while the list stayed exactly as it was.
+      const { customer, address } = await seedOwnedAddress('+9613100135', 'Identical', vendorBId);
+
+      const res = await request(server)
+        .post(`/api/v1/customers/${customer.id}/addresses`)
+        .set(auth(vendorAToken))
+        .send({ label: 'HOME', addressText: 'Identical street' })
+        .expect(201);
+
+      expect(res.body.data.created).toBe(false);
+      expect(res.body.data.id).toBe(address.id); // the row that already existed
+      expect(res.body.data.ownership).toBe('OTHER'); // still theirs, not mine
+      expect(
+        await prisma.customerAddress.count({ where: { customerId: customer.id, isArchived: false } }),
+      ).toBe(1);
+    });
+
+    it('"copy & correct" leaves theirs alone and makes me the owner of mine', async () => {
       const { customer, address } = await seedOwnedAddress('+9613100133', 'Copy Me', vendorBId);
 
       const res = await request(server)
@@ -1201,6 +1221,7 @@ describe('customers (integration)', () => {
         .send({ label: 'HOME', addressText: 'Copy Me street, Bldg 7' })
         .expect(201);
       expect(res.body.data.ownership).toBe('MINE');
+      expect(res.body.data.created).toBe(true); // a genuinely different address
 
       const rows = await prisma.customerAddress.findMany({
         where: { customerId: customer.id, isArchived: false },

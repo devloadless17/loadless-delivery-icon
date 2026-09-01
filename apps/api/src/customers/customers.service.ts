@@ -322,17 +322,24 @@ export class CustomersService {
     return { id: created.id, created: true };
   }
 
-  /** Explicit "add address" — same dedupe rule as the order path. */
+  /**
+   * Explicit "add address" — same dedupe rule as the order path.
+   *
+   * Reports `created`. The dedupe means an add can legitimately change
+   * nothing: saving a byte-identical copy of an address that already exists
+   * returns the existing row. The caller MUST be able to tell, or the UI ends
+   * up saying "Address saved" when nothing was saved.
+   */
   async addAddress(customerId: string, input: CustomerAddressInput, actor: AuthUser) {
     await this.get(customerId); // 404 guard
-    const { id } = await this.prisma.$transaction((tx) =>
+    const { id, created } = await this.prisma.$transaction((tx) =>
       this.saveAddressInTx(tx, customerId, input, actor),
     );
     const row = await this.prisma.customerAddress.findUniqueOrThrow({
       where: { id },
       select: ADDRESS_SELECT,
     });
-    return projectAddress(actor, row);
+    return { ...projectAddress(actor, row), created };
   }
 
   /**

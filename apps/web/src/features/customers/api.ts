@@ -42,19 +42,23 @@ export interface OffsetPage<T> {
  * This is the ONLY listing a vendor gets. Typing a phone reaches anyone on the
  * platform; browsing reaches only the people they actually deal with.
  */
+function buildMyCustomersParams(params: { page: number; q: string }): URLSearchParams {
+  const qs = new URLSearchParams({ page: String(params.page), limit: '10' });
+  if (params.q.trim()) qs.set('q', params.q.trim());
+  return qs;
+}
+
 export function useMyCustomers(params: { page: number; q: string }) {
   return useQuery({
     queryKey: ['vendor', 'customers', params.page, params.q],
-    // Raw fetch, not api.get: this endpoint answers with a { data, meta }
+    // api.page, not api.get: this endpoint answers with a { data, meta }
     // envelope, and api.get unwraps to `data` alone — which would silently
     // drop the pagination meta the table pages off.
-    queryFn: async ({ signal }) => {
-      const qs = new URLSearchParams({ page: String(params.page), limit: '10' });
-      if (params.q.trim()) qs.set('q', params.q.trim());
-      const res = await fetch(`/api/v1/vendor/customers?${qs}`, { signal });
-      if (!res.ok) throw new Error('Failed to load customers');
-      return (await res.json()) as OffsetPage<VendorCustomerRow>;
-    },
+    queryFn: ({ signal }) =>
+      api.page<VendorCustomerRow[], OffsetPage<VendorCustomerRow>['meta']>(
+        `/vendor/customers?${buildMyCustomersParams(params)}`,
+        signal,
+      ),
     placeholderData: (previous) => previous, // paging shouldn't blank the table
     staleTime: 15_000,
   });
@@ -107,12 +111,13 @@ export function useCustomerOrders(
 ) {
   return useInfiniteQuery({
     queryKey: ['customers', 'orders', customerId],
-    queryFn: async ({ pageParam, signal }) => {
+    queryFn: ({ pageParam, signal }) => {
       const params = new URLSearchParams({ limit: '10' });
       if (pageParam) params.set('cursor', pageParam);
-      const res = await fetch(`/api/v1/customers/${customerId}/orders?${params}`, { signal });
-      if (!res.ok) throw new Error('Failed to load orders');
-      return (await res.json()) as CursorPage<CustomerOrder>;
+      return api.page<CustomerOrder[], CursorPage<CustomerOrder>['meta']>(
+        `/customers/${customerId}/orders?${params}`,
+        signal,
+      );
     },
     initialPageParam: '',
     getNextPageParam: (last) => last.meta.nextCursor ?? undefined,
@@ -218,7 +223,10 @@ export function useAddAddress() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ customerId, input }: { customerId: string; input: CustomerAddressInput }) =>
-      api.post<CustomerAddress>(`/customers/${customerId}/addresses`, input),
+      api.post<CustomerAddress & { created: boolean }>(
+        `/customers/${customerId}/addresses`,
+        input,
+      ),
     onSuccess: (address, { customerId }) => {
       patchCachedCustomer(qc, customerId, (c) => ({
         ...c,

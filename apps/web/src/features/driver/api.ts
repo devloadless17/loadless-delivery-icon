@@ -36,12 +36,13 @@ interface CursorPage<T> {
   meta: { nextCursor: string | null };
 }
 
-async function fetchCursorPage<T>(path: string, cursor: string, signal?: AbortSignal) {
+function fetchCursorPage<T>(path: string, cursor: string, signal?: AbortSignal) {
   const params = new URLSearchParams({ limit: '15' });
   if (cursor) params.set('cursor', cursor);
-  const res = await fetch(`/api/v1${path}${path.includes('?') ? '&' : '?'}${params}`, { signal });
-  if (!res.ok) throw new Error('Failed to load orders');
-  return (await res.json()) as CursorPage<T>;
+  return api.page<T[], CursorPage<T>['meta']>(
+    `${path}${path.includes('?') ? '&' : '?'}${params}`,
+    signal,
+  );
 }
 
 export function useAvailableOrders() {

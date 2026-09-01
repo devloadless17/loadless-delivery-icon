@@ -250,7 +250,7 @@ test.describe('my customers', () => {
     await expect(vendorB.getByRole('button', { name: 'Remove address' })).toHaveCount(0);
 
     // The way forward: copy it, correct it, own the copy.
-    await vendorB.getByRole('button', { name: 'Save my version' }).click();
+    await vendorB.getByRole('button', { name: 'Copy & correct' }).click();
     const addForm = vendorB.getByRole('form', { name: 'New address' });
     await expect(addForm).toBeVisible();
     await vendorB.locator('#new-address').fill('Gemmayze, Gouraud st, Bldg 5, 2nd floor');

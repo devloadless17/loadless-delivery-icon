@@ -3,6 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Search, UserPlus, Users } from 'lucide-react';
 import { useState } from 'react';
+import { api } from '@/lib/api-client';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -41,13 +42,11 @@ interface AdminCustomer {
 function useAdminCustomers(page: number, q: string, vendorId: string) {
   return useQuery({
     queryKey: ['admin', 'customers', page, q, vendorId],
-    queryFn: async () => {
+    queryFn: ({ signal }) => {
       const params = new URLSearchParams({ page: String(page), limit: '20' });
       if (q) params.set('q', q);
       if (vendorId !== 'ALL') params.set('vendorId', vendorId);
-      const res = await fetch(`/api/v1/admin/customers?${params}`);
-      if (!res.ok) throw new Error('Failed to load customers');
-      return (await res.json()) as { data: AdminCustomer[]; meta: PageMeta };
+      return api.page<AdminCustomer[], PageMeta>(`/admin/customers?${params}`, signal);
     },
     placeholderData: (prev) => prev,
   });

@@ -3,7 +3,7 @@
 import { ImagePlus, X } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { ApiError } from '@/lib/api-client';
+import { api, ApiError } from '@/lib/api-client';
 import { fileUrl } from '@/lib/format';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -39,12 +39,11 @@ export function ImageUpload({
     try {
       const body = new FormData();
       body.append('file', file);
-      const res = await fetch(`/api/v1/files/upload?purpose=${purpose}`, { method: 'POST', body });
-      const json = (await res.json()) as { data?: { key: string }; error?: { message: string } };
-      if (!res.ok || !json.data) {
-        throw new ApiError(res.status, 'INTERNAL', json.error?.message ?? 'Upload failed');
-      }
-      onChange(json.data.key);
+      const { key } = await api.postForm<{ key: string }>(
+        `/files/upload?purpose=${purpose}`,
+        body,
+      );
+      onChange(key);
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Upload failed. Try again.');
     } finally {

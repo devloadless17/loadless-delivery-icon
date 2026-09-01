@@ -164,6 +164,13 @@ export interface CustomerAddressView {
   ownership: AddressOwnership;
   /** ADMIN scope only — which vendor owns the row. */
   ownerVendorName?: string | null;
+  /**
+   * Add responses only: did this write actually create a row? The address book
+   * holds one row per place, so saving an identical copy of an existing
+   * address is a no-op that returns that row — and the UI must not call that
+   * "saved".
+   */
+  created?: boolean;
 }
 
 /** Money never merges across currencies — one entry per currency. */

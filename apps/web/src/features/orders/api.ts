@@ -47,13 +47,14 @@ interface CursorPage<T> {
 export function useVendorOrdersList(status: OrderStatus | 'ALL') {
   return useInfiniteQuery({
     queryKey: ['vendor', 'orders', status],
-    queryFn: async ({ pageParam, signal }) => {
+    queryFn: ({ pageParam, signal }) => {
       const params = new URLSearchParams({ limit: '15' });
       if (status !== 'ALL') params.set('status', status);
       if (pageParam) params.set('cursor', pageParam);
-      const res = await fetch(`/api/v1/vendor/orders?${params}`, { signal });
-      if (!res.ok) throw new Error('Failed to load orders');
-      return (await res.json()) as CursorPage<VendorOrder>;
+      return api.page<VendorOrder[], CursorPage<VendorOrder>['meta']>(
+        `/vendor/orders?${params}`,
+        signal,
+      );
     },
     initialPageParam: '',
     getNextPageParam: (last) => last.meta.nextCursor ?? undefined,

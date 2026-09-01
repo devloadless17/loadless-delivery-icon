@@ -26,7 +26,7 @@ export function AddressRow({
   mode,
   onModeChange,
   onStartOrder,
-  onSaveMyVersion,
+  onCopyAndCorrect,
   canManageAll,
 }: {
   customerId: string;
@@ -35,7 +35,8 @@ export function AddressRow({
   mode: RowMode;
   onModeChange: (mode: RowMode) => void;
   onStartOrder?: (address: CustomerAddress) => void;
-  onSaveMyVersion?: (address: CustomerAddress) => void;
+  /** Offered on rows the caller cannot edit: copy it, correct it, own the copy. */
+  onCopyAndCorrect?: (address: CustomerAddress) => void;
   /** ADMIN: the platform can correct any row, whoever added it. */
   canManageAll?: boolean;
 }) {
@@ -50,8 +51,8 @@ export function AddressRow({
   const Icon = LABEL_ICON[address.label];
   // You may rewrite only what you added. Another vendor's row stays readable —
   // sharing is the whole point — but untouchable, so their screen never
-  // changes under them. `onSaveMyVersion` is the way forward: copy it, correct
-  // it, own the copy.
+  // changes under them. `onCopyAndCorrect` is the way forward: copy it,
+  // correct it, own the copy.
   const canEdit = canManageAll || address.ownership === 'MINE';
 
   function beginEdit() {
@@ -219,14 +220,17 @@ export function AddressRow({
               </Button>
             </>
           ) : (
-            onSaveMyVersion && (
+            onCopyAndCorrect && (
               <Button
                 variant="ghost"
                 size="sm"
                 className="text-muted-foreground"
-                onClick={() => onSaveMyVersion(address)}
+                // "Save my version" promised a private copy. There is no such
+                // thing — one row per place, visible to all — and saving an
+                // identical copy does nothing. This says what it does.
+                onClick={() => onCopyAndCorrect(address)}
               >
-                <CopyPlus /> Save my version
+                <CopyPlus /> Copy &amp; correct
               </Button>
             )
           )}

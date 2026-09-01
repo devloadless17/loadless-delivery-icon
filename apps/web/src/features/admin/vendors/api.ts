@@ -12,19 +12,16 @@ export interface AdminVendor {
   user: { email: string };
 }
 
-async function fetchVendors(page: number, q: string) {
+function fetchVendors(page: number, q: string, signal?: AbortSignal) {
   const params = new URLSearchParams({ page: String(page), limit: '20' });
   if (q) params.set('q', q);
-  const res = await fetch(`/api/v1/admin/vendors?${params}`);
-  const json = (await res.json()) as { data: AdminVendor[]; meta: PageMeta };
-  if (!res.ok) throw new Error('Failed to load vendors');
-  return json;
+  return api.page<AdminVendor[], PageMeta>(`/admin/vendors?${params}`, signal);
 }
 
 export function useVendors(page: number, q: string) {
   return useQuery({
     queryKey: ['admin', 'vendors', page, q],
-    queryFn: () => fetchVendors(page, q),
+    queryFn: ({ signal }) => fetchVendors(page, q, signal),
     placeholderData: (prev) => prev,
   });
 }
