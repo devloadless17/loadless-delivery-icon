@@ -203,12 +203,17 @@ export default function DriverOrderDetailPage() {
                 : '.'}
             </DialogDescription>
           </DialogHeader>
+          {/* size="lg" (48px), not the 40px default: a driver taps these
+              one-handed, in a hurry, often with a glove on. The default
+              measured 38px on a phone — under every touch-target guideline,
+              on the two actions that cannot be undone. */}
           <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={() => setConfirmDeliver(false)}>
+            <Button variant="ghost" size="lg" onClick={() => setConfirmDeliver(false)}>
               Not yet
             </Button>
             <Button
               variant="live"
+              size="lg"
               loading={deliverOrder.isPending}
               onClick={() => {
                 setConfirmDeliver(false);
@@ -244,11 +249,12 @@ export default function DriverOrderDetailPage() {
             />
           </div>
           <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={() => setReasonDialog(null)}>
+            <Button variant="ghost" size="lg" onClick={() => setReasonDialog(null)}>
               Cancel
             </Button>
             <Button
               variant={reasonDialog === 'fail' ? 'destructive' : 'default'}
+              size="lg"
               loading={releaseOrder.isPending || failOrder.isPending}
               onClick={() => void submitReason()}
             >

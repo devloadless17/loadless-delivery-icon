@@ -35,7 +35,21 @@ export default defineConfig({
     baseURL: 'http://localhost:3190',
     trace: 'retain-on-failure',
   },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  projects: [
+    {
+      name: 'desktop',
+      use: { ...devices['Desktop Chrome'] },
+      testIgnore: /09-mobile\.spec\.ts/,
+    },
+    {
+      // Most of the real usage is a phone — a driver's entire job, and a
+      // vendor's half the time — so the flows that live there get their own
+      // run at phone size with touch, not just a narrow desktop window.
+      name: 'mobile',
+      use: { ...devices['Pixel 5'] },
+      testMatch: /09-mobile\.spec\.ts/,
+    },
+  ],
   webServer: [
     {
       command: 'node ../api/dist/main.js',
