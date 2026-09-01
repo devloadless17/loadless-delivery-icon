@@ -143,7 +143,13 @@ export const createSettlementSchema = z
      * client; backdating to the end of a previous Beirut day is allowed.
      */
     cutoffAt: z.coerce.date(),
-    expected: z.array(expectedLineSchema).min(1).max(CURRENCIES.length),
+    /**
+     * May be empty: recording a fine against a driver who owes nothing is a
+     * real handover. "There is genuinely nothing to settle" is the server's
+     * call, not the schema's — it answers with SETTLEMENT_NOTHING_TO_SETTLE so
+     * the UI can say why, rather than a shapeless validation error.
+     */
+    expected: z.array(expectedLineSchema).max(CURRENCIES.length),
     collections: z.array(collectionSchema).max(CURRENCIES.length).default([]),
     adjustments: z.array(settlementAdjustmentSchema).max(20).default([]),
     note: z.string().trim().max(500).optional(),

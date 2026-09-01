@@ -266,8 +266,10 @@ test.describe('order lifecycle', () => {
     await admin.goto('/admin/orders');
     await expect(admin.getByRole('table')).toBeVisible();
 
-    // filter: only failed orders
-    await admin.getByRole('combobox').click();
+    // filter: only failed orders. The status picker is the FIRST of four now
+    // that the board also filters by vendor, driver and currency — a bare
+    // combobox lookup matches all of them.
+    await admin.getByRole('combobox').first().click();
     await admin.getByRole('option', { name: 'Failed' }).click();
     await expect(admin.getByRole('table')).toBeVisible();
     const badges = admin.getByRole('table').getByText('Failed');

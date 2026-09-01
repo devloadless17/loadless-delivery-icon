@@ -5,7 +5,6 @@ import {
   CURRENCIES,
   ERROR_CODES,
   adjustmentSignedMinor,
-  beirutDayEnd,
   formatMoney,
   toMinorUnits,
   type CreateSettlementInput,
@@ -788,12 +787,5 @@ export class SettlementsService {
 
   async listForDriver(driverId: string, query: SettlementListQuery) {
     return this.list({ ...query, driverId });
-  }
-
-  /** Default cut-off for the settle dialog: the end of today, in Beirut. */
-  defaultCutoff(): Date {
-    const endOfDay = beirutDayEnd();
-    const now = new Date();
-    return endOfDay > now ? now : endOfDay;
   }
 }

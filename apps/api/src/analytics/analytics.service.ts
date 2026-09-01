@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { Currency, OrderStatus } from '@prisma/client';
+import { beirutDayStart } from '@loadless/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 
@@ -26,10 +27,18 @@ interface DeliveredSums {
 const DASHBOARD_CACHE_KEY = 'cache:analytics:admin-dashboard';
 const DASHBOARD_TTL_SECONDS = 30;
 
+/**
+ * Midnight in BEIRUT, not in whatever timezone the container happens to run.
+ *
+ * `new Date().setHours(0,0,0,0)` is process-local, which in production is UTC
+ * — so "Today" used to begin at 2 or 3am Beirut and a driver's early-morning
+ * deliveries landed in yesterday's card. That is now visible: the driver's
+ * earnings screen shows "Today" directly beside what he owes the platform, and
+ * the two disagreeing by three hours is the kind of thing people settle cash
+ * arguments over.
+ */
 function startOfToday(): Date {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d;
+  return beirutDayStart();
 }
 
 function daysAgo(days: number): Date {

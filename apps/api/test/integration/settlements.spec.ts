@@ -478,15 +478,64 @@ describe('driver settlements (integration)', () => {
     expect(await prisma.order.count({ where: { driverId: driver.id, settlementId: null } })).toBe(2);
   });
 
-  it('refuses when there is nothing to settle', async () => {
+  it('refuses, in words, when there is genuinely nothing to settle', async () => {
     const { driver } = await makeDriver('Nothing Owed Driver');
     const res = await request(server)
       .post(`/api/v1/admin/drivers/${driver.id}/settlements`)
       .set(auth(adminToken))
       .send({ cutoffAt: new Date().toISOString(), expected: [] })
-      .expect(400);
-    // An empty `expected` never reaches the service — the schema requires a line.
-    expect(res.body.error.code).toBe('VALIDATION_FAILED');
+      .expect(409);
+    // A named refusal the UI can explain, not a shapeless validation error.
+    expect(res.body.error.code).toBe('SETTLEMENT_NOTHING_TO_SETTLE');
+  });
+
+  it('records a fine against a driver who owes nothing', async () => {
+    // An empty sweep is not an empty handover: a driver can be square on
+    // commission and still be charged for something. This is why `expected`
+    // is allowed to be empty.
+    const { driver } = await makeDriver('Fined While Square');
+    const preview = await previewOf(driver.id).expect(200);
+    expect(preview.body.data.lines).toHaveLength(0);
+
+    const res = await request(server)
+      .post(`/api/v1/admin/drivers/${driver.id}/settlements`)
+      .set(auth(adminToken))
+      .send({
+        cutoffAt: new Date().toISOString(),
+        expected: [],
+        adjustments: [
+          {
+            currency: 'LBP',
+            type: 'FINE',
+            direction: 'DEBIT',
+            amount: '5000',
+            reason: 'Lost the thermal bag',
+          },
+        ],
+        collections: [{ currency: 'LBP', amountCollected: '5000' }],
+      })
+      .expect(201);
+
+    expect(lineFor(res.body.data, 'LBP')).toMatchObject({
+      orderCount: 0,
+      commissionDue: '0',
+      adjustmentsTotal: '5000',
+      totalDue: '5000',
+      amountCollected: '5000',
+      carriedForward: '0',
+    });
+  });
+
+  it('will not let a delivered order exist without the moment it was delivered', async () => {
+    // The sweep filters `delivered_at <= cutoff`, and no comparison against
+    // NULL is ever true — so such a row would be invisible to every settlement
+    // and its commission would never be collected by anyone.
+    const { driver } = await makeDriver('Timeless Delivery Driver');
+    await expect(
+      seedOrder({ driverId: driver.id, charge: 100_000n, currency: 'LBP' }).then((order) =>
+        prisma.order.update({ where: { id: order.id }, data: { deliveredAt: null } }),
+      ),
+    ).rejects.toThrow(/order_delivered_has_timestamp/);
   });
 
   // ----------------------------------------------------------------- void
