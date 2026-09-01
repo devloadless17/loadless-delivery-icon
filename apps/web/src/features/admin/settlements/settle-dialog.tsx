@@ -143,7 +143,13 @@ export function SettleDialog({
     };
   });
   const hasAdjustmentErrors = adjustmentErrors.some((e) => e.amount || e.reason);
-  const overpaying = computed.some((row) => row.shortfall !== null && row.shortfall < 0n);
+  // Genuinely paying MORE than is owed — not merely a negative shortfall, which
+  // is also what a driver already in credit produces when he hands over nothing.
+  // Without the totalDue guard the confirm button read "Record overpayment" at
+  // someone who was paying nothing at all.
+  const overpaying = computed.some(
+    (row) => row.totalDue > 0n && row.shortfall !== null && row.shortfall < 0n,
+  );
   const nothingOwed = !preview.isPending && lines.length === 0 && adjustments.length === 0;
 
   async function onSubmit() {

@@ -29,6 +29,12 @@ export function OwedPanel() {
   // this is the screen he checks before walking in to pay.
   const owedLines = data.lines.filter((line) => BigInt(line.totalDue) > 0n);
   const creditLines = data.lines.filter((line) => BigInt(line.totalDue) < 0n);
+  // Credit that exactly cancels this period's commission. He owes nothing, so
+  // "all settled" is true — but saying only that would quietly swallow the fact
+  // that his credit is what paid for these deliveries.
+  const coveredByCredit = data.lines.filter(
+    (line) => BigInt(line.totalDue) === 0n && line.unsettledOrderCount > 0,
+  );
 
   if (owedLines.length === 0) {
     return (
@@ -44,6 +50,13 @@ export function OwedPanel() {
             <p key={line.currency} className="mt-1 text-sm font-medium text-success">
               You paid {displayMoney(-BigInt(line.totalDue), line.currency)} too much last time —
               it comes off your next handover.
+            </p>
+          ))}
+          {coveredByCredit.map((line) => (
+            <p key={line.currency} className="mt-1 text-sm text-muted-foreground">
+              Your credit covered the {displayMoney(line.unsettledCommission, line.currency)}{' '}
+              commission on {line.unsettledOrderCount}{' '}
+              {line.unsettledOrderCount === 1 ? 'delivery' : 'deliveries'}.
             </p>
           ))}
         </div>
