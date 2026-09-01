@@ -179,6 +179,68 @@ export class AuthService {
     }
   }
 
+  /**
+   * Change your own password.
+   *
+   * The current password is required, and the same generic failure is used for
+   * a wrong one as for a bad login: this route is reachable with a stolen
+   * session, and it must not become a way to confirm a password.
+   *
+   * Changing a password ends every session — that is the point of changing it —
+   * so this revokes them all and then issues a fresh one for the device that
+   * asked. The person doing it stays signed in here; anyone holding a session
+   * elsewhere, including whoever the change was prompted by, does not.
+   */
+  async changePassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string,
+    ctx: ClientContext,
+  ): Promise<AuthSession> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        vendor: { select: { id: true, status: true } },
+        driver: { select: { id: true, status: true } },
+      },
+    });
+    if (!user) throw this.invalidCredentials();
+
+    const currentOk = await argon2.verify(user.passwordHash, currentPassword).catch(() => false);
+    if (!currentOk) throw this.invalidCredentials();
+
+    if (currentPassword === newPassword) {
+      throw AppException.validation([
+        { field: 'newPassword', message: 'The new password must be different from the current one' },
+      ]);
+    }
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash: await AuthService.hashPassword(newPassword) },
+    });
+
+    // Bumps tokenVersion, so every access token minted before now is dead.
+    await this.revokeAllSessions(userId, 'LOGGED_OUT');
+
+    // Re-read: revokeAllSessions incremented the version this session must carry.
+    const refreshed = await this.prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: { tokenVersion: true },
+    });
+
+    return this.issueSession(
+      {
+        id: user.id,
+        role: user.role,
+        tokenVersion: refreshed.tokenVersion,
+        vendorId: user.vendor?.id,
+        driverId: user.driver?.id,
+      },
+      ctx,
+    );
+  }
+
   /** Deactivation / password change: kill refresh chains + live access tokens + sockets. */
   async revokeAllSessions(userId: string, reason: 'DEACTIVATED' | 'LOGGED_OUT'): Promise<void> {
     const user = await this.prisma.user.update({

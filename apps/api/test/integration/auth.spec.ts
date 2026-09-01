@@ -29,6 +29,14 @@ describe('auth sessions (integration)', () => {
     return found.split(';')[0]!;
   }
 
+  /** The access cookie out of a Set-Cookie header list. */
+  function accessCookie(res: request.Response): string {
+    const raw = res.headers['set-cookie'] as unknown as string[] | undefined;
+    const found = (raw ?? []).find((c) => c.startsWith('access_token='));
+    if (!found) throw new Error('no access cookie was set');
+    return found.split(';')[0]!;
+  }
+
   async function login() {
     return request(server)
       .post('/api/v1/auth/login')
@@ -176,5 +184,87 @@ describe('auth sessions (integration)', () => {
       .post('/api/v1/auth/refresh')
       .set('Cookie', 'refresh_token=not-a-real-token')
       .expect(401);
+  });
+
+  /**
+   * Changing your own password. This exists for the admin the deploy creates
+   * from a secret: without it the platform runs forever on a bootstrap value
+   * that lives in CI. The properties worth pinning are the security ones.
+   */
+  describe('changing your own password', () => {
+    const NEW_PASSWORD = 'a-much-better-password';
+
+    afterEach(async () => {
+      // Put it back so the other tests in this file keep their password.
+      await prisma.user.update({
+        where: { id: vendorUserId },
+        data: { passwordHash: await AuthService.hashPassword(PASSWORD) },
+      });
+    });
+
+    it('requires the CURRENT password, and says nothing useful when it is wrong', async () => {
+      const session = await login();
+      const res = await request(server)
+        .post('/api/v1/auth/change-password')
+        .set('Cookie', accessCookie(session))
+        .send({ currentPassword: 'not-the-password', newPassword: NEW_PASSWORD })
+        .expect(401);
+      // The same generic answer as a bad login: this route is reachable with a
+      // stolen session and must not become a way to confirm a password.
+      expect(res.body.error.code).toBe('INVALID_CREDENTIALS');
+
+      // ...and nothing changed.
+      await request(server)
+        .post('/api/v1/auth/login')
+        .send({ identifier: 'sessions@test.local', password: PASSWORD })
+        .expect(200);
+    });
+
+    it('cannot be reached without a session at all', async () => {
+      await request(server)
+        .post('/api/v1/auth/change-password')
+        .send({ currentPassword: PASSWORD, newPassword: NEW_PASSWORD })
+        .expect(401);
+    });
+
+    it('refuses a new password identical to the old one', async () => {
+      const session = await login();
+      await request(server)
+        .post('/api/v1/auth/change-password')
+        .set('Cookie', accessCookie(session))
+        .send({ currentPassword: PASSWORD, newPassword: PASSWORD })
+        .expect(400);
+    });
+
+    it('changes it, keeps THIS device signed in, and signs every other one out', async () => {
+      const mine = await login();
+      const elsewhere = await login(); // a second device, still valid
+
+      const res = await request(server)
+        .post('/api/v1/auth/change-password')
+        .set('Cookie', accessCookie(mine))
+        .send({ currentPassword: PASSWORD, newPassword: NEW_PASSWORD })
+        .expect(200);
+
+      // This device got fresh cookies and still works.
+      await request(server).get('/api/v1/auth/me').set('Cookie', accessCookie(res)).expect(200);
+
+      // The other device's refresh chain is dead — that is what changing a
+      // password is FOR.
+      await request(server)
+        .post('/api/v1/auth/refresh')
+        .set('Cookie', refreshCookie(elsewhere))
+        .expect(401);
+
+      // The old password no longer works; the new one does.
+      await request(server)
+        .post('/api/v1/auth/login')
+        .send({ identifier: 'sessions@test.local', password: PASSWORD })
+        .expect(401);
+      await request(server)
+        .post('/api/v1/auth/login')
+        .send({ identifier: 'sessions@test.local', password: NEW_PASSWORD })
+        .expect(200);
+    });
   });
 });

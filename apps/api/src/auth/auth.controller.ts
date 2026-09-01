@@ -1,6 +1,6 @@
 import { Body, Controller, Get, HttpCode, Post, Req, Res } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
-import { loginSchema, type LoginInput } from '@loadless/shared';
+import { changePasswordSchema, loginSchema, type ChangePasswordInput, type LoginInput } from '@loadless/shared';
 import type { Request, Response } from 'express';
 import { AppConfigService } from '../config/config.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -63,6 +63,37 @@ export class AuthController {
     const presented = (req.cookies as Record<string, string> | undefined)?.[REFRESH_COOKIE];
     await this.auth.logout(presented);
     clearAuthCookies(res, this.config.isProduction);
+  }
+
+  /**
+   * Change your own password. Authenticated — any role, including the admin
+   * created by the deploy's bootstrap, which is the whole reason this exists:
+   * the seeded password is a bootstrap value and must be replaceable from the
+   * app.
+   *
+   * Throttled like login: it takes the current password, so without a limit it
+   * is a password oracle for anyone holding a stolen session.
+   *
+   * Returns fresh cookies. Every other session is revoked, so the caller stays
+   * signed in HERE and is signed out everywhere else.
+   */
+  @Post('change-password')
+  @HttpCode(200)
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  async changePassword(
+    @Body(new ZodValidationPipe(changePasswordSchema)) body: ChangePasswordInput,
+    @CurrentUser() user: AuthUser,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const session = await this.auth.changePassword(
+      user.userId,
+      body.currentPassword,
+      body.newPassword,
+      { userAgent: req.headers['user-agent'], ip: req.ip },
+    );
+    setAuthCookies(res, session.accessToken, session.refreshToken, this.config.isProduction);
+    return { user: session.user };
   }
 
   @Get('me')

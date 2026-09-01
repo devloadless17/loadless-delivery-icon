@@ -15,6 +15,7 @@ const TABS = [
   { href: '/vendor/orders/new', label: 'New order' },
   { href: '/vendor/customers', label: 'Customers' },
   { href: '/vendor/stats', label: 'Stats' },
+  { href: '/vendor/settings', label: 'Settings' },
 ];
 
 export function VendorHeader() {

@@ -4,6 +4,7 @@ import { Bike, UserRound } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { SignOutButton } from '@/components/sign-out-button';
+import { ChangePasswordCard } from '@/components/change-password-card';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { displayPhone } from '@/lib/format';
 import { useMe } from '@/features/auth/use-me';
@@ -41,6 +42,7 @@ export default function DriverProfilePage() {
           </CardContent>
         </Card>
       )}
+      <ChangePasswordCard />
       <p className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
         <Bike className="size-3.5" aria-hidden /> Photos and details are managed by the platform.
       </p>
