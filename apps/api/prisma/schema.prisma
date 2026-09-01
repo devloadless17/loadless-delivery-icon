@@ -60,24 +60,36 @@ enum FilePurpose {
   DRIVER_BIKE
 }
 
+enum SettlementStatus {
+  SETTLED
+  VOIDED
+}
+
+enum AdjustmentType {
+  FINE
+  BONUS
+  ADVANCE
+  CORRECTION
+}
+
 // ---------------------------------------------------------------------------
 // Auth identity
 // ---------------------------------------------------------------------------
 
 model User {
-  id              String   @id @default(cuid())
+  id              String    @id @default(cuid())
   /// Login identity: DRIVER -> normalizedPhone, ADMIN/VENDOR -> email
   /// (enforced by the user_identity_by_role CHECK).
-  email           String?  @unique
-  normalizedPhone String?  @unique @map("normalized_phone")
-  passwordHash    String   @map("password_hash")
+  email           String?   @unique
+  normalizedPhone String?   @unique @map("normalized_phone")
+  passwordHash    String    @map("password_hash")
   role            Role
-  isActive        Boolean  @default(true) @map("is_active")
-  tokenVersion    Int      @default(0) @map("token_version")
-  failedLogins    Int      @default(0) @map("failed_logins")
+  isActive        Boolean   @default(true) @map("is_active")
+  tokenVersion    Int       @default(0) @map("token_version")
+  failedLogins    Int       @default(0) @map("failed_logins")
   lockedUntil     DateTime? @map("locked_until")
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
 
   vendor        Vendor?
   driver        Driver?
@@ -140,7 +152,9 @@ model Driver {
   createdAt             DateTime      @default(now()) @map("created_at")
   updatedAt             DateTime      @updatedAt @map("updated_at")
 
-  orders Order[]
+  orders      Order[]
+  settlements DriverSettlement[]
+  balances    DriverBalance[]
 
   @@index([dutyStatus, status])
   @@map("drivers")
@@ -279,6 +293,13 @@ model Order {
   platformCommissionAmount BigInt?  @map("platform_commission_amount")
   driverEarnings           BigInt?  @map("driver_earnings")
 
+  /// Set when this order's commission has been collected from the driver in
+  /// cash. Stamping the order — rather than re-deriving a past settlement from
+  /// a date range — is what makes double-collection structurally impossible and
+  /// keeps a settlement reconcilable order by order, forever.
+  settlementId String?           @map("settlement_id")
+  settlement   DriverSettlement? @relation(fields: [settlementId], references: [id])
+
   assignedAt  DateTime? @map("assigned_at")
   pickedUpAt  DateTime? @map("picked_up_at")
   deliveredAt DateTime? @map("delivered_at")
@@ -303,7 +324,11 @@ model Order {
   // Admin's order list and every date-range analytics read. Without it the
   // platform's main operational screen sequential-scans the whole table.
   @@index([createdAt(sort: Desc), id(sort: Desc)])
+  // Listing the orders one settlement covered. Non-partial, so it must be
+  // declared here or Prisma drops it on the next migrate.
+  @@index([settlementId])
   // Partial index for the PENDING feed lives in raw SQL (see constraints migration)
+  // As does orders_unsettled_by_driver_idx — the settlement sweep's hot path.
   @@map("orders")
 }
 
@@ -326,6 +351,113 @@ model OrderStatusHistory {
 // ---------------------------------------------------------------------------
 // Platform
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Driver settlements — the end-of-day cash handover
+//
+// The driver collects the delivery fee at the door, keeps his earnings and owes
+// the platform its commission. These tables are the record of that cash
+// actually changing hands. They are APPEND-ONLY: a settlement is never edited
+// or deleted, only voided, because they describe money that physically moved.
+// ---------------------------------------------------------------------------
+
+/// One recorded cash handover between a driver and the platform.
+model DriverSettlement {
+  id               String @id @default(cuid())
+  settlementNumber String @unique @map("settlement_number")
+
+  driverId String @map("driver_id")
+  driver   Driver @relation(fields: [driverId], references: [id])
+
+  /// Sweep window (periodStart, periodEnd]. periodStart is the previous
+  /// non-voided settlement's periodEnd — null for a driver's first ever.
+  /// Bounding by INSTANTS rather than calendar days is what lets a driver skip
+  /// a day, or turn up at 2am, without anything falling through a gap.
+  periodStart DateTime? @map("period_start")
+  periodEnd   DateTime  @map("period_end")
+
+  status SettlementStatus @default(SETTLED)
+
+  settledAt         DateTime @default(now()) @map("settled_at")
+  collectedByUserId String   @map("collected_by_user_id")
+  note              String?
+
+  voidedAt       DateTime? @map("voided_at")
+  voidedByUserId String?   @map("voided_by_user_id")
+  voidReason     String?   @map("void_reason")
+
+  lines       DriverSettlementLine[]
+  adjustments SettlementAdjustment[]
+  orders      Order[]
+
+  @@index([driverId, settledAt(sort: Desc)])
+  @@index([settledAt(sort: Desc), id(sort: Desc)])
+  @@map("driver_settlements")
+}
+
+/// One currency's arithmetic within a handover. Two rows if the driver ran both
+/// LBP and USD orders. The currencies are NEVER merged into a single total.
+model DriverSettlementLine {
+  id           String           @id @default(cuid())
+  settlementId String           @map("settlement_id")
+  settlement   DriverSettlement @relation(fields: [settlementId], references: [id], onDelete: Cascade)
+  currency     Currency
+
+  orderCount       Int    @map("order_count")
+  /// Sum of delivery charges, for context on the receipt — never itself billed.
+  grossCharge      BigInt @map("gross_charge")
+  commissionDue    BigInt @map("commission_due")
+  /// Signed: fines add, bonuses subtract.
+  adjustmentsTotal BigInt @map("adjustments_total")
+  /// Signed. The previous settlement's shortfall, carried into this one.
+  broughtForward   BigInt @map("brought_forward")
+  totalDue         BigInt @map("total_due")
+  amountCollected  BigInt @map("amount_collected")
+  /// Signed. Positive = still owed, negative = the driver is in credit.
+  carriedForward   BigInt @map("carried_forward")
+
+  @@unique([settlementId, currency])
+  @@map("driver_settlement_lines")
+}
+
+/// Non-order money on a settlement: a fine, a bonus, a fuel advance, a fix.
+/// Exists so an admin never has to misreport what was collected to make the
+/// numbers come out right.
+model SettlementAdjustment {
+  id           String           @id @default(cuid())
+  settlementId String           @map("settlement_id")
+  settlement   DriverSettlement @relation(fields: [settlementId], references: [id], onDelete: Cascade)
+  currency     Currency
+  type         AdjustmentType
+  /// Signed minor units in "what the driver owes" terms: positive increases the
+  /// debt, negative reduces it. The sign is DB-checked against the type.
+  amount       BigInt
+  reason       String
+
+  createdByUserId String   @map("created_by_user_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([settlementId])
+  @@map("settlement_adjustments")
+}
+
+/// A driver's running balance per currency.
+///
+/// Derivable from the settlement chain, but materialised so the admin's
+/// end-of-day worklist ("who owes what right now", across every driver) is one
+/// indexed scan instead of a correlated subquery per driver. An integration
+/// test reconciles it against the chain.
+model DriverBalance {
+  driverId    String   @map("driver_id")
+  driver      Driver   @relation(fields: [driverId], references: [id])
+  currency    Currency
+  /// Signed: >0 the driver owes the platform, <0 the platform owes him.
+  outstanding BigInt   @default(0)
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@id([driverId, currency])
+  @@map("driver_balances")
+}
 
 model PlatformSetting {
   id                   String   @id @default("singleton")

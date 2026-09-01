@@ -16,6 +16,8 @@ export const SOCKET_EVENTS = {
   ORDER_RELEASED: 'order.released',
   DRIVER_DUTY_CHANGED: 'driver.duty_changed',
   SESSION_REVOKED: 'session.revoked',
+  SETTLEMENT_RECORDED: 'settlement.recorded',
+  SETTLEMENT_VOIDED: 'settlement.voided',
 } as const;
 export type SocketEventName = (typeof SOCKET_EVENTS)[keyof typeof SOCKET_EVENTS];
 
@@ -63,6 +65,25 @@ export interface DriverDutyChangedPayload {
   at: string;
 }
 
+/**
+ * A cash handover was recorded. Reaches the admin room and the driver's own
+ * room so his phone shows "all settled" without him refreshing — he is standing
+ * right there when it happens.
+ */
+export interface SettlementRecordedPayload {
+  settlementId: string;
+  settlementNumber: string;
+  driverId: string;
+  at: string;
+}
+
+export interface SettlementVoidedPayload {
+  settlementId: string;
+  settlementNumber: string;
+  driverId: string;
+  at: string;
+}
+
 export interface SessionRevokedPayload {
   reason: 'DEACTIVATED' | 'LOGGED_OUT' | 'TOKEN_REUSE';
 }
@@ -77,6 +98,8 @@ export interface ServerToClientEvents {
   [SOCKET_EVENTS.ORDER_RELEASED]: (payload: OrderReleasedPayload) => void;
   [SOCKET_EVENTS.DRIVER_DUTY_CHANGED]: (payload: DriverDutyChangedPayload) => void;
   [SOCKET_EVENTS.SESSION_REVOKED]: (payload: SessionRevokedPayload) => void;
+  [SOCKET_EVENTS.SETTLEMENT_RECORDED]: (payload: SettlementRecordedPayload) => void;
+  [SOCKET_EVENTS.SETTLEMENT_VOIDED]: (payload: SettlementVoidedPayload) => void;
 }
 
 /** Room naming — used by the gateway; clients never join rooms themselves. */

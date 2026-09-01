@@ -50,6 +50,30 @@ export const ERROR_CODES = {
    */
   CUSTOMER_HAS_ORDERS: 'CUSTOMER_HAS_ORDERS',
 
+  // driver settlements — collecting the platform's commission in cash
+  /**
+   * The figures moved between the admin previewing a settlement and confirming
+   * it — the driver delivered another order in the gap. The write is refused
+   * rather than silently collecting against a total nobody agreed to; the
+   * details carry the fresh figures so the UI can re-render and re-confirm.
+   */
+  SETTLEMENT_TOTALS_CHANGED: 'SETTLEMENT_TOTALS_CHANGED',
+  /** No unsettled orders, no adjustments, no carried debt. There is no handover to record. */
+  SETTLEMENT_NOTHING_TO_SETTLE: 'SETTLEMENT_NOTHING_TO_SETTLE',
+  /**
+   * Only a driver's most recent settlement may be voided. Each settlement's
+   * brought-forward balance is the previous one's shortfall, so voiding out of
+   * order would silently corrupt every settlement after it. To correct an older
+   * one, void forward — the same rule a paper cash book follows.
+   */
+  SETTLEMENT_NOT_LATEST: 'SETTLEMENT_NOT_LATEST',
+  SETTLEMENT_ALREADY_VOIDED: 'SETTLEMENT_ALREADY_VOIDED',
+  /**
+   * A driver with recorded settlements cannot be deleted: those rows are the
+   * record of cash that actually changed hands. Suspend instead.
+   */
+  DRIVER_HAS_SETTLEMENTS: 'DRIVER_HAS_SETTLEMENTS',
+
   // files
   FILE_TOO_LARGE: 'FILE_TOO_LARGE',
   FILE_TYPE_NOT_ALLOWED: 'FILE_TYPE_NOT_ALLOWED',

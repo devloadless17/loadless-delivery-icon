@@ -19,13 +19,26 @@ describe('beirutDayStart / beirutDayEnd', () => {
   const samples = [
     '2026-09-01T09:00:00Z', // mid-summer, UTC+3
     '2026-01-15T09:00:00Z', // mid-winter, UTC+2
-    '2026-03-29T09:00:00Z', // spring-forward day
-    '2026-10-25T09:00:00Z', // fall-back day
+    '2026-03-29T09:00:00Z', // spring-forward day — midnight does not exist here
+    '2026-10-25T09:00:00Z', // fall-back day — midnight happens twice
     '2026-06-30T21:30:00Z', // 00:30 Beirut the NEXT day — the classic off-by-one
   ];
 
-  it.each(samples)('start of the Beirut day containing %s reads 00:00:00', (iso) => {
-    expect(wall(beirutDayStart(new Date(iso)))).toMatch(/, 00:00:00$/);
+  // Every ordinary day starts at midnight. The spring-forward day is excluded
+  // because Beirut's clock jumps 00:00 -> 01:00: there IS no midnight to find,
+  // and the day genuinely begins an hour late.
+  it.each(samples.filter((s) => !s.startsWith('2026-03-29')))(
+    'start of the Beirut day containing %s reads 00:00:00',
+    (iso) => {
+      expect(wall(beirutDayStart(new Date(iso)))).toMatch(/, 00:00:00$/);
+    },
+  );
+
+  it('the spring-forward day begins at 01:00, because 00:00 never happens', () => {
+    const start = beirutDayStart(new Date('2026-03-29T09:00:00Z'));
+    expect(wall(start)).toBe('29/03/2026, 01:00:00');
+    // One second earlier is still the previous day, at 23:59:59 — no gap, no overlap.
+    expect(wall(new Date(start.getTime() - 1000))).toBe('28/03/2026, 23:59:59');
   });
 
   it.each(samples)('end of the Beirut day containing %s reads 23:59:59', (iso) => {
@@ -53,17 +66,43 @@ describe('beirutDayStart / beirutDayEnd', () => {
     expect(beirutDayKey(at)).toBe('2026-07-01');
   });
 
-  it('spans 24h on an ordinary day and 23h across the spring-forward', () => {
-    const hours = (iso: string) =>
-      (beirutDayEnd(new Date(iso)).getTime() + 1 - beirutDayStart(new Date(iso)).getTime()) / 3_600_000;
+  const hours = (iso: string) =>
+    (beirutDayEnd(new Date(iso)).getTime() + 1 - beirutDayStart(new Date(iso)).getTime()) / 3_600_000;
+
+  it('spans exactly 24h on an ordinary day', () => {
     expect(hours('2026-09-01T09:00:00Z')).toBe(24);
-    // Lebanon springs forward in late March; whichever day it lands on, exactly
-    // one day that month is short. Assert the shape rather than the date.
-    const marchDays = Array.from({ length: 31 }, (_, i) =>
+    expect(hours('2026-01-15T09:00:00Z')).toBe(24);
+  });
+
+  // Lebanon shifts twice a year. Whichever dates the rules land on, exactly one
+  // day in March is short and one in October is long, and every other day is
+  // 24h — assert that shape rather than hard-coding a transition date that the
+  // tz database can and does move.
+  it('has exactly one 23h day in March and one 25h day in October', () => {
+    const march = Array.from({ length: 31 }, (_, i) =>
       hours(`2026-03-${String(i + 1).padStart(2, '0')}T09:00:00Z`),
     );
-    expect(marchDays.filter((h) => h === 23)).toHaveLength(1);
-    expect(marchDays.filter((h) => h === 24)).toHaveLength(30);
+    expect(march.filter((h) => h === 23)).toHaveLength(1);
+    expect(march.filter((h) => h === 24)).toHaveLength(30);
+
+    const october = Array.from({ length: 31 }, (_, i) =>
+      hours(`2026-10-${String(i + 1).padStart(2, '0')}T09:00:00Z`),
+    );
+    expect(october.filter((h) => h === 25)).toHaveLength(1);
+    expect(october.filter((h) => h === 24)).toHaveLength(30);
+  });
+
+  // The property that actually matters for settlement: consecutive days must
+  // tile the timeline with no gap and no overlap, or an order delivered in the
+  // seam would be settleable twice or never.
+  it('tiles consecutive days with no gap and no overlap', () => {
+    for (const month of ['03', '10']) {
+      for (let d = 1; d <= 30; d++) {
+        const today = new Date(`2026-${month}-${String(d).padStart(2, '0')}T09:00:00Z`);
+        const tomorrow = new Date(`2026-${month}-${String(d + 1).padStart(2, '0')}T09:00:00Z`);
+        expect(beirutDayEnd(today).getTime() + 1).toBe(beirutDayStart(tomorrow).getTime());
+      }
+    }
   });
 });
 
