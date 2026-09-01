@@ -72,12 +72,24 @@ export default function DriverSettlementPage() {
               <dd className="data-mono">{formatMoney(line.totalDue, line.currency)}</dd>
             </div>
             <Row label="You paid" value={displayMoney(line.amountCollected, line.currency)} />
-            {BigInt(line.carriedForward) !== 0n && (
-              <div className="flex justify-between font-medium text-warning">
-                <dt>{BigInt(line.carriedForward) > 0n ? 'Carried over' : 'In credit'}</dt>
-                <dd className="data-mono">{displayMoney(line.carriedForward, line.currency)}</dd>
-              </div>
-            )}
+            {BigInt(line.carriedForward) !== 0n &&
+              // The label already flips on the sign; the AMOUNT has to flip too,
+              // or it reads "In credit  -10,000 LBP" — a negative under a
+              // positive word. And a credit is good news for the driver, so it
+              // should not be painted in the warning colour.
+              (BigInt(line.carriedForward) > 0n ? (
+                <div className="flex justify-between font-medium text-warning">
+                  <dt>Carried over</dt>
+                  <dd className="data-mono">{displayMoney(line.carriedForward, line.currency)}</dd>
+                </div>
+              ) : (
+                <div className="flex justify-between font-medium text-success">
+                  <dt>In credit</dt>
+                  <dd className="data-mono">
+                    {displayMoney(-BigInt(line.carriedForward), line.currency)}
+                  </dd>
+                </div>
+              ))}
           </dl>
 
           <OrderBreakdown

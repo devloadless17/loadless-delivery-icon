@@ -137,7 +137,18 @@ export default function AdminCustomersPage() {
             <TableBody>
               {data.data.map((customer) => (
                 <TableRow key={customer.id}>
-                  <TableCell className="font-medium">{customer.name}</TableCell>
+                  <TableCell className="font-medium">
+                      {/* A real <button> inside the cell, never role="button" on
+                        the <TableRow> — that replaces the row role and breaks
+                        every getByRole('row') in the suite. */}
+                    <button
+                      type="button"
+                      className="rounded-sm text-left hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      onClick={() => setManagingId(customer.id)}
+                    >
+                      {customer.name}
+                    </button>
+                </TableCell>
                   <TableCell className="data-mono">{displayPhone(customer.normalizedPhone)}</TableCell>
                   <TableCell className="data-mono">{customer._count.orders}</TableCell>
                   <TableCell className="data-mono">{customer._count.addresses}</TableCell>

@@ -223,9 +223,16 @@ function SettlementHistory() {
                   {settlement.lines.map((line) => (
                     <div key={line.currency} className="data-mono text-sm">
                       {displayMoney(line.amountCollected, line.currency)}
-                      {BigInt(line.carriedForward) !== 0n && (
+                      {BigInt(line.carriedForward) > 0n && (
                         <span className="ml-2 text-xs text-warning">
                           short {displayMoney(line.carriedForward, line.currency)}
+                        </span>
+                      )}
+                      {BigInt(line.carriedForward) < 0n && (
+                        // "short -10,000" said the opposite of what happened:
+                        // they paid MORE than they owed.
+                        <span className="ml-2 text-xs text-accent">
+                          {displayMoney(-BigInt(line.carriedForward), line.currency)} credit
                         </span>
                       )}
                     </div>

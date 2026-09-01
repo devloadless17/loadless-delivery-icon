@@ -111,14 +111,24 @@ export default function SettlementDetailPage() {
                   <dd className="data-mono">{displayMoney(line.totalDue, line.currency)}</dd>
                 </div>
                 <Row label="Collected" value={displayMoney(line.amountCollected, line.currency)} />
-                {BigInt(line.carriedForward) !== 0n && (
-                  <div className="flex justify-between font-medium text-warning">
-                    <dt>{BigInt(line.carriedForward) > 0n ? 'Carried forward' : 'In credit'}</dt>
-                    <dd className="data-mono">
-                      {displayMoney(line.carriedForward, line.currency)}
-                    </dd>
-                  </div>
-                )}
+                {BigInt(line.carriedForward) !== 0n &&
+                  (BigInt(line.carriedForward) > 0n ? (
+                    <div className="flex justify-between font-medium text-warning">
+                      <dt>Carried forward</dt>
+                      <dd className="data-mono">
+                        {displayMoney(line.carriedForward, line.currency)}
+                      </dd>
+                    </div>
+                  ) : (
+                    // Positive amount under a positive word — never a minus
+                    // sign beneath the label "In credit".
+                    <div className="flex justify-between font-medium text-accent">
+                      <dt>In credit</dt>
+                      <dd className="data-mono">
+                        {displayMoney(-BigInt(line.carriedForward), line.currency)}
+                      </dd>
+                    </div>
+                  ))}
               </dl>
             </CardContent>
           </Card>

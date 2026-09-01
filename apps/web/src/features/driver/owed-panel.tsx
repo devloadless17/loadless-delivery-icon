@@ -138,6 +138,13 @@ export function MySettlements() {
                         {displayMoney(line.carriedForward, line.currency)} carried over
                       </span>
                     )}
+                    {BigInt(line.carriedForward) < 0n && (
+                      // Overpaying was invisible here. Money the driver is owed
+                      // should never be the thing his receipt declines to show.
+                      <span className="ml-2 text-xs text-success">
+                        {displayMoney(-BigInt(line.carriedForward), line.currency)} in credit
+                      </span>
+                    )}
                   </p>
                 ))}
               </div>

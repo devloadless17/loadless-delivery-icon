@@ -8,8 +8,9 @@ import { OrderStatusBadge } from '@/features/orders/order-status';
 import { useCustomerOrders, type CustomerProfile } from '../api';
 
 /**
- * This customer's history WITH THIS VENDOR. Seeded from the profile payload,
- * so opening the tab costs zero requests; only "Load more" hits the network.
+ * This customer's order history, ALREADY SCOPED BY THE SERVER — a vendor's own
+ * trade, the whole platform for admin. Seeded from the profile payload, so
+ * opening the tab costs zero requests; only "Load more" hits the network.
  */
 export function RecentOrders({ customer }: { customer: CustomerProfile }) {
   const query = useCustomerOrders(customer.id, {
@@ -17,14 +18,22 @@ export function RecentOrders({ customer }: { customer: CustomerProfile }) {
     nextCursor: customer.recentOrdersNextCursor,
   });
   const orders = query.data?.pages.flatMap((page) => page.data) ?? [];
+  // The same component serves both scopes, so the empty state has to follow the
+  // payload: telling an admin that orders elsewhere are "not yours to see" is
+  // false, and it is the one line that would send them hunting for a bug.
+  const isPlatform = customer.stats.scope === 'PLATFORM';
 
   if (orders.length === 0) {
     return (
       <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed py-8 text-center">
         <PackageSearch className="size-7 text-muted-foreground" aria-hidden />
-        <p className="text-sm font-medium">No orders with you yet</p>
+        <p className="text-sm font-medium">
+          {isPlatform ? 'No orders yet' : 'No orders with you yet'}
+        </p>
         <p className="text-sm text-muted-foreground">
-          Their orders with other vendors are not yours to see.
+          {isPlatform
+            ? 'Nobody on the platform has delivered to this customer.'
+            : 'Their orders with other vendors are not yours to see.'}
         </p>
       </div>
     );

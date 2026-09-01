@@ -3,7 +3,7 @@
 import { CURRENCIES, ORDER_STATUSES, type Currency, type OrderStatus } from '@loadless/shared';
 import { Download, PackageSearch, X } from 'lucide-react';
 import Link from 'next/link';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { DateField } from '@/components/ui/date-field';
 import { Label } from '@/components/ui/label';
@@ -40,6 +40,18 @@ export default function AdminOrdersPage() {
   const [vendorId, setVendorId] = useState('ALL');
   const [driverId, setDriverId] = useState('ALL');
   const [currency, setCurrency] = useState<Currency | 'ALL'>('ALL');
+
+  // A driver's detail dialog links here to answer "all their orders". Read the
+  // id ONCE on mount and strip it from the URL, so a later Clear filters isn't
+  // silently undone by a refresh. Done in an effect rather than through
+  // useSearchParams: this page is statically rendered, and reading the query
+  // during render would both demand a Suspense boundary and mismatch hydration.
+  useEffect(() => {
+    const fromUrl = new URLSearchParams(window.location.search).get('driverId');
+    if (!fromUrl) return;
+    setDriverId(fromUrl);
+    window.history.replaceState(null, '', window.location.pathname);
+  }, []);
 
   // The lists that fill the two pickers. Page 1 is enough for a platform of
   // this size, and asking for more would slow the screen for nobody's benefit.

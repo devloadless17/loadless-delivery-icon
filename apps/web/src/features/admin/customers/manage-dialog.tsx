@@ -18,6 +18,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AddressManager } from '@/features/customers/addresses/address-manager';
+import { RecentOrders } from '@/features/customers/profile/recent-orders';
+import { StatStrip } from '@/features/customers/profile/stat-strip';
 import type { CustomerProfile } from '@/features/customers/api';
 
 function useAdminCustomer(id: string | null) {
@@ -73,7 +75,7 @@ export function CustomerManageDialog({
 
   return (
     <Dialog open={customerId !== null} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>Manage customer</DialogTitle>
           <DialogDescription>
@@ -113,6 +115,18 @@ export function CustomerManageDialog({
                 Save identity
               </Button>
             </form>
+
+            {/* Platform-wide, because `stats.scope` is PLATFORM for an admin —
+                the trade a vendor is never shown. It rides in on the profile
+                payload, so this costs no extra request. */}
+            <div className="-mx-6">
+              <StatStrip stats={customer.stats} />
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Orders</p>
+              <RecentOrders customer={customer} />
+            </div>
 
             <div className="space-y-2">
               <p className="text-sm font-medium">Saved addresses</p>

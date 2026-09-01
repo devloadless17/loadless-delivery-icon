@@ -22,6 +22,7 @@ import { useDebouncedValue } from '@/lib/use-debounced-value';
 import { useDrivers, type AdminDriver } from '@/features/admin/drivers/api';
 import { DriverFormDialog } from '@/features/admin/drivers/driver-form-dialog';
 import { DriverDeleteDialog } from '@/features/admin/drivers/driver-delete-dialog';
+import { DriverDetailDialog } from '@/features/admin/drivers/driver-detail-dialog';
 import { useSettings } from '@/features/admin/settings/api';
 
 export default function AdminDriversPage() {
@@ -29,6 +30,7 @@ export default function AdminDriversPage() {
   const [search, setSearch] = useState('');
   const q = useDebouncedValue(search, 300);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [viewing, setViewing] = useState<AdminDriver | null>(null);
   const [editing, setEditing] = useState<AdminDriver | null>(null);
   const [deleting, setDeleting] = useState<AdminDriver | null>(null);
 
@@ -109,7 +111,15 @@ export default function AdminDriversPage() {
                           <Bike className="size-4" />
                         </div>
                       )}
-                      <span className="font-medium">{driver.fullName}</span>
+                      {/* A real <button>, never role="button" on the row —
+                          that replaces the row role and breaks getByRole('row'). */}
+                      <button
+                        type="button"
+                        className="rounded-sm text-left font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        onClick={() => setViewing(driver)}
+                      >
+                        {driver.fullName}
+                      </button>
                     </div>
                   </TableCell>
                   <TableCell className="data-mono">{displayPhone(driver.contactPhone)}</TableCell>
@@ -184,6 +194,7 @@ export default function AdminDriversPage() {
       )}
 
       <DriverFormDialog open={dialogOpen} onOpenChange={setDialogOpen} driver={editing} />
+      <DriverDetailDialog driver={viewing} onOpenChange={(open) => !open && setViewing(null)} />
       <DriverDeleteDialog driver={deleting} onOpenChange={(o) => !o && setDeleting(null)} />
     </div>
   );
