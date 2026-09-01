@@ -6,6 +6,7 @@ import {
 } from '@tanstack/react-query';
 import type { CreateOrderInput, Currency, OrderStatus } from '@loadless/shared';
 import { api } from '@/lib/api-client';
+import { endOfDay } from '@/lib/format';
 
 export interface OrderTimelineEntry {
   id: string;
@@ -48,12 +49,18 @@ interface CursorPage<T> {
   meta: { nextCursor: string | null };
 }
 
-export function useVendorOrdersList(status: OrderStatus | 'ALL') {
+export function useVendorOrdersList(
+  status: OrderStatus | 'ALL',
+  range: { from: string; to: string } = { from: '', to: '' },
+) {
   return useInfiniteQuery({
-    queryKey: ['vendor', 'orders', status],
+    queryKey: ['vendor', 'orders', status, range.from, range.to],
     queryFn: ({ pageParam, signal }) => {
       const params = new URLSearchParams({ limit: '15' });
       if (status !== 'ALL') params.set('status', status);
+      if (range.from) params.set('from', range.from);
+      // Inclusive of the whole end day — see endOfDay.
+      if (range.to) params.set('to', endOfDay(range.to));
       if (pageParam) params.set('cursor', pageParam);
       return api.page<VendorOrder[], CursorPage<VendorOrder>['meta']>(
         `/vendor/orders?${params}`,

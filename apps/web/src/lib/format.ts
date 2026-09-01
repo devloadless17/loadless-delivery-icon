@@ -126,3 +126,14 @@ export function initialsOf(name: string): string {
   const last = parts[parts.length - 1] as string;
   return `${first[0] ?? ''}${last[0] ?? ''}`.toUpperCase();
 }
+
+/**
+ * The inclusive end of a chosen day, for a `to` filter.
+ *
+ * A bare "2026-09-01" parses as midnight, so filtering "up to today" would
+ * silently exclude everything that happened today — the orders someone is most
+ * likely looking for.
+ */
+export function endOfDay(date: string): string {
+  return `${date}T23:59:59`;
+}

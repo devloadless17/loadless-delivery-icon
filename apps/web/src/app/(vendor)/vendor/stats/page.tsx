@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { formatMoney, type Currency, type OrderStatus } from '@loadless/shared';
 import { useState } from 'react';
 import { api } from '@/lib/api-client';
+import { endOfDay } from '@/lib/format';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { DateField } from '@/components/ui/date-field';
 import { Label } from '@/components/ui/label';
@@ -33,7 +34,7 @@ export default function VendorStatsPage() {
     queryFn: () => {
       const params = new URLSearchParams();
       if (from) params.set('from', from);
-      if (to) params.set('to', `${to}T23:59:59`);
+      if (to) params.set('to', endOfDay(to));
       return api.get<VendorStats>(`/vendor/analytics?${params}`);
     },
   });

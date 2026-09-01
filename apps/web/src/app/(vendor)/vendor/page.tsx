@@ -1,10 +1,12 @@
 'use client';
 
 import { displayAddress, type OrderStatus } from '@loadless/shared';
-import { PackagePlus } from 'lucide-react';
+import { PackagePlus, X } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { DateField } from '@/components/ui/date-field';
+import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { displayDateTime, displayMoney, displayPhone } from '@/lib/format';
 import { cn } from '@/lib/utils';
@@ -22,10 +24,13 @@ const TABS: Array<{ key: OrderStatus | 'ALL'; label: string }> = [
 
 export default function VendorOrdersPage() {
   const [tab, setTab] = useState<OrderStatus | 'ALL'>('ALL');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
   const { data, isPending, fetchNextPage, hasNextPage, isFetchingNextPage } =
-    useVendorOrdersList(tab);
+    useVendorOrdersList(tab, { from, to });
 
   const orders = data?.pages.flatMap((p) => p.data) ?? [];
+  const filtered = from !== '' || to !== '';
 
   return (
     <div className="space-y-4">
@@ -54,6 +59,44 @@ export default function VendorOrdersPage() {
             {label}
           </button>
         ))}
+      </div>
+
+      {/* Two equal columns on a phone so the pair always fits the width, a
+          natural row from `sm` up. A vendor looking for "that order last
+          Tuesday" should not have to scroll a list to find it. */}
+      <div className="grid grid-cols-2 items-end gap-2 sm:flex sm:flex-wrap">
+        <div className="space-y-1.5">
+          <Label htmlFor="vo-from">From</Label>
+          <DateField
+            id="vo-from"
+            className="w-full sm:w-44"
+            value={from}
+            onValueChange={setFrom}
+            clearLabel="from date"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="vo-to">To</Label>
+          <DateField
+            id="vo-to"
+            className="w-full sm:w-44"
+            value={to}
+            onValueChange={setTo}
+            clearLabel="to date"
+          />
+        </div>
+        {filtered && (
+          <Button
+            variant="ghost"
+            className="col-span-2 h-10 justify-self-start sm:col-span-1"
+            onClick={() => {
+              setFrom('');
+              setTo('');
+            }}
+          >
+            <X /> Clear dates
+          </Button>
+        )}
       </div>
 
       {isPending ? (
@@ -114,14 +157,32 @@ export default function VendorOrdersPage() {
         <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed py-16 text-center">
           <PackagePlus className="size-8 text-muted-foreground" aria-hidden />
           <div>
-            <p className="font-medium">No orders here yet</p>
-            <p className="text-sm text-muted-foreground">Create an order and drivers will see it instantly.</p>
+            <p className="font-medium">
+              {filtered ? 'No orders in this date range' : 'No orders here yet'}
+            </p>
+            <p className="text-sm text-muted-foreground">
+              {filtered
+                ? 'Try widening the dates, or clear them to see everything.'
+                : 'Create an order and drivers will see it instantly.'}
+            </p>
           </div>
-          <Link href="/vendor/orders/new">
-            <Button>
-              <PackagePlus /> New order
+          {filtered ? (
+            <Button
+              variant="outline"
+              onClick={() => {
+                setFrom('');
+                setTo('');
+              }}
+            >
+              <X /> Clear dates
             </Button>
-          </Link>
+          ) : (
+            <Link href="/vendor/orders/new">
+              <Button>
+                <PackagePlus /> New order
+              </Button>
+            </Link>
+          )}
         </div>
       )}
     </div>

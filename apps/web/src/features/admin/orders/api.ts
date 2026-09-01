@@ -1,6 +1,7 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Currency, OrderStatus } from '@loadless/shared';
 import { api } from '@/lib/api-client';
+import { endOfDay } from '@/lib/format';
 import type { OrderTimelineEntry } from '@/features/orders/api';
 
 export interface AdminOrderRow {
@@ -46,7 +47,7 @@ export function buildAdminOrderParams(filters: AdminOrderFilters): URLSearchPara
   const params = new URLSearchParams();
   if (filters.status) params.set('status', filters.status);
   if (filters.from) params.set('from', filters.from);
-  if (filters.to) params.set('to', `${filters.to}T23:59:59`);
+  if (filters.to) params.set('to', endOfDay(filters.to));
   return params;
 }
 

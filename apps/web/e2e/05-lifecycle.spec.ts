@@ -226,6 +226,38 @@ test.describe('order lifecycle', () => {
     await adminCtx.close();
   });
 
+  test('the vendor can find an order by date — including today', async () => {
+    const { orderNumber } = await createOrderUI(vendor, { charge: '133000' });
+    await vendor.goto('/vendor');
+    await expect(vendor.getByText(orderNumber)).toBeVisible();
+
+    const today = new Date();
+    const iso = (d: Date) => d.toISOString().slice(0, 10);
+    const shift = (days: number) => {
+      const d = new Date(today);
+      d.setDate(d.getDate() + days);
+      return iso(d);
+    };
+
+    // TODAY as the end of the range must INCLUDE today's orders. A bare date
+    // parses as midnight, so without an end-of-day the newest order — the one
+    // someone is most likely hunting for — silently vanishes.
+    // By id, not label: "To" also matches the theme toggle's
+    // aria-label "Switch to dark mode".
+    await vendor.locator('#vo-from').fill(shift(-7));
+    await vendor.locator('#vo-to').fill(iso(today));
+    await expect(vendor.getByText(orderNumber)).toBeVisible();
+
+    // A window that ended yesterday must exclude it.
+    await vendor.locator('#vo-to').fill(shift(-1));
+    await expect(vendor.getByText(orderNumber)).toHaveCount(0);
+    await expect(vendor.getByText('No orders in this date range')).toBeVisible();
+
+    // Clearing brings everything back.
+    await vendor.getByRole('button', { name: 'Clear dates' }).first().click();
+    await expect(vendor.getByText(orderNumber)).toBeVisible();
+  });
+
   test('admin order filters and CSV export work', async ({ browser }) => {
     const adminCtx = await browser.newContext();
     const admin = await adminCtx.newPage();
