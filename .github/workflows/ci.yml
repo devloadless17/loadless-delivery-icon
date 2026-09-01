@@ -263,18 +263,32 @@ jobs:
     steps:
       # Fail fast with the list of missing names rather than a confusing error
       # halfway through the deploy.
+      #
+      # Each secret is mapped in BY NAME. The shorter alternative — serialising
+      # the whole secrets context into one variable — is indistinguishable from a
+      # secret-exfiltration step, and GitHub's workflow scanner refused to run the
+      # file at all because of it ("this workflow file may be malicious",
+      # 2026-09-01). Enumerating is also simply tighter: this step then holds only
+      # the eleven values it actually checks, not every secret in the repository.
       - name: Validate required secrets
         env:
-          REQUIRED: |
-            DOCKER_USERNAME DOCKER_SECRET VPS_HOST VPS_USER VPS_SSH_KEY_B64
-            FRONTEND_DOMAIN ACME_EMAIL JWT_SECRET POSTGRES_PASSWORD
-            SEED_ADMIN_EMAIL SEED_ADMIN_PASSWORD
-          SECRETS_JSON: ${{ toJSON(secrets) }}
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          DOCKER_SECRET: ${{ secrets.DOCKER_SECRET }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY_B64: ${{ secrets.VPS_SSH_KEY_B64 }}
+          FRONTEND_DOMAIN: ${{ secrets.FRONTEND_DOMAIN }}
+          ACME_EMAIL: ${{ secrets.ACME_EMAIL }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          SEED_ADMIN_EMAIL: ${{ secrets.SEED_ADMIN_EMAIL }}
+          SEED_ADMIN_PASSWORD: ${{ secrets.SEED_ADMIN_PASSWORD }}
         run: |
           missing=""
-          for key in $REQUIRED; do
-            val=$(printf '%s' "$SECRETS_JSON" | jq -r --arg k "$key" '.[$k] // ""')
-            [ -z "$val" ] && missing="$missing $key"
+          for name in DOCKER_USERNAME DOCKER_SECRET VPS_HOST VPS_USER VPS_SSH_KEY_B64 \
+                      FRONTEND_DOMAIN ACME_EMAIL JWT_SECRET POSTGRES_PASSWORD \
+                      SEED_ADMIN_EMAIL SEED_ADMIN_PASSWORD; do
+            [ -z "$(eval echo \"\$$name\")" ] && missing="$missing $name"
           done
           if [ -n "$missing" ]; then
             echo "::error::Missing required GitHub secret(s):$missing"
