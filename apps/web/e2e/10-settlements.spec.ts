@@ -16,12 +16,25 @@ import { ADMIN, DRIVER1_PHONE, loginAs } from './helpers';
 test.describe('driver settlements', () => {
   const DRIVER_NAME = 'E2E Driver';
 
+  /**
+   * The row for this driver in the OUTSTANDING table specifically.
+   *
+   * Scoped on purpose: the history table below lists driver names too, so a
+   * bare getByRole('row') matches both and the assertion silently depends on
+   * whether the history query has finished loading.
+   */
+  const owingRow = (page: import('@playwright/test').Page) =>
+    page
+      .getByRole('table', { name: 'Drivers with money outstanding' })
+      .getByRole('row')
+      .filter({ hasText: DRIVER_NAME });
+
   test('admin sees who is holding the platform’s money', async ({ page }) => {
     await loginAs(page, ADMIN, '/admin');
     await page.goto('/admin/settlements');
     await expect(page.getByRole('heading', { name: 'Settlements' })).toBeVisible();
 
-    const row = page.getByRole('row').filter({ hasText: DRIVER_NAME });
+    const row = owingRow(page);
     await expect(row).toBeVisible();
     // The amount is shown per currency with its code — never a bare number.
     await expect(row.getByText(/LBP/)).toBeVisible();
@@ -31,7 +44,7 @@ test.describe('driver settlements', () => {
     await loginAs(page, ADMIN, '/admin');
     await page.goto('/admin/settlements');
 
-    const row = page.getByRole('row').filter({ hasText: DRIVER_NAME });
+    const row = owingRow(page);
     await row.getByRole('button', { name: 'Settle' }).click();
 
     const dialog = page.getByRole('dialog');
@@ -63,7 +76,7 @@ test.describe('driver settlements', () => {
     await loginAs(page, ADMIN, '/admin');
     await page.goto('/admin/settlements');
 
-    const row = page.getByRole('row').filter({ hasText: DRIVER_NAME });
+    const row = owingRow(page);
     await row.getByRole('button', { name: 'Settle' }).click();
 
     const dialog = page.getByRole('dialog');
@@ -75,7 +88,7 @@ test.describe('driver settlements', () => {
     await expect(page.getByText(/Settled — STL-\d{4}-\d{6}/)).toBeVisible();
 
     // He drops off the worklist.
-    await expect(page.getByRole('row').filter({ hasText: DRIVER_NAME })).toHaveCount(0);
+    await expect(owingRow(page)).toHaveCount(0);
   });
 
   // A separate test rather than a role switch mid-test: the admin's session
@@ -123,6 +136,6 @@ test.describe('driver settlements', () => {
 
     // And the money is owed again.
     await page.goto('/admin/settlements');
-    await expect(page.getByRole('row').filter({ hasText: DRIVER_NAME })).toBeVisible();
+    await expect(owingRow(page)).toBeVisible();
   });
 });

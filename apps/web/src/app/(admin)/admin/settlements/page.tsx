@@ -67,7 +67,9 @@ export default function SettlementsPage() {
           </div>
         ) : data && data.data.length > 0 ? (
           <>
-            <Table>
+            {/* Named so the two tables on this page are tellable apart: both
+                list driver names, and an unscoped row query matches either. */}
+            <Table aria-label="Drivers with money outstanding">
               <TableHeader>
                 <TableRow>
                   <TableHead>Driver</TableHead>
@@ -168,7 +170,7 @@ function SettlementHistory() {
       <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
         Recent settlements
       </h2>
-      <Table>
+      <Table aria-label="Recent settlements">
         <TableHeader>
           <TableRow>
             <TableHead>Reference</TableHead>
