@@ -18,7 +18,8 @@ export type PolicyAction =
   | 'order:admin_cancel'
   | 'order:reassign'
   | 'audit:read'
-  | 'analytics:platform';
+  | 'analytics:platform'
+  | 'settlement:manage'; // collect the platform's commission from a driver
 
 const ROLE_GRANTS: Record<PolicyAction, ReadonlyArray<AuthUser['role']>> = {
   'vendor:manage': ['ADMIN'],
@@ -33,6 +34,7 @@ const ROLE_GRANTS: Record<PolicyAction, ReadonlyArray<AuthUser['role']>> = {
   'order:reassign': ['ADMIN'],
   'audit:read': ['ADMIN'],
   'analytics:platform': ['ADMIN'],
+  'settlement:manage': ['ADMIN'],
 };
 
 @Injectable()

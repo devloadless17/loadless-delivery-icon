@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useDriverOrders } from '@/features/driver/api';
 import { OrderStatusBadge } from '@/features/orders/order-status';
+import { MySettlements, OwedPanel } from '@/features/driver/owed-panel';
 
 interface EarningsRow {
   currency: Currency;
@@ -68,6 +69,11 @@ export default function DriverEarningsPage() {
     <div className="space-y-4">
       <h1 className="text-2xl font-semibold">Earnings</h1>
 
+      {/* What he owes comes FIRST. It is the number he needs before he walks
+          into the office, and burying it under his takings would be the wrong
+          way round. */}
+      <OwedPanel />
+
       {isPending || !data ? (
         <div className="grid grid-cols-2 gap-3">
           <Skeleton className="h-24" />
@@ -79,6 +85,8 @@ export default function DriverEarningsPage() {
           <EarningsCard title="Last 7 days" rows={data.week} />
         </div>
       )}
+
+      <MySettlements />
 
       <h2 className="pt-2 text-base font-semibold">Completed deliveries</h2>
       {history.isPending ? (

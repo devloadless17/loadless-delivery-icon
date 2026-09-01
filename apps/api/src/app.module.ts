@@ -15,6 +15,7 @@ import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { AuditModule } from './audit/audit.module';
 import { SettingsModule } from './settings/settings.module';
+import { SettlementsModule } from './settlements/settlements.module';
 import { FilesModule } from './files/files.module';
 import { VendorsModule } from './vendors/vendors.module';
 import { DriversModule } from './drivers/drivers.module';
@@ -72,6 +73,7 @@ import { ResponseEnvelopeInterceptor } from './common/response-envelope.intercep
     UsersModule,
     AuditModule,
     SettingsModule,
+    SettlementsModule,
     FilesModule,
     VendorsModule,
     DriversModule,

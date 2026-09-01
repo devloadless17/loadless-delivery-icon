@@ -4,7 +4,13 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query';
-import type { Currency, DutyStatus, OrderStatus } from '@loadless/shared';
+import type {
+  Currency,
+  DriverOwedView,
+  DutyStatus,
+  OrderStatus,
+  SettlementView,
+} from '@loadless/shared';
 import { api } from '@/lib/api-client';
 
 export interface FeedOrder {
@@ -125,5 +131,29 @@ export function useSetDuty() {
       void qc.invalidateQueries({ queryKey: ['me'] });
       void qc.invalidateQueries({ queryKey: ['driver', 'feed'] });
     },
+  });
+}
+
+// ------------------------------------------------------------- settlements
+
+/**
+ * What the driver owes the platform right now — the SAME figure the admin
+ * collects against, so there is nothing to argue about at the handover.
+ */
+export function useMyOwed() {
+  return useQuery({
+    queryKey: ['driver', 'owed'],
+    queryFn: ({ signal }) => api.get<DriverOwedView>('/driver/settlements/current', signal),
+  });
+}
+
+export function useMySettlements() {
+  return useQuery({
+    queryKey: ['driver', 'settlements'],
+    queryFn: ({ signal }) =>
+      api.page<SettlementView[], { page: number; totalPages: number }>(
+        '/driver/settlements?limit=10',
+        signal,
+      ),
   });
 }

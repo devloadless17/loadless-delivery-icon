@@ -1,0 +1,112 @@
+'use client';
+
+import Link from 'next/link';
+import { CheckCircle2, Wallet } from 'lucide-react';
+import { formatMoney } from '@loadless/shared';
+import { Skeleton } from '@/components/ui/skeleton';
+import { displayDateTime, displayMoney } from '@/lib/format';
+import { useMyOwed, useMySettlements } from './api';
+
+/**
+ * "How much is on me right now" — and, once he has paid, that nothing is.
+ *
+ * This is the same figure the admin collects against, deliberately: the two of
+ * them are standing together counting cash, and the one thing that must not
+ * happen is the driver's phone disagreeing with the admin's screen. It updates
+ * live over the socket, so the moment the handover is recorded the driver sees
+ * himself go clear.
+ */
+export function OwedPanel() {
+  const { data, isPending } = useMyOwed();
+
+  if (isPending) return <Skeleton className="h-28 w-full" />;
+  if (!data) return null;
+
+  if (data.clear) {
+    return (
+      <div className="flex items-start gap-3 rounded-lg border border-success/30 bg-success/10 p-4">
+        <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-success" aria-hidden />
+        <div>
+          <p className="font-semibold text-success">You&apos;re all settled</p>
+          <p className="text-sm text-muted-foreground">
+            Nothing is owed to the platform
+            {data.lastSettledAt ? ` — last handover ${displayDateTime(data.lastSettledAt)}` : ''}.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-lg border border-warning/30 bg-warning/10 p-4">
+      <div className="flex items-center gap-2">
+        <Wallet className="size-5 shrink-0 text-warning" aria-hidden />
+        <p className="font-semibold text-warning">To hand over</p>
+      </div>
+      <div className="mt-3 space-y-3">
+        {data.lines.map((line) => (
+          // Stacked per currency, never added together — LBP and USD are
+          // separate piles of cash and the driver counts them separately.
+          <div key={line.currency}>
+            <p className="data-mono whitespace-nowrap text-2xl font-bold">
+              {formatMoney(line.totalDue, line.currency)}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {line.unsettledOrderCount}{' '}
+              {line.unsettledOrderCount === 1 ? 'delivery' : 'deliveries'}
+              {BigInt(line.broughtForward) !== 0n &&
+                ` · includes ${displayMoney(line.broughtForward, line.currency)} carried over`}
+            </p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** His own receipts — proof he handed the money over. */
+export function MySettlements() {
+  const { data, isPending } = useMySettlements();
+
+  if (isPending) return <Skeleton className="h-24 w-full" />;
+  if (!data || data.data.length === 0) return null;
+
+  return (
+    <>
+      <h2 className="pt-2 text-base font-semibold">Handovers</h2>
+      <ul className="space-y-2">
+        {data.data.map((settlement) => (
+          <li key={settlement.id} className="rounded-lg border bg-card px-4 py-3">
+            <div className="flex items-center justify-between gap-3">
+              <span className="data-mono text-sm font-semibold">
+                {settlement.settlementNumber}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                {displayDateTime(settlement.settledAt)}
+              </span>
+            </div>
+            {settlement.status === 'VOIDED' ? (
+              <p className="mt-1 text-xs text-destructive">Voided — this handover was reversed.</p>
+            ) : (
+              <div className="mt-1 space-y-0.5">
+                {settlement.lines.map((line) => (
+                  <p key={line.currency} className="data-mono text-sm">
+                    Paid {displayMoney(line.amountCollected, line.currency)}
+                    {BigInt(line.carriedForward) > 0n && (
+                      <span className="ml-2 text-xs text-warning">
+                        {displayMoney(line.carriedForward, line.currency)} carried over
+                      </span>
+                    )}
+                  </p>
+                ))}
+              </div>
+            )}
+          </li>
+        ))}
+      </ul>
+      <Link href="/driver/earnings" className="sr-only">
+        Earnings
+      </Link>
+    </>
+  );
+}

@@ -16,6 +16,11 @@ import {
   type OrderReleasedEvent,
   type OrderStatusEvent,
 } from '../orders/order-events';
+import {
+  SETTLEMENT_EVENTS,
+  type SettlementRecordedEvent,
+  type SettlementVoidedEvent,
+} from '../settlements/settlement-events';
 
 interface SocketAuth {
   userId: string;
@@ -197,6 +202,37 @@ export class RealtimeGateway implements OnGatewayConnection {
       dutyStatus: event.dutyStatus,
       at: event.at.toISOString(),
     });
+  }
+
+  // ---------------------------------------------------------- settlements
+
+  /**
+   * A cash handover was recorded. Reaches the admin room and the driver's own
+   * room: he is standing right there when it happens, so his phone should show
+   * "all settled" without him refreshing.
+   */
+  @OnEvent(SETTLEMENT_EVENTS.RECORDED)
+  onSettlementRecorded(event: SettlementRecordedEvent): void {
+    this.server
+      .to([SOCKET_ROOMS.admin, SOCKET_ROOMS.driver(event.driverId)])
+      .emit(SOCKET_EVENTS.SETTLEMENT_RECORDED, {
+        settlementId: event.settlementId,
+        settlementNumber: event.settlementNumber,
+        driverId: event.driverId,
+        at: event.at.toISOString(),
+      });
+  }
+
+  @OnEvent(SETTLEMENT_EVENTS.VOIDED)
+  onSettlementVoided(event: SettlementVoidedEvent): void {
+    this.server
+      .to([SOCKET_ROOMS.admin, SOCKET_ROOMS.driver(event.driverId)])
+      .emit(SOCKET_EVENTS.SETTLEMENT_VOIDED, {
+        settlementId: event.settlementId,
+        settlementNumber: event.settlementNumber,
+        driverId: event.driverId,
+        at: event.at.toISOString(),
+      });
   }
 
   @OnEvent('auth.sessions_revoked')

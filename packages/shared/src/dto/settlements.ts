@@ -100,10 +100,34 @@ const uniqueByCurrency = <T extends { currency: Currency }>(rows: T[]) =>
  * a number nobody agreed to, the server re-computes and refuses the write if
  * these figures have moved (SETTLEMENT_TOTALS_CHANGED).
  */
+/**
+ * Amounts in this file come in two flavours, and mixing them up is invisible in
+ * LBP (exponent 0) while being wrong by a factor of 100 in USD:
+ *
+ *   - HUMAN input — what an admin types into a box ("45000", "12.50"). Parsed
+ *     with the shared toMinorUnits, which is currency-aware.
+ *   - ECHOED server values — figures this API itself just emitted, which cross
+ *     the wire as MINOR units already (the BigInt-as-string convention).
+ *     Re-parsing one as human input would multiply every USD figure by 100.
+ *
+ * `minorAmount` marks the second kind.
+ */
+const minorAmount = z
+  .string()
+  .trim()
+  .regex(/^-?\d{1,24}$/, 'Expected a minor-unit integer');
+
 export const expectedLineSchema = z.object({
   currency: z.enum(CURRENCIES),
   orderCount: z.number().int().min(0),
-  totalDue: majorAmount,
+  /**
+   * commissionDue + broughtForward in MINOR units, exactly as the preview
+   * reported it — the SERVER-derived part only, echoed straight back.
+   * Adjustments are chosen in the dialog after the preview, so the server
+   * recomputes those from the submitted list and they cannot drift.
+   * May be negative: a driver who overpaid last time is in credit.
+   */
+  totalDue: minorAmount,
 });
 
 export const collectionSchema = z.object({
@@ -131,15 +155,6 @@ export const createSettlementSchema = z
     if (!uniqueByCurrency(value.collections)) {
       ctx.addIssue({ code: 'custom', path: ['collections'], message: 'One row per currency' });
     }
-    value.expected.forEach((row, i) => {
-      if (toMinorUnits(row.totalDue, row.currency) === null) {
-        ctx.addIssue({
-          code: 'custom',
-          path: ['expected', i, 'totalDue'],
-          message: `Enter a valid ${row.currency} amount`,
-        });
-      }
-    });
     value.collections.forEach((row, i) => {
       const minor = toMinorUnits(row.amountCollected, row.currency);
       if (minor === null) {
@@ -150,11 +165,16 @@ export const createSettlementSchema = z
         });
       }
     });
-    // Collecting in a currency the driver owes nothing in is a mis-tap, not a
-    // settlement — the server would have no line to attach it to.
-    const expectedCurrencies = new Set(value.expected.map((r) => r.currency));
+    // Collecting in a currency that will have no line is a mis-tap, not a
+    // settlement — the server would have nothing to attach the cash to. A
+    // currency can earn a line either from swept orders/carried debt (which is
+    // what `expected` echoes) or from an adjustment added in this same dialog.
+    const settleable = new Set([
+      ...value.expected.map((r) => r.currency),
+      ...value.adjustments.map((r) => r.currency),
+    ]);
     value.collections.forEach((row, i) => {
-      if (!expectedCurrencies.has(row.currency)) {
+      if (!settleable.has(row.currency)) {
         ctx.addIssue({
           code: 'custom',
           path: ['collections', i, 'currency'],

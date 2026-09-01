@@ -51,6 +51,14 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
     socket.on(SOCKET_EVENTS.DRIVER_DUTY_CHANGED, () => {
       void queryClient.invalidateQueries({ queryKey: ['admin', 'drivers'] });
     });
+    // A recorded handover changes both sides of the same conversation: the
+    // admin's outstanding worklist and the driver's own "what's on me". The
+    // loop above already refreshes every ['driver'] key; this adds the admin's.
+    const invalidateSettlements = () => {
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'settlements'] });
+    };
+    socket.on(SOCKET_EVENTS.SETTLEMENT_RECORDED, invalidateSettlements);
+    socket.on(SOCKET_EVENTS.SETTLEMENT_VOIDED, invalidateSettlements);
     socket.on(SOCKET_EVENTS.SESSION_REVOKED, () => {
       window.location.assign('/login');
     });

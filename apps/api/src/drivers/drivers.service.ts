@@ -196,8 +196,22 @@ export class DriversService {
       );
     }
 
+    // Settlements are the record of cash that physically changed hands, and
+    // driver_settlements.driver_id is ON DELETE RESTRICT — so refuse clearly
+    // here rather than letting the FK surface as an opaque 500.
+    const settlementCount = await this.prisma.driverSettlement.count({ where: { driverId: id } });
+    if (settlementCount > 0) {
+      throw AppException.conflict(
+        ERROR_CODES.DRIVER_HAS_SETTLEMENTS,
+        `${driver.fullName} has ${settlementCount} recorded settlement${settlementCount === 1 ? '' : 's'}, ` +
+          `which are the record of cash they actually handed over. Suspend them instead — ` +
+          `that ends their sessions and takes them off duty, while the record survives.`,
+      );
+    }
+
     await this.prisma.$transaction(async (tx) => {
       // Driver before user: drivers.user_id is ON DELETE RESTRICT.
+      await tx.driverBalance.deleteMany({ where: { driverId: id } });
       await tx.driver.delete({ where: { id } });
       await tx.user.delete({ where: { id: driver.userId } });
     });

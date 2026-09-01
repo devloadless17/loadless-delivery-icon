@@ -298,7 +298,7 @@ model Order {
   /// a date range — is what makes double-collection structurally impossible and
   /// keeps a settlement reconcilable order by order, forever.
   settlementId String?           @map("settlement_id")
-  settlement   DriverSettlement? @relation(fields: [settlementId], references: [id])
+  settlement   DriverSettlement? @relation(fields: [settlementId], references: [id], onDelete: Restrict)
 
   assignedAt  DateTime? @map("assigned_at")
   pickedUpAt  DateTime? @map("picked_up_at")
