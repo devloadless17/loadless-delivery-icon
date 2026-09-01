@@ -132,15 +132,18 @@ export default function DriverOrderDetailPage() {
                 <Phone /> Call
               </Button>
             </a>
+            {/* "Location", not "Navigate": the word has to be understood at a
+                glance by a driver who may not read English comfortably, and it
+                matches "Open location" used everywhere else in the app. */}
             {order.deliveryMapsUrl ? (
               <a href={order.deliveryMapsUrl} target="_blank" rel="noopener noreferrer">
                 <Button variant="outline" className="w-full">
-                  <Navigation /> Navigate
+                  <Navigation /> Location
                 </Button>
               </a>
             ) : (
               <Button variant="outline" disabled className="w-full">
-                <Navigation /> No location link
+                <Navigation /> No location
               </Button>
             )}
           </div>
