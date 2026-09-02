@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 import {
   ADMIN,
   DRIVER1_PHONE,
+  DRIVER2_PHONE,
   VENDOR,
   apiPost,
   createOrderUI,
@@ -239,5 +240,90 @@ test.describe('driver settlements', () => {
     // And the money is owed again.
     await page.goto('/admin/settlements');
     await expect(owingRow(page)).toBeVisible();
+  });
+
+  // ------------------------------------------------------------- edge cases
+
+  test('an adjustment with no reason is refused on the field, not in a toast', async ({
+    page,
+  }) => {
+    // Ali hit this: the reason is required — it is what the driver reads to
+    // understand a charge — but an empty one produced a bare "Validation
+    // failed" naming no field, so there was no way to know what to fix.
+    await loginAs(page, ADMIN, '/admin');
+    await page.goto('/admin/settlements');
+    await owingRow(page).getByRole('button', { name: 'Settle' }).click();
+
+    const dialog = page.getByRole('dialog');
+    await dialog.getByRole('button', { name: 'Add adjustment' }).click();
+    await dialog.getByLabel('Amount').fill('5000');
+
+    // Reason left empty: named on the field, and the confirm button refuses.
+    await expect(dialog.getByText('Say why — the driver sees this')).toBeVisible();
+    await expect(dialog.getByRole('button', { name: /Record/ })).toBeDisabled();
+
+    // Filling it in releases the button.
+    await dialog.getByLabel('Reason').fill('Lost the thermal bag');
+    await expect(dialog.getByText('Say why — the driver sees this')).toHaveCount(0);
+    await expect(dialog.getByRole('button', { name: /Record/ })).toBeEnabled();
+  });
+
+  test('a driver who overpays goes into credit and stays settleable', async ({ browser }) => {
+    // The worst bug Ali found. An overpayment leaves a NEGATIVE balance; the
+    // cash box defaulted to that negative, "-10000" is not a parseable amount,
+    // so the field stayed invalid and the confirm button was dead forever with
+    // no explanation. Uses the SECOND driver so it cannot disturb the flow
+    // above.
+    const vendorCtx = await browser.newContext();
+    const vendor = await vendorCtx.newPage();
+    await loginAs(vendor, VENDOR, '/vendor');
+    const { orderId } = await createOrderUI(vendor, { charge: '100000' });
+
+    const driverCtx = await browser.newContext();
+    const driver = await driverCtx.newPage();
+    await loginAs(driver, DRIVER2_PHONE, '/driver');
+    await ensureDuty(driver, true);
+    await apiPost(driver, `/driver/orders/${orderId}/accept`);
+    await apiPost(driver, `/driver/orders/${orderId}/pickup`);
+    await apiPost(driver, `/driver/orders/${orderId}/deliver`);
+
+    const adminCtx = await browser.newContext();
+    const admin = await adminCtx.newPage();
+    await loginAs(admin, ADMIN, '/admin');
+    await admin.goto('/admin/settlements');
+
+    const row = admin
+      .getByRole('table', { name: 'Drivers with an open balance' })
+      .getByRole('row')
+      .filter({ hasText: 'E2E Driver Two' });
+    await row.getByRole('button', { name: 'Settle' }).click();
+
+    // 100,000 at the platform's 30% is 30,000 owed. Hand over 50,000.
+    const dialog = admin.getByRole('dialog');
+    await expect(dialog.getByText('30,000 LBP').first()).toBeVisible();
+    await dialog.getByLabel('Collected').fill('50000');
+    await expect(dialog.getByText(/Overpaying by 20,000 LBP/)).toBeVisible();
+    await dialog.getByRole('button', { name: 'Record overpayment' }).click();
+    await expect(admin.getByText(/Settled — STL-\d{4}-\d{6}/)).toBeVisible();
+
+    // The worklist states it as credit, not as a debt with a minus sign.
+    await admin.goto('/admin/settlements');
+    await expect(row.getByText('20,000 LBP in credit')).toBeVisible();
+
+    // And he is still settleable: the box defaults to zero rather than to an
+    // unparseable negative, and the confirm button is alive.
+    await row.getByRole('button', { name: 'Settle' }).click();
+    await expect(dialog.getByText(/Nothing to collect — 20,000 LBP in credit/)).toBeVisible();
+    await expect(dialog.getByRole('button', { name: /Record/ })).toBeEnabled();
+    await expect(dialog.getByText('Record overpayment')).toHaveCount(0);
+
+    // His own phone agrees, and does not tell him to hand over a negative.
+    await driver.goto('/driver/earnings');
+    await expect(driver.getByText('To hand over')).toHaveCount(0);
+    await expect(driver.getByText(/You paid 20,000 LBP too much/)).toBeVisible();
+
+    await vendorCtx.close();
+    await driverCtx.close();
+    await adminCtx.close();
   });
 });
