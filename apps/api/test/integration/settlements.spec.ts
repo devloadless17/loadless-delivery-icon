@@ -924,6 +924,48 @@ describe('driver settlements (integration)', () => {
     ]);
   });
 
+  // -------------------------------------------------------- finding a driver
+
+  it('finds a driver by the phone number exactly as the UI displays it', async () => {
+    // This is how a Lebanese number is written and how the app renders it back:
+    // "03 123 456". Both phone columns store E.164, so a hand-stripped
+    // "03123456" appears nowhere in "+9613123456" and the search returned
+    // nothing at all — silently, which is the worst way for a lookup to fail.
+    const hash = await AuthService.hashPassword('password123');
+    const user = await prisma.user.create({
+      data: { normalizedPhone: '+9613123456', passwordHash: hash, role: 'DRIVER' },
+    });
+    await prisma.driver.create({
+      data: {
+        userId: user.id,
+        fullName: 'Findable By Phone',
+        contactPhone: '+9613123456',
+      },
+    });
+
+    for (const typed of ['03 123 456', '03123456', '+961 3 123 456']) {
+      const res = await request(server)
+        .get(`/api/v1/admin/drivers?q=${encodeURIComponent(typed)}`)
+        .set(auth(adminToken))
+        .expect(200);
+      const names = res.body.data.map((d: { fullName: string }) => d.fullName);
+      expect(`${typed} -> ${names.join(',')}`).toBe(`${typed} -> Findable By Phone`);
+    }
+
+    // A name still works, and a number belonging to nobody finds nobody.
+    const byName = await request(server)
+      .get('/api/v1/admin/drivers?q=Findable')
+      .set(auth(adminToken))
+      .expect(200);
+    expect(byName.body.data).toHaveLength(1);
+
+    const miss = await request(server)
+      .get('/api/v1/admin/drivers?q=03%20999%20999')
+      .set(auth(adminToken))
+      .expect(200);
+    expect(miss.body.data).toHaveLength(0);
+  });
+
   // ------------------------------------------------------- deleting a driver
 
   it('refuses to delete a driver who has settlements but no orders', async () => {

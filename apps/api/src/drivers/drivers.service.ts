@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { ERROR_CODES } from '@loadless/shared';
+import { ERROR_CODES, phoneSearchPrefix } from '@loadless/shared';
 import type { CreateDriverInput, OffsetPagination, UpdateDriverInput } from '@loadless/shared';
 import { AppException } from '../common/app.exception';
 import { offsetArgs, offsetMeta } from '../common/pagination';
@@ -68,8 +68,18 @@ export class DriversService {
         ? {
             OR: [
               { fullName: { contains: filters.q, mode: 'insensitive' as const } },
-              { contactPhone: { contains: filters.q.replace(/\s/g, '') } },
-              { user: { normalizedPhone: { contains: filters.q.replace(/\s/g, '') } } },
+              // The STORED prefix, country code included — the same rule the
+              // customer search uses. Stripping whitespace by hand looked
+              // equivalent and was not: both phone columns hold E.164, so a
+              // typed "03 123 456" became "03123456", which appears nowhere in
+              // "+9613123456". Searching a driver by the number the UI itself
+              // DISPLAYS returned nothing at all, silently.
+              ...(phoneSearchPrefix(filters.q)
+                ? [
+                    { contactPhone: { startsWith: phoneSearchPrefix(filters.q) } },
+                    { user: { normalizedPhone: { startsWith: phoneSearchPrefix(filters.q) } } },
+                  ]
+                : []),
             ],
           }
         : {}),

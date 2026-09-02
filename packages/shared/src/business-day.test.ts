@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { beirutDayEnd, beirutDayKey, beirutDayStart, beirutRange } from './business-day';
+import { beirutDayEnd, beirutDayStart, beirutRange } from './business-day';
 
 const beirut = new Intl.DateTimeFormat('en-GB', {
   timeZone: 'Asia/Beirut',
@@ -47,8 +47,9 @@ describe('beirutDayStart / beirutDayEnd', () => {
 
   it.each(samples)('start and end of %s fall on the same Beirut date', (iso) => {
     const at = new Date(iso);
-    expect(beirutDayKey(beirutDayStart(at))).toBe(beirutDayKey(at));
-    expect(beirutDayKey(beirutDayEnd(at))).toBe(beirutDayKey(at));
+    const day = (d: Date) => wall(d).split(',')[0];
+    expect(day(beirutDayStart(at))).toBe(day(at));
+    expect(day(beirutDayEnd(at))).toBe(day(at));
   });
 
   it('brackets the instant it was asked about', () => {
@@ -63,7 +64,8 @@ describe('beirutDayStart / beirutDayEnd', () => {
     // 21:30 UTC on 30 June is 00:30 on 1 July in Beirut. A server using its own
     // local midnight would settle this delivery into the wrong day.
     const at = new Date('2026-06-30T21:30:00Z');
-    expect(beirutDayKey(at)).toBe('2026-07-01');
+    expect(wall(at)).toBe('01/07/2026, 00:30:00');
+    expect(wall(beirutDayStart(at))).toBe('01/07/2026, 00:00:00');
   });
 
   const hours = (iso: string) =>
@@ -106,12 +108,6 @@ describe('beirutDayStart / beirutDayEnd', () => {
   });
 });
 
-describe('beirutDayKey', () => {
-  it('formats as YYYY-MM-DD', () => {
-    expect(beirutDayKey(new Date('2026-09-01T09:00:00Z'))).toBe('2026-09-01');
-    expect(beirutDayKey(new Date('2026-01-05T09:00:00Z'))).toBe('2026-01-05');
-  });
-});
 
 describe('beirutRange', () => {
   it('snaps a bare picked date onto the real Beirut day', () => {

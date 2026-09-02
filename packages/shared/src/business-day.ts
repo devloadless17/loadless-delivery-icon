@@ -126,11 +126,6 @@ export function beirutDayEnd(at: Date = new Date()): Date {
   return new Date(nextDayStart.getTime() - 1);
 }
 
-/** "2026-09-01" — the Beirut calendar day an instant falls on. */
-export function beirutDayKey(at: Date = new Date()): string {
-  const wall = beirutWallClock(at);
-  return `${wall.year}-${String(wall.month).padStart(2, '0')}-${String(wall.day).padStart(2, '0')}`;
-}
 
 /**
  * Snap a user-picked date range onto real Beirut day boundaries.
