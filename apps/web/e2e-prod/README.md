@@ -22,14 +22,29 @@ accident that resembles one.
   still mis-prices anything created in between.
 - Reads pre-existing data but modifies none of it.
 
+## STOP — this suite WRITES to production
+
+It creates vendors, drivers, customers, orders and settlements, and records real
+handovers. That was right while the platform was being commissioned and empty.
+It is **wrong once real trade is running**: the same run puts fabricated
+deliveries and fabricated money alongside a real business's books, and the
+platform has been live to real users since 2026-09-03.
+
+Before running it, answer one question: **does production have real data in it?**
+If yes, or if you are not sure, do not run this. Point it at a staging
+deployment with `PROD_BASE_URL` instead.
+
 ## Running it
 
 ```bash
-PROD_ADMIN_PASSWORD='…' pnpm --filter @loadless/web exec \
-  playwright test --config e2e-prod/playwright.config.ts
+PROD_ADMIN_PASSWORD='…' \
+PRODCHECK_I_UNDERSTAND_THIS_WRITES_REAL_DATA=yes \
+pnpm --filter @loadless/web exec playwright test --config e2e-prod/playwright.config.ts
 ```
 
-Without `PROD_ADMIN_PASSWORD` every test skips rather than guessing credentials.
+Both variables are required. Without the password it will not guess credentials;
+without the consent phrase it refuses to write to a live system. The phrase is
+deliberately long so it cannot be set by reflex or left lying in a shell.
 `PROD_BASE_URL` overrides the target (default `https://flashdelivery.loadless.site`).
 
 Read a failure as a production failure: there are no fixtures and no reset here.

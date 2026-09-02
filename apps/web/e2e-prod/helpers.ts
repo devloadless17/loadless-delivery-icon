@@ -18,6 +18,34 @@ export const ADMIN_EMAIL = process.env.PROD_ADMIN_EMAIL ?? 'ali@loadless.ai';
 export const ADMIN_PASSWORD = process.env.PROD_ADMIN_PASSWORD ?? '';
 
 /**
+ * A deliberate, awkward opt-in — required IN ADDITION to the password.
+ *
+ * This suite WRITES to production: it creates vendors, drivers, customers,
+ * orders and settlements, and records real handovers. That was appropriate on
+ * an empty platform being commissioned. It is NOT appropriate once real trade
+ * is running, where the same run means fabricated deliveries and fabricated
+ * money sitting alongside a real business's books.
+ *
+ * A password alone is too easy to have lying around in a shell, so it is not
+ * enough to start this. The phrase below has to be typed on purpose, and its
+ * wording is the warning:
+ *
+ *   PRODCHECK_I_UNDERSTAND_THIS_WRITES_REAL_DATA=yes
+ *
+ * Before ever setting it again, ask whether production has real customers in
+ * it. If the answer is yes or "not sure", the answer to running this is no.
+ */
+export const WRITE_CONFIRMED =
+  process.env.PRODCHECK_I_UNDERSTAND_THIS_WRITES_REAL_DATA === 'yes';
+
+/** Every spec guards on this. Missing password OR missing consent = skip. */
+export const SKIP_REASON = !ADMIN_PASSWORD
+  ? 'PROD_ADMIN_PASSWORD not set — refusing to guess production credentials'
+  : !WRITE_CONFIRMED
+    ? 'Refusing to run: this suite WRITES to production. Set PRODCHECK_I_UNDERSTAND_THIS_WRITES_REAL_DATA=yes only if production has no real data to spoil.'
+    : '';
+
+/**
  * One stamp for the WHOLE run, read from the file globalSetup wrote.
  *
  * Not Date.now() at module load: that is per process, and Playwright restarts

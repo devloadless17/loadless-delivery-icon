@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
-import { ADMIN_EMAIL, ADMIN_PASSWORD, asAdmin, login } from './helpers';
+import { ADMIN_EMAIL, ADMIN_PASSWORD, SKIP_REASON, asAdmin, login } from './helpers';
 
-test.skip(!ADMIN_PASSWORD, 'PROD_ADMIN_PASSWORD not set');
+test.skip(!!SKIP_REASON, SKIP_REASON);
 test.describe.configure({ mode: 'serial', retries: 0 });
 
 test.describe('production: authentication', () => {

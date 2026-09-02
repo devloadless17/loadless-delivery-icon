@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
-import { ADMIN_PASSWORD, DRIVER_A_PHONE, PASSWORD, login, expectNoSidewaysScroll } from './helpers';
+import { SKIP_REASON, ADMIN_PASSWORD, DRIVER_A_PHONE, PASSWORD, login, expectNoSidewaysScroll } from './helpers';
 
-test.skip(!ADMIN_PASSWORD, 'PROD_ADMIN_PASSWORD not set');
+test.skip(!!SKIP_REASON, SKIP_REASON);
 test.describe.configure({ mode: 'serial', retries: 0 });
 
 /** The phone is where the product lives, so the driver's screens are checked
