@@ -23,6 +23,16 @@ import {
  * Runs last: it deliberately settles the drivers the other specs created.
  */
 test.describe('driver settlements', () => {
+  // No retries here, deliberately. These tests are serial and each one moves
+  // the drivers' money on to the next state, so a retry does not repeat the
+  // failure — it runs the same steps against a world the first attempt already
+  // changed, and fails somewhere else entirely. That happened in CI today: the
+  // real fault was a wiped adjustment, the retry reported a missing
+  // "Overpaying by 20,000 LBP" three assertions earlier, and the second,
+  // meaningless failure is the one that got read first. One clear failure beats
+  // two contradictory ones.
+  test.describe.configure({ retries: 0 });
+
   const DRIVER_NAME = 'E2E Driver';
 
   /**
