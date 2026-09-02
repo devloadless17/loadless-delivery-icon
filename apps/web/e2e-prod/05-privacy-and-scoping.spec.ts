@@ -30,11 +30,27 @@ test.describe('production: privacy and scoping', () => {
     await expect(page.getByText(`${STAMP} Customer One`)).toHaveCount(0);
   });
 
-  test('a complete phone number is the only way to reach anyone else', async ({ page }) => {
+  test('a complete phone number reaches them — and reveals nothing else', async ({ page }) => {
     await login(page, VENDOR_B_EMAIL, PASSWORD, '/vendor');
     await page.goto('/vendor/customers');
     await page.getByPlaceholder(/Search/).fill(CUSTOMER_1_PHONE);
-    await expect(page.getByText(`${STAMP} Customer One`).first()).toBeVisible();
+
+    const platform = page.getByRole('region', { name: 'On the platform' });
+    await expect(platform).toBeVisible();
+    await expect(platform.getByText(`${STAMP} Customer One`)).toBeVisible();
+
+    // Identity only. A vendor must learn nothing about who ELSE serves them:
+    // not the other shop's name, not an address, not an ownership badge.
+    await expect(platform.getByText(`${STAMP} Burger`)).toHaveCount(0);
+    await expect(platform.getByText('Added by you')).toHaveCount(0);
+    await expect(platform.getByText(/Hamra, Beirut/)).toHaveCount(0);
+  });
+
+  test('a partial number opens nobody on the platform', async ({ page }) => {
+    await login(page, VENDOR_B_EMAIL, PASSWORD, '/vendor');
+    await page.goto('/vendor/customers');
+    await page.getByPlaceholder(/Search/).fill(CUSTOMER_1_PHONE.slice(0, 4));
+    await expect(page.getByRole('region', { name: 'On the platform' })).toHaveCount(0);
   });
 
   test('a vendor is refused at every admin endpoint', async ({ page }) => {
