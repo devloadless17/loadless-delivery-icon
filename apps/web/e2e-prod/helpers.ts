@@ -1,4 +1,8 @@
-import { expect, type Page } from '@playwright/test';
+import { expect, type BrowserContext, type Page } from '@playwright/test';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { join } from 'node:path';
+import { readRunId } from './run-id';
 
 /**
  * Shared setup for the PRODUCTION verification suite.
@@ -13,8 +17,15 @@ import { expect, type Page } from '@playwright/test';
 export const ADMIN_EMAIL = process.env.PROD_ADMIN_EMAIL ?? 'ali@loadless.ai';
 export const ADMIN_PASSWORD = process.env.PROD_ADMIN_PASSWORD ?? '';
 
-/** One stamp per whole run, so a re-run cannot collide with the last. */
-export const RUN = process.env.PRODCHECK_RUN ?? String(Date.now()).slice(-8);
+/**
+ * One stamp for the WHOLE run, read from the file globalSetup wrote.
+ *
+ * Not Date.now() at module load: that is per process, and Playwright restarts
+ * its worker after a failure — so one failure changed every identity the
+ * remaining specs used, and they failed signing in as accounts that were never
+ * created.
+ */
+export const RUN = readRunId();
 export const STAMP = `PRODCHECK-${RUN}`;
 export const PASSWORD = 'ProdCheck!2026';
 
@@ -33,12 +44,85 @@ export function displayedPhone(phone: string): string {
   return `${phone.slice(0, 2)} ${phone.slice(2, 5)} ${phone.slice(5)}`;
 }
 
+/**
+ * Sign-in is rate-limited to 5 attempts per ACCOUNT per minute — correct
+ * product behaviour, and something a test suite has to respect rather than
+ * work around. Logging in afresh in every test burned the allowance by the
+ * ninth one, the login 429'd, and the navigation never came: the suite failed
+ * as a 90-second timeout that looked like production being slow.
+ *
+ * So each account signs in ONCE per run and its cookies are reused. Playwright
+ * gives every test a fresh context, so the session is replayed onto it rather
+ * than re-earned.
+ */
+type Cookies = Parameters<BrowserContext['addCookies']>[0];
+
+/**
+ * Sessions are cached on DISK, not in memory.
+ *
+ * Sign-in is limited to 5 attempts per account per minute — correct behaviour,
+ * and a suite has to live within it. An in-memory cache does not: Playwright
+ * gives each project its own worker and restarts a worker after a failure, so
+ * the cache is empty precisely when it matters and every restart re-earns every
+ * session. That is how a run ends up throttled and reports "Too many attempts"
+ * as a 90-second navigation timeout.
+ */
+const SESSION_DIR = join(process.cwd(), 'test-results', '.sessions');
+const sessionFile = (identifier: string) =>
+  join(SESSION_DIR, `${createHash('sha256').update(identifier).digest('hex').slice(0, 16)}.json`);
+
+function loadSession(identifier: string): Cookies | null {
+  const f = sessionFile(identifier);
+  if (!existsSync(f)) return null;
+  try {
+    return JSON.parse(readFileSync(f, 'utf8')) as Cookies;
+  } catch {
+    return null;
+  }
+}
+
+function saveSession(identifier: string, cookies: Cookies) {
+  mkdirSync(SESSION_DIR, { recursive: true });
+  writeFileSync(sessionFile(identifier), JSON.stringify(cookies), 'utf8');
+}
+
 export async function login(page: Page, identifier: string, password: string, home: string) {
-  await page.goto('/login');
-  await page.getByLabel('Email or phone number').fill(identifier);
-  await page.getByLabel('Password').fill(password);
-  await page.getByRole('button', { name: 'Sign in' }).click();
-  await page.waitForURL(`**${home}`);
+  const cached = loadSession(identifier);
+  if (cached) {
+    await page.context().addCookies(cached);
+    await page.goto(home);
+    // If the replayed session is no longer good the app bounces to /login;
+    // fall through and sign in properly rather than failing obscurely later.
+    if (!page.url().includes('/login')) return;
+  }
+
+  // Sign-in allows 5 attempts per account per minute. That is the product being
+  // right, not an obstacle to route around, so when the suite does trip it the
+  // honest response is to wait the window out and try once more — never to
+  // weaken the limit or spread logins across accounts to dodge it.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    await page.goto('/login');
+    await page.getByLabel('Email or phone number').fill(identifier);
+    await page.getByLabel('Password').fill(password);
+    await page.getByRole('button', { name: 'Sign in' }).click();
+
+    const landed = await page
+      .waitForURL(`**${home}`, { timeout: 30_000 })
+      .then(() => true)
+      .catch(() => false);
+
+    if (landed) {
+      saveSession(identifier, await page.context().cookies());
+      return;
+    }
+
+    const alerts = (await page.locator('[role="alert"]').allInnerTexts()).join(' | ');
+    if (attempt === 0 && /too many/i.test(alerts)) {
+      await page.waitForTimeout(62_000);
+      continue;
+    }
+    throw new Error(`Sign-in as ${identifier} did not land on ${home}: ${alerts || '(no message)'}`);
+  }
 }
 
 export const asAdmin = (page: Page) => login(page, ADMIN_EMAIL, ADMIN_PASSWORD, '/admin');
@@ -80,8 +164,15 @@ export async function createOrder(
 ) {
   await vendor.goto('/vendor/orders/new');
   await vendor.getByPlaceholder('Customer phone — 03 123 456').fill(opts.customerPhone);
+  // The name field appears only once the phone resolves to a NEW customer, and
+  // isVisible() answers immediately rather than waiting — so a slow lookup meant
+  // the name was silently skipped and the form failed validation. The click then
+  // did nothing and the test died waiting for a navigation that was never coming.
   const nameField = vendor.getByLabel('Customer name (new customer)');
-  if (await nameField.isVisible().catch(() => false)) await nameField.fill(opts.customerName);
+  await nameField.waitFor({ state: 'visible', timeout: 15_000 }).catch(() => {});
+  if (await nameField.isVisible().catch(() => false)) {
+    await nameField.fill(opts.customerName);
+  }
   await vendor.getByLabel('Address for THIS order').fill(`${STAMP} Hamra, Beirut`);
   if (opts.currency === 'USD') {
     await vendor.locator('#no-currency').click();
@@ -89,7 +180,16 @@ export async function createOrder(
   }
   await vendor.getByLabel('Amount').fill(opts.charge);
   await vendor.getByRole('button', { name: 'Create order' }).click();
-  await vendor.waitForURL((u) => /\/vendor\/orders\/[a-z0-9]{20,}$/.test(u.pathname));
+  // Surface a refusal as a refusal. Without this a rejected form is reported as
+  // a navigation timeout, which reads like the site is down.
+  await vendor
+    .waitForURL((u) => /\/vendor\/orders\/[a-z0-9]{20,}$/.test(u.pathname), { timeout: 20_000 })
+    .catch(async () => {
+      const problem = await vendor.locator('[role="alert"], .text-destructive').allInnerTexts();
+      throw new Error(
+        `Create order did not navigate. Page said: ${problem.join(' | ') || '(nothing)'}`,
+      );
+    });
   return {
     orderId: vendor.url().split('/').pop() as string,
     orderNumber: (await vendor.locator('h1').innerText()).trim(),

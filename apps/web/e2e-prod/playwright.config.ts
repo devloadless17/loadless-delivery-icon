@@ -17,11 +17,13 @@ const BASE = process.env.PROD_BASE_URL ?? 'https://flashdelivery.loadless.site';
 
 export default defineConfig({
   testDir: '.',
-  timeout: 90_000,
+  // Long enough to absorb one 62s wait for the login throttle window to clear.
+  timeout: 150_000,
   expect: { timeout: 15_000 },
   workers: 1,
   retries: 0,
   reporter: 'line',
+  globalSetup: './global-setup.ts',
   use: { baseURL: BASE, trace: 'retain-on-failure' },
   projects: [
     {

@@ -122,8 +122,26 @@ test.describe('production: the money path', () => {
     await page.goto('/driver/earnings');
     await expect(page.getByText('To hand over')).toBeVisible();
     await expect(page.getByText(/carried over/).first()).toBeVisible();
-    // USD was paid in full, so it no longer appears as owed.
-    await expect(page.getByText(/[\d,.]+ USD/)).toHaveCount(0);
+
+    // Assert the PAYLOAD rather than the pixels. The page legitimately still
+    // shows USD earnings and a USD handover record, so hunting for the string
+    // "USD" on screen tested nothing; and scoping by DOM shape is guesswork.
+    // What actually has to be true is that USD is no longer OWED.
+    const res = await page.request.get('/api/v1/driver/settlements/current');
+    expect(res.status()).toBe(200);
+    const owed = (await res.json()) as {
+      data: {
+        clear: boolean;
+        lines: Array<{ currency: string; totalDue: string; broughtForward: string }>;
+      };
+    };
+    expect(owed.data.clear).toBe(false);
+    expect(owed.data.lines.map((l) => l.currency)).toEqual(['LBP']);
+
+    const lbp = owed.data.lines[0]!;
+    // The shortfall carried: 50,000 owed, 10,000 handed over.
+    expect(lbp.broughtForward).toBe('40000');
+    expect(lbp.totalDue).toBe('40000');
     await ctx.close();
   });
 

@@ -65,7 +65,13 @@ export function OwedPanel() {
   }
 
   return (
-    <div className="rounded-lg border border-warning/30 bg-warning/10 p-4">
+    // A named landmark: this is the figure the driver is asked to act on, so it
+    // should be reachable directly by anyone navigating by region rather than
+    // found by scrolling. It also gives a test something honest to scope to.
+    <section
+      aria-label="To hand over"
+      className="rounded-lg border border-warning/30 bg-warning/10 p-4"
+    >
       <div className="flex items-center gap-2">
         <Wallet className="size-5 shrink-0 text-warning" aria-hidden />
         <p className="font-semibold text-warning">To hand over</p>
@@ -110,7 +116,7 @@ export function OwedPanel() {
           </p>
         ))}
       </div>
-    </div>
+    </section>
   );
 }
 

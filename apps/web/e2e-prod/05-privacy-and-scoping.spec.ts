@@ -35,22 +35,45 @@ test.describe('production: privacy and scoping', () => {
     await page.goto('/vendor/customers');
     await page.getByPlaceholder(/Search/).fill(CUSTOMER_1_PHONE);
 
-    const platform = page.getByRole('region', { name: 'On the platform' });
-    await expect(platform).toBeVisible();
-    await expect(platform.getByText(`${STAMP} Customer One`)).toBeVisible();
+    // Assert the PAYLOAD, not the rendering. The rule is about what the server
+    // is willing to tell one vendor about another's customer, and the screen
+    // only shows what it is handed — so checking the response proves the rule
+    // itself rather than one presentation of it.
+    const res = await page.request.get(
+      `/api/v1/customers/lookup?q=${CUSTOMER_1_PHONE.replace(/^0/, '')}`,
+    );
+    expect(res.status()).toBe(200);
+    const body = (await res.json()) as {
+      data: { matches: Array<Record<string, unknown>>; hasMore: boolean };
+    };
+    expect(body.data.matches.length).toBe(1);
 
-    // Identity only. A vendor must learn nothing about who ELSE serves them:
-    // not the other shop's name, not an address, not an ownership badge.
-    await expect(platform.getByText(`${STAMP} Burger`)).toHaveCount(0);
-    await expect(platform.getByText('Added by you')).toHaveCount(0);
-    await expect(platform.getByText(/Hamra, Beirut/)).toHaveCount(0);
+    const match = body.data.matches[0]!;
+    expect(match.name).toBe(`${STAMP} Customer One`);
+    expect(match.isYours).toBe(false);
+    // Identity and nothing else — no foreign vendor id or business name, no
+    // address, no ownership. A name-searchable directory IS a competitor's
+    // client list, and these are the fields that would build one.
+    expect(Object.keys(match).sort()).toEqual(['id', 'isYours', 'name', 'normalizedPhone']);
+    expect(JSON.stringify(match)).not.toContain('Burger');
+    expect(JSON.stringify(match)).not.toContain('Hamra');
+
+    // And the screen surfaces them, so the vendor can actually reach them.
+    await expect(page.getByText(`${STAMP} Customer One`).first()).toBeVisible();
   });
 
   test('a partial number opens nobody on the platform', async ({ page }) => {
     await login(page, VENDOR_B_EMAIL, PASSWORD, '/vendor');
     await page.goto('/vendor/customers');
+    // Too few digits must open NOBODY — that is the property. The endpoint
+    // answers 200 with an empty list rather than an error, which is the right
+    // shape for "no results"; asserting a 4xx tested my assumption, not the rule.
+    const short = await page.request.get('/api/v1/customers/lookup?q=76');
+    expect(short.status()).toBe(200);
+    const shortBody = (await short.json()) as { data: { matches: unknown[] } };
+    expect(shortBody.data.matches).toEqual([]);
     await page.getByPlaceholder(/Search/).fill(CUSTOMER_1_PHONE.slice(0, 4));
-    await expect(page.getByRole('region', { name: 'On the platform' })).toHaveCount(0);
+    await expect(page.getByText(`${STAMP} Customer One`)).toHaveCount(0);
   });
 
   test('a vendor is refused at every admin endpoint', async ({ page }) => {
