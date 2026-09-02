@@ -178,6 +178,33 @@ The safe shape when a destructive change is unavoidable is two releases: first s
 code that stops using the column, then drop it in a later release. Each half is
 then individually reversible.
 
+That two-release shape is **expand/contract**, and it is the right answer when the
+table has real data and live traffic: make the column nullable and drop its
+constraints, ship code that stops writing it, then drop the column once no running
+image references it. It is also ceremony when the table is empty everywhere and one
+code path touches it — proportionality is part of the judgement. Choose the one-way
+release knowingly; do not stumble into it.
+
+### A backup is a restore point only for the state it captured
+
+Age is not the test. A dump taken twenty minutes ago can be worse than useless if
+the database was deliberately changed since, because it will restore cleanly and
+put back exactly what someone meant to remove.
+
+That happened here: on 2026-09-01 three dumps existed (16:11, 16:26, 16:27) and the
+production database was deliberately wiped at 16:29. All three were schema-valid for
+the release that followed, and every one of them would have resurrected the test
+data the wipe existed to delete. They looked like rollback targets right up until
+the moment of use.
+
+So before a destructive migration, take a dump **immediately before it runs** and
+say what state it captures. `~/backups/clean-baseline-*.dump` is that: production
+after the wipe, at 13 migrations, one admin and nothing else — the first dump on
+this box that is a valid restore point for the current production.
+
+Keep a copy OFF the server. A dump beside the database survives a bad migration but
+not a lost disk, and only one of those is what backups are usually bought for.
+
 ## Backups (activate when the app is live with real data — deliberate, playbook §10)
 
 ```bash
