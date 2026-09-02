@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Plus, Trash2, TriangleAlert } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -71,8 +71,31 @@ export function SettleDialog({
 
   // Default each box to the full amount owed. The admin edits down only when
   // the driver is actually short.
+  /**
+   * Seed the form ONCE per opening, not on every preview response.
+   *
+   * This query is deliberately never cached (staleTime 0) and the settlement
+   * socket events invalidate it, so `preview.data` changes identity while the
+   * dialog is open. Re-seeding on every change wiped whatever the admin had
+   * typed — the collected amount, and every adjustment INCLUDING its reason —
+   * silently, mid-handover, with a driver standing at the counter. It also cost
+   * a CI run: the previous settle's socket event refetched here, cleared a fine
+   * that had just been entered, and the settlement was recorded without it.
+   *
+   * On a genuine drift the admin gets SETTLEMENT_TOTALS_CHANGED and a warning
+   * to re-confirm, which is the right way to tell them the numbers moved —
+   * quietly overwriting their input never was.
+   */
+  const seededFor = useRef<string | null>(null);
+
   useEffect(() => {
+    if (!open) {
+      seededFor.current = null;
+      return;
+    }
     if (!preview.data) return;
+    if (seededFor.current === preview.data.driverId) return;
+    seededFor.current = preview.data.driverId;
     setCollections(
       Object.fromEntries(
         preview.data.lines.map((line) => {
@@ -88,7 +111,7 @@ export function SettleDialog({
     setAdjustments([]);
     setNote('');
     setStaleWarning(null);
-  }, [preview.data]);
+  }, [open, preview.data]);
 
   /** Per-currency arithmetic, recomputed live as adjustments are added. */
   const computed = useMemo(() => {

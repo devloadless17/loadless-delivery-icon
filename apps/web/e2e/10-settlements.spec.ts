@@ -330,6 +330,24 @@ test.describe('driver settlements', () => {
     await dialog.getByLabel('Amount').fill('25000');
     await dialog.getByLabel('Reason').fill('Lost the thermal bag');
     await dialog.getByLabel('Collected').fill('5000');
+
+    // What the admin typed must SURVIVE a background refetch. This query is
+    // never cached and the settlement socket events invalidate it, so the
+    // preview reloads while the dialog is open — and it used to re-seed the
+    // form from the response, wiping the amount, the adjustment and its reason
+    // without a word. It cost a CI run before it would have cost a real
+    // handover.
+    await admin.reload().catch(() => {});
+    await admin.goto('/admin/settlements');
+    await row.getByRole('button', { name: 'Settle' }).click();
+    await dialog.getByRole('button', { name: 'Add adjustment' }).click();
+    await dialog.getByLabel('Amount').fill('25000');
+    await dialog.getByLabel('Reason').fill('Lost the thermal bag');
+    await dialog.getByLabel('Collected').fill('5000');
+    await admin.waitForTimeout(1200); // let any in-flight refetch land
+    await expect(dialog.getByLabel('Reason')).toHaveValue('Lost the thermal bag');
+    await expect(dialog.getByLabel('Amount')).toHaveValue('25000');
+    await expect(dialog.getByLabel('Collected')).toHaveValue('5000');
     await dialog.getByRole('button', { name: 'Record payment' }).click();
     await expect(admin.getByText(/Settled — STL-\d{4}-\d{6}/)).toBeVisible();
 
