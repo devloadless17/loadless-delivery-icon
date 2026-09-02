@@ -489,7 +489,7 @@ export class SettlementsService {
 
     const driverId = existing.driverId;
 
-    await this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`settlement:${driverId}`}))`;
 
       const settlement = await tx.driverSettlement.findUniqueOrThrow({
@@ -546,26 +546,38 @@ export class SettlementsService {
         });
       }
 
-      this.audit.log({
-        actor,
-        action: 'DRIVER_SETTLEMENT_VOIDED',
-        entityType: 'DriverSettlement',
-        entityId: settlementId,
-        metadata: {
-          settlementNumber: settlement.settlementNumber,
-          driverId,
-          reason,
-          ordersReleased: released.count,
-        },
-      });
-
-      this.events.emit(SETTLEMENT_EVENTS.VOIDED, {
-        settlementId,
+      return {
         settlementNumber: settlement.settlementNumber,
-        driverId,
-        at: voidedAt,
-      } satisfies SettlementVoidedEvent);
+        ordersReleased: released.count,
+        voidedAt,
+      };
     });
+
+    // Audited and announced only AFTER the commit, never inside it. Emitting
+    // from within the transaction would tell every admin and the driver that a
+    // settlement was voided, and write an audit row saying so, at a point where
+    // a later failure could still roll the whole thing back — leaving the debt
+    // in place and both records claiming otherwise. `settle` already did this
+    // correctly; this did not.
+    this.audit.log({
+      actor,
+      action: 'DRIVER_SETTLEMENT_VOIDED',
+      entityType: 'DriverSettlement',
+      entityId: settlementId,
+      metadata: {
+        settlementNumber: result.settlementNumber,
+        driverId,
+        reason,
+        ordersReleased: result.ordersReleased,
+      },
+    });
+
+    this.events.emit(SETTLEMENT_EVENTS.VOIDED, {
+      settlementId,
+      settlementNumber: result.settlementNumber,
+      driverId,
+      at: result.voidedAt,
+    } satisfies SettlementVoidedEvent);
 
     return this.get(settlementId);
   }
