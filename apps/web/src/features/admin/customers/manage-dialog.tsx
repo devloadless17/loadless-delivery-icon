@@ -123,7 +123,7 @@ export function CustomerManageDialog({
               <StatStrip stats={customer.stats} />
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-2" data-testid="customer-orders">
               <p className="text-sm font-medium">Orders</p>
               <RecentOrders customer={customer} />
             </div>
@@ -144,7 +144,7 @@ export function CustomerManageDialog({
             <div className="space-y-2">
               <p className="text-sm font-medium">Vendors</p>
               {customer.vendorLinks && customer.vendorLinks.length > 0 ? (
-                <ul className="divide-y rounded-lg border text-sm">
+                <ul className="divide-y rounded-lg border text-sm" data-testid="vendor-links">
                   {customer.vendorLinks.map((link) => (
                     <li
                       key={link.vendorId}

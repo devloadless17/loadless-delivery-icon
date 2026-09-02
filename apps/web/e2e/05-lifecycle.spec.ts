@@ -232,7 +232,11 @@ test.describe('order lifecycle', () => {
     await expect(vendor.getByText(orderNumber)).toBeVisible();
 
     const today = new Date();
-    const iso = (d: Date) => d.toISOString().slice(0, 10);
+    // LOCAL calendar date, never toISOString() — that yields the UTC day, so
+    // between local midnight and the UTC offset it names YESTERDAY and this
+    // test silently asserts the opposite of what it claims. The date input the
+    // vendor types into is local, so the test has to speak the same calendar.
+    const iso = (d: Date) => d.toLocaleDateString('en-CA');
     const shift = (days: number) => {
       const d = new Date(today);
       d.setDate(d.getDate() + days);

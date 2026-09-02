@@ -304,8 +304,18 @@ test.describe('my customers', () => {
     await adminRow.getByRole('button', { name: 'Manage' }).click();
     const dialog = admin.getByRole('dialog');
     await expect(dialog.getByText('Vendors')).toBeVisible();
-    await expect(dialog.getByText('E2E Burger House')).toBeVisible();
+    // Scoped to the vendor list: the order history below it names the vendor on
+    // every row, so an unscoped match now finds the same shop twice.
+    const vendorLinks = dialog.getByTestId('vendor-links');
+    await expect(vendorLinks.getByText('E2E Burger House')).toBeVisible();
     await expect(dialog.getByText('Added them')).toBeVisible();
+
+    // The trade behind the customer — the admin's whole reason for opening
+    // them. PLATFORM scope, so the label must not be the vendor's "with you".
+    await expect(dialog.getByTestId('customer-orders')).toBeVisible();
+    await expect(dialog.getByTestId('stat-orders')).toContainText('Orders');
+    await expect(dialog.getByTestId('stat-orders')).not.toContainText('with you');
+    await expect(dialog.getByText('55,000', { exact: false })).toBeVisible();
     // Admin may correct any address, whoever added it.
     await admin.keyboard.press('Escape');
 

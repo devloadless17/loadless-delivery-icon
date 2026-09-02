@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
+  beirutRange,
   displayAddress,
   toMinorUnits,
   type AdminOrderListFilter,
@@ -239,11 +240,19 @@ export class OrdersService {
   // ---------------------------------------------------------------- vendor
 
   async vendorList(vendorId: string, filter: OrderListFilter) {
+    // Beirut days, not UTC ones — see beirutRange. Snapping the END is also
+    // what makes the range inclusive, so nothing may pre-fake a 23:59:59.
+    const range = beirutRange(filter.from, filter.to);
     const where: Prisma.OrderWhereInput = {
       vendorId,
       ...(filter.status ? { status: filter.status } : {}),
-      ...(filter.from || filter.to
-        ? { createdAt: { ...(filter.from ? { gte: filter.from } : {}), ...(filter.to ? { lte: filter.to } : {}) } }
+      ...(range.from || range.to
+        ? {
+            createdAt: {
+              ...(range.from ? { gte: range.from } : {}),
+              ...(range.to ? { lte: range.to } : {}),
+            },
+          }
         : {}),
     };
     const rows = await this.prisma.order.findMany({
@@ -308,13 +317,21 @@ export class OrdersService {
   // ----------------------------------------------------------------- admin
 
   async adminList(filter: AdminOrderListFilter) {
+    // Beirut days, not UTC ones — see beirutRange. Snapping the END is also
+    // what makes the range inclusive, so nothing may pre-fake a 23:59:59.
+    const range = beirutRange(filter.from, filter.to);
     const where: Prisma.OrderWhereInput = {
       ...(filter.status ? { status: filter.status } : {}),
       ...(filter.vendorId ? { vendorId: filter.vendorId } : {}),
       ...(filter.driverId ? { driverId: filter.driverId } : {}),
       ...(filter.currency ? { currency: filter.currency } : {}),
-      ...(filter.from || filter.to
-        ? { createdAt: { ...(filter.from ? { gte: filter.from } : {}), ...(filter.to ? { lte: filter.to } : {}) } }
+      ...(range.from || range.to
+        ? {
+            createdAt: {
+              ...(range.from ? { gte: range.from } : {}),
+              ...(range.to ? { lte: range.to } : {}),
+            },
+          }
         : {}),
     };
     const rows = await this.prisma.order.findMany({

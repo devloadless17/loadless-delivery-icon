@@ -47,6 +47,30 @@ test.describe('driver experience and money surfaces', () => {
     await expect(page.getByText('This week by status')).toBeVisible();
   });
 
+  /**
+   * The admin's end of the same fact. 04 delivered 100,000 LBP at this
+   * driver's personal 25%, so 25,000 is on him for the platform — and the
+   * itemised breakdown has to be able to defend that figure, because it is
+   * what the cash handover is argued over.
+   */
+  test('admin opens a driver and sees what he owes, itemised', async ({ page }) => {
+    await loginAs(page, ADMIN, '/admin');
+    await page.goto('/admin/drivers');
+    await page.getByRole('button', { name: 'E2E Driver', exact: true }).click();
+
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.getByText('Balance with the platform')).toBeVisible();
+    // NOT a pinned total: earlier specs deliver for this driver too, so the
+    // balance moves. What must hold is that he owes rather than being square,
+    // and that the figure can be defended line by line.
+    await expect(dialog.getByText('Nothing outstanding', { exact: false })).toHaveCount(0);
+    // The breakdown is COLLAPSED by default — the trigger is what shows until
+    // someone asks, which is the whole point of it on a phone.
+    await dialog.getByText('The deliveries behind this').click();
+    // The golden-path delivery itemised: 100,000 LBP at this driver's 25%.
+    await expect(dialog.getByText('25,000 LBP').first()).toBeVisible();
+  });
+
   test('PWA surface: manifest and offline page are served', async ({ page }) => {
     const manifest = await page.request.get('/manifest.webmanifest');
     expect(manifest.status()).toBe(200);

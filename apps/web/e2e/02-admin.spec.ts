@@ -151,4 +151,23 @@ test.describe('admin management', () => {
     await page.goto('/admin/customers');
     await expect(page.getByText('shared customer directory', { exact: false })).toBeVisible();
   });
+
+  /**
+   * Clicking a driver has to answer "what is on him right now" — and for a
+   * driver who has never delivered, the honest answer is "nothing". Named
+   * rather than taken by row position: this one is square only because he
+   * never carries an order, and a positional pick would drift onto a driver
+   * who does. The owed case is covered in 06, once the golden path has run.
+   */
+  test('opening a driver with nothing on him says so', async ({ page }) => {
+    await adminPage(page);
+    await page.goto('/admin/drivers');
+
+    await page.getByRole('button', { name: 'E2E Extra Driver' }).click();
+
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.getByText('Balance with the platform')).toBeVisible();
+    await expect(dialog.getByText('Nothing outstanding — this driver is square.')).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'All their orders' })).toBeVisible();
+  });
 });
