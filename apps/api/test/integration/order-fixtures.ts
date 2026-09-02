@@ -1,3 +1,4 @@
+import { calcCommission } from '@loadless/shared';
 import type { PrismaService } from '../../src/prisma/prisma.service';
 
 /**
@@ -24,7 +25,8 @@ import type { PrismaService } from '../../src/prisma/prisma.service';
  * Money defaults are internally consistent on purpose: 100000 at 3000bps gives
  * 30000 commission and 70000 earnings, i.e. earnings = charge - commission. A
  * fixture that violated that invariant would make any assertion about money
- * meaningless.
+ * meaningless — which is also why the commission comes from shared's
+ * calcCommission rather than a division written here.
  */
 export type FixtureOrderStatus =
   | 'PENDING'
@@ -53,7 +55,12 @@ export async function seedOrder(prisma: PrismaService, opts: SeedOrderOptions) {
   const status = opts.status ?? 'DELIVERED';
   const charge = opts.charge ?? 100_000n;
   const bps = opts.commissionBps ?? 3000;
-  const commission = (charge * BigInt(bps)) / 10_000n;
+  // calcCommission, not a local division: it rounds half-up and this truncated.
+  // They agree on round numbers and diverge by one minor unit the moment there
+  // is a remainder (333 at 3000bps is 100, not 99), which builds an order the
+  // platform would never have created and quietly makes any money assertion
+  // about it a fiction. Shared is documented as the only commission math.
+  const commission = calcCommission(charge, bps);
 
   // PENDING is the only status the coupling constraint requires to be bare.
   const assigned = status !== 'PENDING';

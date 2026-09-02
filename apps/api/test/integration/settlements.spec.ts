@@ -7,6 +7,7 @@ import { AppModule } from '../../src/app.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { AuthService } from '../../src/auth/auth.service';
 import { TokenService } from '../../src/auth/token.service';
+import { seedOrder as seedOrderFixture, type FixtureOrderStatus } from './order-fixtures';
 
 /**
  * Daily driver settlement — the end-of-day cash handover.
@@ -100,9 +101,13 @@ describe('driver settlements (integration)', () => {
 
   /**
    * A delivered order carrying its commission snapshot — the thing a settlement
-   * collects against. `status` is overridable so the tests can prove that a
-   * FAILED or admin-cancelled delivery is NEVER swept, even though both keep
-   * the snapshot populated.
+   * collects against.
+   *
+   * A thin wrapper over the SHARED fixture rather than another hand-built row:
+   * an order has to satisfy three interlocking CHECK constraints at once, and
+   * every spec that retypes them is a place they can drift. `status` stays
+   * overridable so the tests can prove a FAILED or admin-cancelled delivery is
+   * NEVER swept, even though both keep the snapshot populated.
    */
   async function seedOrder(opts: {
     driverId: string;
@@ -113,29 +118,16 @@ describe('driver settlements (integration)', () => {
     /** Basis points for THIS delivery; defaults to the platform's 30%. */
     bps?: number;
   }) {
-    const [{ nextval }] = await prisma.$queryRaw<[{ nextval: bigint }]>`
-      SELECT nextval('order_number_seq')`;
-    const bps = BigInt(opts.bps ?? 3000);
-    const commission = (opts.charge * bps + 5000n) / 10000n;
-    const status = opts.status ?? 'DELIVERED';
-    return prisma.order.create({
-      data: {
-        orderNumber: `ORD-STL-${nextval}`,
-        vendorId,
-        customerId,
-        driverId: opts.driverId,
-        status,
-        deliveryAddressText: 'Hamra, Beirut',
-        deliveryCharge: opts.charge,
-        currency: opts.currency,
-        commissionBps: opts.bps ?? 3000,
-        platformCommissionAmount: commission,
-        driverEarnings: opts.charge - commission,
-        assignedAt: new Date(),
-        pickedUpAt: new Date(),
-        deliveredAt: status === 'DELIVERED' ? (opts.deliveredAt ?? new Date()) : null,
-        ...(status === 'CANCELLED' ? { cancelledAt: new Date(), cancellationReason: 'x' } : {}),
-      },
+    return seedOrderFixture(prisma, {
+      vendorId,
+      customerId,
+      driverId: opts.driverId,
+      status: (opts.status ?? 'DELIVERED') as FixtureOrderStatus,
+      charge: opts.charge,
+      currency: opts.currency,
+      commissionBps: opts.bps,
+      addressText: 'Hamra, Beirut',
+      ...(opts.deliveredAt ? { deliveredAt: opts.deliveredAt } : {}),
     });
   }
 
