@@ -10,11 +10,13 @@ worth: the npm scopes (`@loadless/api`, `@loadless/web`, `@loadless/shared`), th
 Postgres role and database, the deploy directory and the Docker Hub
 repositories. Never put "Loadless" in user-facing copy.
 
-The live hostname is **`flashdelivery.loadless.site`** (187.77.167.2). The older
-`delivery.loadless.site` is NOT ours any more — it resolves to an unrelated
-Fortinet appliance that answers 403, so a health check aimed at it fails in a
-way that looks exactly like production being down. `FRONTEND_DOMAIN` in the
-server's `.env` is the authority.
+The live hostname is **`flashdelivery.ink`** (187.77.167.2) — the apex, not a
+subdomain. Everything under `loadless.site` is retired: `delivery.loadless.site`
+and `flashdelivery.loadless.site` are no longer ours and no longer served. Do
+not health-check them; `*.loadless.site` has a wildcard A-record pointing at an
+unrelated box that answers with its own certificate, so aiming at an old name
+fails in a way that looks exactly like production being down.
+`FRONTEND_DOMAIN` in the server's `.env` is the authority.
 
 ## Stack & layout
 

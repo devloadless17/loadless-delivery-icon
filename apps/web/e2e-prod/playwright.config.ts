@@ -13,7 +13,7 @@ import { defineConfig, devices } from '@playwright/test';
  * So this config has its own testDir, starts NO webServer, and drives the real
  * deployed site over HTTPS. It runs only when PROD_ADMIN_PASSWORD is set.
  */
-const BASE = process.env.PROD_BASE_URL ?? 'https://flashdelivery.loadless.site';
+const BASE = process.env.PROD_BASE_URL ?? 'https://flashdelivery.ink';
 
 export default defineConfig({
   testDir: '.',

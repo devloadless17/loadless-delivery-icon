@@ -14,7 +14,7 @@ import { readRunId } from './run-id';
  * that nudges it and puts it back still mis-prices anything created in between.
  */
 
-export const ADMIN_EMAIL = process.env.PROD_ADMIN_EMAIL ?? 'ali@loadless.ai';
+export const ADMIN_EMAIL = process.env.PROD_ADMIN_EMAIL ?? 'admin@flashdelivery.com';
 export const ADMIN_PASSWORD = process.env.PROD_ADMIN_PASSWORD ?? '';
 
 /**

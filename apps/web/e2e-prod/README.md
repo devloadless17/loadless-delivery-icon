@@ -45,7 +45,7 @@ pnpm --filter @loadless/web exec playwright test --config e2e-prod/playwright.co
 Both variables are required. Without the password it will not guess credentials;
 without the consent phrase it refuses to write to a live system. The phrase is
 deliberately long so it cannot be set by reflex or left lying in a shell.
-`PROD_BASE_URL` overrides the target (default `https://flashdelivery.loadless.site`).
+`PROD_BASE_URL` overrides the target (default `https://flashdelivery.ink`).
 
 Read a failure as a production failure: there are no fixtures and no reset here.
 
