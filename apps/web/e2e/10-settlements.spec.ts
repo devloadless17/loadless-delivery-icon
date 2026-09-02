@@ -200,12 +200,21 @@ test.describe('driver settlements', () => {
   test('the driver can open his own receipt for a past handover', async ({ page }) => {
     await loginAs(page, DRIVER1_PHONE, '/driver');
     await page.goto('/driver/earnings');
-    await page.getByRole('link', { name: /STL-\d{4}-\d{6}/ }).first().click();
+    // His handovers are newest-first, and the newest collected only carried
+    // debt — zero deliveries. The FIRST one is the handover that actually swept
+    // his work, so that is the receipt with something to itemise.
+    await page.getByRole('link', { name: /STL-\d{4}-\d{6}/ }).last().click();
     await page.waitForURL(/\/driver\/settlements\/[a-z0-9]{20,}$/);
 
     await expect(page.getByText('Total due').first()).toBeVisible();
     await expect(page.getByText('You paid').first()).toBeVisible();
+
+    // The breakdown is collapsed by default — that is the whole point of it,
+    // so a 30-delivery receipt is readable. Open it to reach the deliveries.
+    await page.getByText('What is this for?').first().click();
     await expect(page.getByText(/ORD-\d{4}-\d{6}/).first()).toBeVisible();
+    // Each row proves its own arithmetic: charge x rate = commission.
+    await expect(page.getByText(/×\s*\d+(\.\d+)?%/).first()).toBeVisible();
   });
 
   test('voiding reverses a settlement without erasing it', async ({ page }) => {
