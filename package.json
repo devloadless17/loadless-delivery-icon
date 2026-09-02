@@ -7,7 +7,7 @@
     "node": ">=22"
   },
   "scripts": {
-    "dev": "pnpm --parallel --filter @loadless/api --filter @loadless/web dev",
+    "dev": "bash scripts/dev-preflight.sh && pnpm --parallel --filter @loadless/api --filter @loadless/web dev",
     "build": "pnpm -r build",
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",
