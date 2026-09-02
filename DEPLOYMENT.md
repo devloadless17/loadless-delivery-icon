@@ -149,6 +149,35 @@ The deploy keeps the current release, the previous one and `:latest` on the box 
 prunes older tags, so the rollback target is always present locally. Any older SHA can
 still be pulled from Docker Hub.
 
+### Rollback restores CODE, never SCHEMA — some releases are one-way
+
+`prisma migrate deploy` runs forward on every deploy and is never reversed. So the
+procedure above puts the OLD image back against the NEW database, which is safe
+only while the migrations in between were additive.
+
+A release containing a **destructive** migration — `DROP COLUMN`, `DROP TYPE`, a
+narrowed constraint, a renamed column — cannot be rolled back this way. The old
+image still references what the migration removed, so redeploying it produces
+500s on every path that touches the change, and the rollback makes the outage
+worse than the release did.
+
+Before releasing, check whether any unapplied migration is destructive:
+
+```bash
+grep -rlE 'DROP (COLUMN|TYPE|TABLE|CONSTRAINT)|ALTER COLUMN .* SET NOT NULL' \
+  apps/api/prisma/migrations/
+```
+
+If one is in the release, say so out loud before pushing, because recovering from
+it means **restoring the database**, not redeploying an image — and that is only
+possible if a backup exists from after the previous migration and before this one.
+Today no such backup exists (see Backups below), which makes a destructive release
+genuinely unrecoverable rather than merely awkward.
+
+The safe shape when a destructive change is unavoidable is two releases: first ship
+code that stops using the column, then drop it in a later release. Each half is
+then individually reversible.
+
 ## Backups (activate when the app is live with real data — deliberate, playbook §10)
 
 ```bash
