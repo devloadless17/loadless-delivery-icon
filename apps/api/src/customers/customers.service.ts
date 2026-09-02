@@ -552,7 +552,11 @@ export class CustomersService {
           }
         : {}),
     };
-    const [rows, total] = await this.prisma.$transaction([
+    // Promise.all, not $transaction([a, b]): $transaction runs them in SERIES
+    // on one connection, and a page and its total are never compared to each
+    // other on screen, so they gain nothing from sharing a snapshot and pay
+    // for it in latency.
+    const [rows, total] = await Promise.all([
       this.prisma.customer.findMany({
         where,
         select: {
@@ -598,7 +602,9 @@ export class CustomersService {
       orderBy: { customerId: 'asc' },
       _count: { _all: true },
     });
-    const [orderCounts, addressCounts, linkCounts] = await this.prisma.$transaction([
+    // Independent aggregates decorating one page of rows — nothing compares
+    // them to each other, so they run in parallel rather than in series.
+    const [orderCounts, addressCounts, linkCounts] = await Promise.all([
       orderCountQuery,
       addressCountQuery,
       linkCountQuery,

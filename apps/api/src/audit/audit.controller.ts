@@ -12,7 +12,11 @@ export class AuditController {
 
   @Get()
   async list(@Query(new ZodValidationPipe(offsetPaginationSchema)) pagination: OffsetPagination) {
-    const [rows, total] = await this.prisma.$transaction([
+    // Promise.all, not $transaction([a, b]): $transaction runs them in SERIES
+    // on one connection, and a page and its total are never compared to each
+    // other on screen, so they gain nothing from sharing a snapshot and pay
+    // for it in latency.
+    const [rows, total] = await Promise.all([
       this.prisma.auditLog.findMany({
         orderBy: { createdAt: 'desc' },
         ...offsetArgs(pagination),

@@ -84,7 +84,11 @@ export class DriversService {
           }
         : {}),
     };
-    const [rows, total] = await this.prisma.$transaction([
+    // Promise.all, not $transaction([a, b]): $transaction runs them in SERIES
+    // on one connection, and a page and its total are never compared to each
+    // other on screen, so they gain nothing from sharing a snapshot and pay
+    // for it in latency.
+    const [rows, total] = await Promise.all([
       this.prisma.driver.findMany({
         where,
         select: DRIVER_LIST_SELECT,
