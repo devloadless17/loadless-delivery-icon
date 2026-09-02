@@ -159,7 +159,13 @@ export default function SettlementDetailPage() {
                     </div>
                   </TableCell>
                   <TableCell className="data-mono text-right">
-                    {displayMoney(adjustment.amount, adjustment.currency)}
+                    {adjustment.direction === 'DEBIT' ? '+' : '−'}
+                    {displayMoney(
+                      BigInt(adjustment.amount) < 0n
+                        ? -BigInt(adjustment.amount)
+                        : BigInt(adjustment.amount),
+                      adjustment.currency,
+                    )}
                   </TableCell>
                 </TableRow>
               ))}

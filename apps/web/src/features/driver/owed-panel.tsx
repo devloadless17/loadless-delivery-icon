@@ -160,6 +160,16 @@ export function MySettlements() {
                     )}
                   </p>
                 ))}
+                {settlement.adjustments.length > 0 && (
+                  // Without this he has no reason to open the receipt, which is
+                  // the only place the explanation lives. An unexpected charge
+                  // should announce itself where he will actually see it.
+                  <p className="text-xs text-muted-foreground">
+                    {settlement.adjustments.length === 1
+                      ? `Includes an adjustment: ${settlement.adjustments[0]!.reason}`
+                      : `Includes ${settlement.adjustments.length} adjustments — tap to see why`}
+                  </p>
+                )}
               </div>
             )}
             </Link>

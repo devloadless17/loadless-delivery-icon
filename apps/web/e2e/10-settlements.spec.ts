@@ -322,6 +322,30 @@ test.describe('driver settlements', () => {
     await expect(driver.getByText('To hand over')).toHaveCount(0);
     await expect(driver.getByText(/You paid 20,000 LBP too much/)).toBeVisible();
 
+    // Now charge him for something, and check he can find out WHY. The reason
+    // has to reach the person paying it, not just the person entering it.
+    await admin.goto('/admin/settlements');
+    await row.getByRole('button', { name: 'Settle' }).click();
+    await dialog.getByRole('button', { name: 'Add adjustment' }).click();
+    await dialog.getByLabel('Amount').fill('25000');
+    await dialog.getByLabel('Reason').fill('Lost the thermal bag');
+    await dialog.getByLabel('Collected').fill('5000');
+    await dialog.getByRole('button', { name: 'Record payment' }).click();
+    await expect(admin.getByText(/Settled — STL-\d{4}-\d{6}/)).toBeVisible();
+
+    // The handover list tells him there IS an adjustment and names it, so he
+    // has a reason to open the receipt rather than just seeing a number.
+    await driver.goto('/driver/earnings');
+    await expect(driver.getByText(/Includes an adjustment: Lost the thermal bag/)).toBeVisible();
+
+    // And the receipt states it in full, with the direction in words and the
+    // amount as a magnitude rather than a minus under a positive phrase.
+    await driver.getByRole('link', { name: /STL-\d{4}-\d{6}/ }).first().click();
+    await driver.waitForURL(/\/driver\/settlements\/[a-z0-9]{20,}$/);
+    await expect(driver.getByText('Lost the thermal bag')).toBeVisible();
+    await expect(driver.getByText('Added to what you owed')).toBeVisible();
+    await expect(driver.getByText('+25,000 LBP')).toBeVisible();
+
     await vendorCtx.close();
     await driverCtx.close();
     await adminCtx.close();

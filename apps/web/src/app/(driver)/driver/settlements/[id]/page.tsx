@@ -115,8 +115,21 @@ export default function DriverSettlementPage() {
                       : 'Taken off what you owed'}
                   </span>
                 </span>
-                <span className="data-mono shrink-0">
-                  {displayMoney(adjustment.amount, adjustment.currency)}
+                {/* The direction word carries the sign, so the number must
+                    not carry it too — "-10,000 LBP" under "Taken off what you
+                    owed" reads as a double negative. */}
+                <span
+                  className={`data-mono shrink-0 ${
+                    adjustment.direction === 'DEBIT' ? 'text-warning' : 'text-success'
+                  }`}
+                >
+                  {adjustment.direction === 'DEBIT' ? '+' : '−'}
+                  {displayMoney(
+                    BigInt(adjustment.amount) < 0n
+                      ? -BigInt(adjustment.amount)
+                      : BigInt(adjustment.amount),
+                    adjustment.currency,
+                  )}
                 </span>
               </li>
             ))}

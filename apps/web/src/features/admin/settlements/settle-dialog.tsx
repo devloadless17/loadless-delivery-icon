@@ -434,12 +434,16 @@ function AdjustmentEditor({
 
           <div className="mt-2 flex flex-wrap items-end gap-2">
             <div className="w-24 space-y-1">
-              <Label>Currency</Label>
+              {/* Every field is explicitly associated with its input. Without
+                  htmlFor/id these read as three unlabelled boxes to a screen
+                  reader, and getByLabel cannot find them either — which is how
+                  the omission surfaced. */}
+              <Label htmlFor={`adj-currency-${adjustment.key}`}>Currency</Label>
               <Select
                 value={adjustment.currency}
                 onValueChange={(next) => update(adjustment.key, { currency: next as Currency })}
               >
-                <SelectTrigger>
+                <SelectTrigger id={`adj-currency-${adjustment.key}`}>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -452,8 +456,9 @@ function AdjustmentEditor({
               </Select>
             </div>
             <div className="w-28 space-y-1">
-              <Label>Amount</Label>
+              <Label htmlFor={`adj-amount-${adjustment.key}`}>Amount</Label>
               <Input
+                id={`adj-amount-${adjustment.key}`}
                 inputMode="decimal"
                 className="data-mono"
                 value={adjustment.amount}
@@ -471,8 +476,9 @@ function AdjustmentEditor({
           </div>
 
           <div className="mt-2 space-y-1">
-            <Label>Reason</Label>
+            <Label htmlFor={`adj-reason-${adjustment.key}`}>Reason</Label>
             <Input
+              id={`adj-reason-${adjustment.key}`}
               value={adjustment.reason}
               onChange={(e) => update(adjustment.key, { reason: e.target.value })}
               placeholder={
