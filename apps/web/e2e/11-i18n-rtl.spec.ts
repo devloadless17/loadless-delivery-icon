@@ -1,5 +1,13 @@
 import { expect, test, type Browser, type Page } from '@playwright/test';
-import { ADMIN, DRIVER1_PHONE, VENDOR, createOrderUI, ensureDuty, loginAs } from './helpers';
+import {
+  ADMIN,
+  DRIVER1_PHONE,
+  VENDOR,
+  createOrderUI,
+  displayedPhone,
+  ensureDuty,
+  loginAs,
+} from './helpers';
 
 /**
  * Arabic and right-to-left, for the vendor and driver apps only.
@@ -149,13 +157,70 @@ test.describe('Arabic & RTL', () => {
     await loginAs(vendor, VENDOR, '/vendor');
     await switchToArabic(vendor, baseURL!);
 
-    // Every such value is wrapped in <bdi>. Without it the bidi algorithm
-    // reorders "1 Sept, 11:21 pm" into "Sept, 11:21 pm 1" and money flips.
-    const bdi = vendor.locator('main bdi');
-    expect(await bdi.count()).toBeGreaterThan(0);
-    for (const el of await bdi.all()) {
-      expect(await el.evaluate((n) => getComputedStyle(n).direction)).toBe('ltr');
+    // Numeric surfaces are isolated so the bidi algorithm cannot reorder them
+    // — "1 Sept, 11:21 pm" became "Sept, 11:21 pm 1" and money flipped.
+    //
+    // The mechanism is `unicode-bidi`, NOT `direction`: plaintext resolves the
+    // CONTENT's direction from its own first strong character while leaving the
+    // element's `direction` (and therefore its alignment) inherited. So
+    // computed `direction` here is still rtl, and asserting otherwise would be
+    // asserting the bug back in.
+    const isolated = vendor.locator('main bdi, main .data-mono');
+    // toBeVisible auto-retries; a bare count() does not, and the orders list
+    // arrives after the first paint.
+    await expect(isolated.first()).toBeVisible();
+    for (const el of await isolated.all()) {
+      const mode = await el.evaluate((n) => getComputedStyle(n).unicodeBidi);
+      expect(['plaintext', 'isolate', 'isolate-override']).toContain(mode);
     }
+
+    // And the thing that actually matters: a real amount still reads in order.
+    const money = vendor.locator('main .data-mono').filter({ hasText: /\d/ }).first();
+    const text = (await money.innerText()).trim();
+    expect(text).not.toMatch(/^[A-Z]{3}\s/); // "LBP 100,000" would be the flipped form
+
+    await ctx.close();
+  });
+
+  test('a switch thumb stays inside its track when the layout mirrors', async ({
+    browser,
+    baseURL,
+  }) => {
+    const ctx = await newContext(browser, baseURL!);
+    const driver = await ctx.newPage();
+    await loginAs(driver, DRIVER1_PHONE, '/driver');
+    await ensureDuty(driver, true);
+    await switchToArabic(driver, baseURL!);
+
+    // The track flips with the layout but `translate-x` does not, so a checked
+    // switch used to push its thumb clean out of the end of the pill.
+    const sw = driver.getByRole('switch').first();
+    await expect(sw).toHaveAttribute('aria-checked', 'true');
+    const fits = await sw.evaluate((el) => {
+      const track = el.getBoundingClientRect();
+      const thumb = (el.firstElementChild as HTMLElement).getBoundingClientRect();
+      return thumb.left >= track.left - 1 && thumb.right <= track.right + 1;
+    });
+    expect(fits).toBe(true);
+
+    await ctx.close();
+  });
+
+  test('a phone number is not reordered by the bidi algorithm', async ({ browser, baseURL }) => {
+    const ctx = await newContext(browser, baseURL!);
+    const driver = await ctx.newPage();
+    await loginAs(driver, DRIVER1_PHONE, '/driver');
+    await switchToArabic(driver, baseURL!);
+    await driver.goto('/driver/profile');
+
+    // "71 999 888" was rendering as "888 999 71": digit groups separated by
+    // spaces carry no strong character, so an RTL paragraph lays the GROUPS
+    // out right-to-left. Every numeric surface is .data-mono, which is
+    // unicode-bidi: plaintext under [dir=rtl].
+    const phone = driver.locator('.data-mono').first();
+    await expect(phone).toBeVisible();
+    const text = (await phone.innerText()).trim();
+    expect(text.replace(/\s+/g, ' ')).toBe(displayedPhone(DRIVER1_PHONE.replace(/\s/g, '')));
 
     await ctx.close();
   });

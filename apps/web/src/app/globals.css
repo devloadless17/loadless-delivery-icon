@@ -188,6 +188,29 @@
 }
 
 @layer utilities {
+  /* ---------------------------------------------------------------------
+     Numbers keep their own direction inside an RTL page.
+
+     A phone, an amount, an order id or a timestamp is a left-to-right run of
+     digits. Dropped into an Arabic paragraph the bidi algorithm reorders the
+     GROUPS — "70 123 456" renders as "456 123 70", and money flips to
+     "LBP 100,000". Wrong, and on a phone number actively dangerous.
+
+     `unicode-bidi: plaintext` resolves the content's direction from its own
+     first strong character (none, for digits → LTR) while leaving the
+     element's `direction` — and therefore its ALIGNMENT — untouched. That is
+     why it is used here rather than `direction: ltr`, which would drag every
+     right-aligned figure to the left edge of its box.
+
+     `.data-mono` already marks every numeric surface in the app, so this is
+     one rule instead of ninety-odd call sites that each have to remember.
+     --------------------------------------------------------------------- */
+  [dir='rtl'] .data-mono,
+  [dir='rtl'] .tabular-nums,
+  [dir='rtl'] bdi {
+    unicode-bidi: plaintext;
+  }
+
   /* The brand surface: deep dispatch-board gradient (login panel, hero areas) */
   .surface-brand {
     /* Ink dispatch-board ground with a warm golden glow — the brand's two

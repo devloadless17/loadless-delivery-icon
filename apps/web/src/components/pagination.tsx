@@ -34,7 +34,7 @@ export function Pagination({
           disabled={meta.page <= 1}
           onClick={() => onPageChange(meta.page - 1)}
         >
-          <ChevronLeft />
+          <ChevronLeft className="rtl:rotate-180" />
         </Button>
         <Button
           variant="outline"
@@ -43,7 +43,7 @@ export function Pagination({
           disabled={meta.page >= meta.totalPages}
           onClick={() => onPageChange(meta.page + 1)}
         >
-          <ChevronRight />
+          <ChevronRight className="rtl:rotate-180" />
         </Button>
       </div>
     </div>

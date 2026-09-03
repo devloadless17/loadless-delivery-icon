@@ -29,7 +29,7 @@ export function SignOutButton({ className, iconOnly }: { className?: string; ico
       loading={busy}
       aria-label={t('signOut')}
     >
-      {!busy && <LogOut />}
+      {!busy && <LogOut className="rtl:rotate-180" />}
       {!iconOnly && t('signOut')}
     </Button>
   );

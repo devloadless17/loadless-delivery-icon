@@ -7,7 +7,7 @@ import { useParams } from 'next/navigation';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { ApiError } from '@/lib/api-client';
-import { displayDateTime, displayMoney, displayPhone, fileUrl, initialsOf } from '@/lib/format';
+import { displayDateTime, displayMoney, displayPhone, fileUrl, initialsOf, isolate } from '@/lib/format';
 import { MapsLinkButton } from '@/components/maps-link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -67,7 +67,7 @@ export default function VendorOrderDetailPage() {
           className="flex size-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           aria-label={t('backToOrders')}
         >
-          <ArrowLeft className="size-4" />
+          <ArrowLeft className="size-4 rtl:rotate-180" />
         </Link>
         <div className="flex flex-1 items-center justify-between gap-3">
           <h1 dir="ltr" className="data-mono text-xl font-semibold">{order.orderNumber}</h1>
@@ -149,7 +149,7 @@ export default function VendorOrderDetailPage() {
         <CardContent>
           <OrderTimeline entries={order.statusHistory ?? []} />
           <p className="mt-3 text-xs text-muted-foreground">
-            {t('created', { when: displayDateTime(order.createdAt) })}
+            {t('created', { when: isolate(displayDateTime(order.createdAt)) })}
           </p>
         </CardContent>
       </Card>

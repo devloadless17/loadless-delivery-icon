@@ -99,7 +99,7 @@ export default function DriverOrderDetailPage() {
           aria-label={tc('back')}
           className="flex size-10 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted"
         >
-          <ArrowLeft className="size-5" />
+          <ArrowLeft className="size-5 rtl:rotate-180" />
         </Link>
         <span dir="ltr" className="data-mono flex-1 text-lg font-semibold">{order.orderNumber}</span>
         <OrderStatusBadge status={order.status} />
@@ -150,12 +150,18 @@ export default function DriverOrderDetailPage() {
               </Button>
             )}
           </div>
-          {/* dir="ltr": a phone number and an amount inside an RTL paragraph
-              get visually reordered by the bidi algorithm — "+961 3 …" is not
-              a string a driver should have to decode. */}
-          <p dir="ltr" className="data-mono text-center text-xs text-muted-foreground">
-            {displayPhone(order.customer.normalizedPhone)} · {t('charge')}{' '}
-            {displayMoney(order.deliveryCharge, order.currency)}
+          {/* The numbers are isolated individually rather than forcing the
+              whole line LTR — that used to leave the Arabic word for "charge"
+              stranded inside a left-to-right sentence. */}
+          <p className="flex flex-wrap items-baseline justify-center gap-x-2 text-xs text-muted-foreground">
+            <bdi className="data-mono">{displayPhone(order.customer.normalizedPhone)}</bdi>
+            <span aria-hidden>·</span>
+            <span>
+              {t('charge')}{' '}
+              <bdi className="data-mono">
+                {displayMoney(order.deliveryCharge, order.currency)}
+              </bdi>
+            </span>
           </p>
         </CardContent>
       </Card>

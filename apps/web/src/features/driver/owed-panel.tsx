@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { CheckCircle2, Wallet } from 'lucide-react';
 import { formatMoney } from '@loadless/shared';
 import { Skeleton } from '@/components/ui/skeleton';
-import { displayDateTime, displayMoney } from '@/lib/format';
+import { displayDateTime, displayMoney, isolate } from '@/lib/format';
 import { OrderBreakdown } from '@/features/settlements/order-breakdown';
 import { useMyOwed, useMySettlements } from './api';
 
@@ -47,7 +47,7 @@ export function OwedPanel() {
           <p className="font-semibold text-success">{t('allSettled')}</p>
           <p className="text-sm text-muted-foreground">
             {data.lastSettledAt
-              ? t('nothingOwedSince', { when: displayDateTime(data.lastSettledAt) })
+              ? t('nothingOwedSince', { when: isolate(displayDateTime(data.lastSettledAt)) })
               : t('nothingOwed')}
           </p>
           {creditLines.map((line) => (
@@ -154,22 +154,37 @@ export function MySettlements() {
             ) : (
               <div className="mt-1 space-y-0.5">
                 {settlement.lines.map((line) => (
-                  <p key={line.currency} className="data-mono text-sm">
-                    {t('paid', { amount: displayMoney(line.amountCollected, line.currency) })}
+                  // The label and the amount are separate children on a flex
+                  // row, not one interpolated sentence: `data-mono` marks a bare
+                  // numeric run, and putting it on a line that also carries
+                  // Arabic prose made two amounts collide with no gap between
+                  // them. gap-x-2 holds in either direction.
+                  <p
+                    key={line.currency}
+                    className="flex flex-wrap items-baseline gap-x-2 text-sm"
+                  >
+                    <span>
+                      {t('paidLabel')}{' '}
+                      <bdi className="data-mono">
+                        {displayMoney(line.amountCollected, line.currency)}
+                      </bdi>
+                    </span>
                     {BigInt(line.carriedForward) > 0n && (
-                      <span className="ms-2 text-xs text-warning">
-                        {t('carriedOver', {
-                          amount: displayMoney(line.carriedForward, line.currency),
-                        })}
+                      <span className="text-xs text-warning">
+                        <bdi className="data-mono">
+                          {displayMoney(line.carriedForward, line.currency)}
+                        </bdi>{' '}
+                        {t('carriedOverLabel')}
                       </span>
                     )}
                     {BigInt(line.carriedForward) < 0n && (
                       // Overpaying was invisible here. Money the driver is owed
                       // should never be the thing his receipt declines to show.
-                      <span className="ms-2 text-xs text-success">
-                        {t('creditShort', {
-                          amount: displayMoney(-BigInt(line.carriedForward), line.currency),
-                        })}
+                      <span className="text-xs text-success">
+                        <bdi className="data-mono">
+                          {displayMoney(-BigInt(line.carriedForward), line.currency)}
+                        </bdi>{' '}
+                        {t('creditLabel')}
                       </span>
                     )}
                   </p>

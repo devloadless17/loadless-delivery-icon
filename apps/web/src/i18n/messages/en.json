@@ -146,10 +146,12 @@
       "broughtForward": "Brought forward",
       "totalDue": "Total due",
       "youPaid": "You paid",
-      "carriedOverLabel": "Carried over",
+      "carriedOverLabel": "carried over",
       "inCreditLabel": "In credit",
       "addedToOwed": "Added to what you owed",
-      "takenOffOwed": "Taken off what you owed"
+      "takenOffOwed": "Taken off what you owed",
+      "paidLabel": "Paid",
+      "creditLabel": "in credit"
     }
   },
   "vendor": {

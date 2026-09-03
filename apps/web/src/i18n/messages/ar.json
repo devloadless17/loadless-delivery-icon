@@ -146,10 +146,12 @@
       "broughtForward": "مُرحّل من السابق",
       "totalDue": "الإجمالي المستحق",
       "youPaid": "دفعت",
-      "carriedOverLabel": "مُرحّل",
+      "carriedOverLabel": "مُرحّلة",
       "inCreditLabel": "رصيد لك",
       "addedToOwed": "أُضيف إلى ما عليك",
-      "takenOffOwed": "خُصم مما عليك"
+      "takenOffOwed": "خُصم مما عليك",
+      "paidLabel": "دفعت",
+      "creditLabel": "رصيد لك"
     }
   },
   "vendor": {

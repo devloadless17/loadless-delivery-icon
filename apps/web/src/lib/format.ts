@@ -127,3 +127,19 @@ export function initialsOf(name: string): string {
   return `${first[0] ?? ''}${last[0] ?? ''}`.toUpperCase();
 }
 
+/**
+ * Wrap a value so an RTL sentence cannot reorder it.
+ *
+ * U+2068 FIRST STRONG ISOLATE … U+2069 POP DIRECTIONAL ISOLATE is the text-level
+ * equivalent of <bdi>, and it is needed where the value is INTERPOLATED into a
+ * translated sentence rather than rendered into an element of its own — there is
+ * no tag to hang `unicode-bidi` on there.
+ *
+ * Only values that are a bare run of digit groups need it. "100,000 LBP" carries
+ * a strong Latin anchor and survives on its own; "70 123 456" and
+ * "1 Sept, 11:21 pm" do not — the groups get laid out right-to-left and the
+ * number reads backwards.
+ */
+export function isolate(value: string): string {
+  return `\u2068${value}\u2069`;
+}

@@ -4,7 +4,13 @@ import * as React from 'react';
 import * as SwitchPrimitive from '@radix-ui/react-switch';
 import { cn } from '@/lib/utils';
 
-/** `live` styles the checked state in accent orange — used for the duty toggle. */
+/**
+ * `live` styles the checked state in accent orange — used for the duty toggle.
+ *
+ * The thumb's travel has to be mirrored by hand: the TRACK flips with the
+ * layout in RTL but `translate-x` does not, so a checked switch pushed its
+ * thumb straight out of the right-hand end of the pill.
+ */
 const Switch = React.forwardRef<
   React.ComponentRef<typeof SwitchPrimitive.Root>,
   React.ComponentPropsWithoutRef<typeof SwitchPrimitive.Root> & { live?: boolean }
@@ -21,7 +27,7 @@ const Switch = React.forwardRef<
     )}
     {...props}
   >
-    <SwitchPrimitive.Thumb className="pointer-events-none block size-5 rounded-full bg-white shadow-sm transition-transform duration-200 data-[state=checked]:translate-x-5 data-[state=unchecked]:translate-x-0" />
+    <SwitchPrimitive.Thumb className="pointer-events-none block size-5 rounded-full bg-white shadow-sm transition-transform duration-200 data-[state=checked]:translate-x-5 data-[state=unchecked]:translate-x-0 rtl:data-[state=checked]:-translate-x-5" />
   </SwitchPrimitive.Root>
 ));
 Switch.displayName = 'Switch';

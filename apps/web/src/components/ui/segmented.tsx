@@ -40,8 +40,11 @@ export function Segmented<T extends string>({
             tabIndex={active ? 0 : -1}
             onKeyDown={(e) => {
               if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+              // The row is mirrored in RTL, so ArrowRight has to walk BACKWARD
+              // through the array or the focus ring jumps the wrong way.
+              const rtl = getComputedStyle(e.currentTarget).direction === 'rtl';
               e.preventDefault();
-              const step = e.key === 'ArrowRight' ? 1 : -1;
+              const step = (e.key === 'ArrowRight' ? 1 : -1) * (rtl ? -1 : 1);
               const next = options[(index + step + options.length) % options.length];
               if (next) onChange(next.value);
             }}

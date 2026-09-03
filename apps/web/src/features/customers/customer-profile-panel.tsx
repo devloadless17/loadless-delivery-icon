@@ -7,7 +7,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Segmented } from '@/components/ui/segmented';
-import { displayPhone, displayRelative } from '@/lib/format';
+import { displayPhone, displayRelative, isolate } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { AddressManager } from './addresses/address-manager';
 import { IdentityHeader } from './profile/identity-header';
@@ -131,8 +131,8 @@ export function CustomerProfilePanel({
         )}
         <p className="text-xs text-muted-foreground">
           {isPlatform
-            ? `${displayPhone(profile.normalizedPhone)} is shared across the platform — these edits reach every vendor.`
-            : `${displayPhone(profile.normalizedPhone)} is managed by the platform. You can add an address, and set each order's address to whatever you need.`}
+            ? `${isolate(displayPhone(profile.normalizedPhone))} is shared across the platform — these edits reach every vendor.`
+            : `${isolate(displayPhone(profile.normalizedPhone))} is managed by the platform. You can add an address, and set each order's address to whatever you need.`}
         </p>
       </div>
     </Card>
