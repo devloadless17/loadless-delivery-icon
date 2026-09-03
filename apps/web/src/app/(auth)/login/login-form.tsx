@@ -54,7 +54,16 @@ export function LoginForm() {
   return (
     <Card className="shadow-float">
       <CardContent className="pt-6">
-        <form onSubmit={onSubmit} className="space-y-5" noValidate>
+        {/*
+          `method="post"` is a safety net, not a route. If this page ever fails
+          to hydrate — a stale chunk 404 after a redeploy, a driver on a bad
+          connection timing out on the bundle — the browser falls back to a
+          NATIVE submit. A form with no method defaults to GET, which would put
+          `?identifier=…&password=…` in the URL bar, the history and the server
+          access log in plaintext. POST puts them in a body that nothing reads;
+          the route rejects it and the user sees an error instead of leaking.
+        */}
+        <form onSubmit={onSubmit} method="post" className="space-y-5" noValidate>
           <div className="space-y-2">
             <Label htmlFor="identifier">{t('identifier')}</Label>
             <Input

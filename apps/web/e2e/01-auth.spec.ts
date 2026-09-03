@@ -66,4 +66,69 @@ test.describe('authentication & role routing', () => {
     }
     void DRIVER1_PHONE;
   });
+
+  /**
+   * A page that never hydrates must not leak the password into the URL.
+   *
+   * These forms submit through JS, so their `method` looks decorative — and it
+   * is, right up until hydration does not happen. A stale chunk 404 after a
+   * redeploy, or a driver on a bad connection timing out on the bundle, and the
+   * browser falls back to a NATIVE submit. A <form> with no method defaults to
+   * GET, which appends every named field to the query string: the password ends
+   * up in the address bar, in history, and in the server access log in plaintext.
+   *
+   * That is not hypothetical — it was observed in a dev log as
+   * `GET /login?identifier=…&password=…` while the server was failing to serve
+   * its JS. JavaScript is disabled here to reproduce exactly that state.
+   *
+   * Dialog forms are not covered because Radix mounts them on interaction, so
+   * without JS they never render at all. Any form on a SERVER-RENDERED page is
+   * covered, which is what these two contexts walk.
+   */
+  test('a page that never hydrates cannot leak credentials into the URL', async ({
+    browser,
+    baseURL,
+  }) => {
+    const ctx = await browser.newContext({ baseURL, javaScriptEnabled: false });
+    const page = await ctx.newPage();
+    await page.goto('/login');
+
+    // `form.method` is the RESOLVED method, so it reads 'get' for a form that
+    // simply omits the attribute — which is the bug being guarded.
+    expect(await page.locator('form').first().evaluate((f: HTMLFormElement) => f.method)).toBe(
+      'post',
+    );
+
+    await page.getByLabel('Email or phone number').fill(ADMIN);
+    await page.getByLabel('Password').fill(PASSWORD);
+    const [request] = await Promise.all([
+      page.waitForRequest((r) => r.isNavigationRequest() && r.url().includes('/login')),
+      page.getByRole('button', { name: 'Sign in' }).click(),
+    ]);
+
+    expect(request.method()).toBe('POST');
+    expect(request.url()).not.toContain('password');
+    expect(page.url()).not.toContain('password');
+    await ctx.close();
+
+    // The same fallback reaches the signed-in password form, which carries
+    // three secrets. Cookies are borrowed from a real session because the
+    // no-JS context cannot sign itself in.
+    const signedIn = await browser.newContext({ baseURL });
+    const helper = await signedIn.newPage();
+    await loginAs(helper, ADMIN, '/admin');
+    const cookies = await signedIn.cookies();
+    await signedIn.close();
+
+    const noJs = await browser.newContext({ baseURL, javaScriptEnabled: false });
+    await noJs.addCookies(cookies);
+    const settings = await noJs.newPage();
+    await settings.goto('/admin/settings');
+    const methods = await settings
+      .locator('form')
+      .evaluateAll((forms) => forms.map((f) => (f as HTMLFormElement).method));
+    expect(methods.length).toBeGreaterThan(0);
+    expect(methods.every((m) => m === 'post')).toBe(true);
+    await noJs.close();
+  });
 });

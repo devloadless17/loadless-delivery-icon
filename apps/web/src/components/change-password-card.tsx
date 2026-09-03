@@ -58,7 +58,9 @@ export function ChangePasswordCard() {
         <CardDescription>{t('description')}</CardDescription>
       </CardHeader>
       <CardContent>
-        <form onSubmit={submit} className="grid max-w-sm gap-4">
+        {/* POST so an unhydrated fallback cannot put these three passwords
+            in the URL — see the note on the login form. */}
+        <form onSubmit={submit} method="post" className="grid max-w-sm gap-4">
           <div className="grid gap-1.5">
             <Label htmlFor="current-password">{t('current')}</Label>
             <Input

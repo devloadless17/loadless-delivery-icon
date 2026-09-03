@@ -65,6 +65,7 @@ export function NewCustomerForm({ normalizedPhone }: { normalizedPhone: string }
       </CardHeader>
       <CardContent>
         <form
+          method="post"
           className="space-y-4"
           onSubmit={(e) => {
             e.preventDefault();

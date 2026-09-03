@@ -55,6 +55,7 @@ export default function AdminSettingsPage() {
             <Skeleton className="h-11 w-full" />
           ) : (
             <form
+              method="post"
               className="flex items-end gap-3"
               onSubmit={(e) => {
                 e.preventDefault();
