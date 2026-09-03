@@ -1022,4 +1022,67 @@ describe('driver settlements (integration)', () => {
       prisma.driverSettlement.delete({ where: { id: settled.body.data.id } }),
     ).rejects.toThrow(/never deleted/);
   });
+  // --------------------------------------------------- more than fits a list
+
+  /**
+   * A settlement bigger than SETTLEMENT_ORDER_LIST_LIMIT.
+   *
+   * Two different things must hold at once, and they pull in opposite
+   * directions: the itemised list is CAPPED (a receipt is opened on a phone,
+   * and a backlog can run to thousands of deliveries), while the money is
+   * summed over EVERY order, capped or not. A total that only added up the
+   * rows it happened to show would quietly under-collect.
+   */
+  it('caps the itemised list but never the total, on either side of the handover', async () => {
+    const { driver, token } = await makeDriver('Backlog Driver');
+    const LIMIT = 200;
+    const EXTRA = 5;
+    // 205 deliveries at 1,000 LBP / 30% => 300 commission each.
+    for (let i = 0; i < LIMIT + EXTRA; i += 1) {
+      await seedOrder({ driverId: driver.id, charge: 1_000n, currency: 'LBP' });
+    }
+
+    const preview = await previewOf(driver.id).expect(200);
+    const line = lineFor(preview.body.data, 'LBP')! as unknown as PreviewLine;
+    expect(line.orderCount).toBe(LIMIT + EXTRA);
+    // 205 x 300 — the sum covers all of them, not just the listed ones.
+    expect(line.commissionDue).toBe(String(300 * (LIMIT + EXTRA)));
+    expect(preview.body.data.orders).toHaveLength(LIMIT);
+
+    // The driver's own "what do I owe" obeys the same two rules.
+    const owed = await request(server)
+      .get('/api/v1/driver/settlements/current')
+      .set(auth(token))
+      .expect(200);
+    expect(owed.body.data.lines[0].unsettledOrderCount).toBe(LIMIT + EXTRA);
+    expect(owed.body.data.orders).toHaveLength(LIMIT);
+
+    const settled = await request(server)
+      .post(`/api/v1/admin/drivers/${driver.id}/settlements`)
+      .set(auth(adminToken))
+      .send(settleBody([line], { LBP: String(300 * (LIMIT + EXTRA)) }))
+      .expect(201);
+
+    // Every one of the 205 is attached, even though only 200 were ever listed.
+    const attached = await prisma.order.count({
+      where: { settlementId: settled.body.data.id },
+    });
+    expect(attached).toBe(LIMIT + EXTRA);
+
+    // The RECEIPT is capped too — this is the path a driver opens on a phone.
+    const receipt = await request(server)
+      .get(`/api/v1/driver/settlements/${settled.body.data.id}`)
+      .set(auth(token))
+      .expect(200);
+    expect(receipt.body.data.orders).toHaveLength(LIMIT);
+    const receiptLine = receipt.body.data.lines.find(
+      (l: { currency: string }) => l.currency === 'LBP',
+    );
+    expect(receiptLine.orderCount).toBe(LIMIT + EXTRA);
+    expect(receiptLine.commissionDue).toBe(String(300 * (LIMIT + EXTRA)));
+
+    // Nothing is left owing: the sweep took all 205, not the 200 on screen.
+    const after = await previewOf(driver.id).expect(200);
+    expect(lineFor(after.body.data, 'LBP')).toBeUndefined();
+  });
 });

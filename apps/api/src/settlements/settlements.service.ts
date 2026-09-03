@@ -594,11 +594,23 @@ export class SettlementsService {
     if (!settlement) throw AppException.notFound('Settlement not found');
 
     const [orders, labels] = await Promise.all([
-      this.prisma.order.findMany({
-        where: { settlementId },
-        select: SETTLEMENT_ORDER_SELECT,
-        orderBy: { deliveredAt: 'asc' },
-      }),
+      // Capped like the preview and the "what do I owe" list. This is the
+      // RECEIPT, opened on a driver's phone: a settlement that closed a long
+      // backlog can carry thousands of deliveries, and every one of them was
+      // being serialised into the payload and rendered. The UI already handles
+      // a short list — it compares length against the line's orderCount and
+      // says "showing the most recent N of M" — so the cap costs nothing.
+      //
+      // Taken newest-first to get the most RECENT slice, then reversed so the
+      // receipt still reads in delivery order as it always has.
+      this.prisma.order
+        .findMany({
+          where: { settlementId },
+          select: SETTLEMENT_ORDER_SELECT,
+          orderBy: { deliveredAt: 'desc' },
+          take: SETTLEMENT_ORDER_LIST_LIMIT,
+        })
+        .then((rows) => rows.reverse()),
       this.userLabels([settlement.collectedByUserId]),
     ]);
 
@@ -647,10 +659,16 @@ export class SettlementsService {
   /**
    * The admin's end-of-day worklist: every driver who owes something right now.
    *
-   * The groupBy here is safe despite the perf rules on relation counts: it runs
-   * against orders_unsettled_by_driver_idx, a PARTIAL index over delivered-and-
-   * unsettled orders only. That set is a day's work, not the whole orders
-   * table, because settling empties it.
+   * The groupBy runs against orders_unsettled_by_driver_idx, a PARTIAL index
+   * over delivered-and-unsettled orders which now INCLUDEs the commission
+   * column, so this is an index-only scan.
+   *
+   * That INCLUDE is load-bearing and was added after measuring. The set is only
+   * "a day's work" while settling keeps up; let a backlog build and it grows
+   * without bound — and a backlog is exactly when someone opens this screen.
+   * Without the summed column in the index every row needed a heap visit, the
+   * planner switched to a sequential scan of the whole orders table, and 150k
+   * unsettled orders took 500ms. Covered, the same query is 17ms.
    */
   async outstanding(query: OutstandingQuery) {
     const [orderRows, balanceRows] = await Promise.all([

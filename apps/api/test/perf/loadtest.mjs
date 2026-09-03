@@ -78,4 +78,15 @@ await bench('driver active', '/api/v1/driver/orders?scope=active&limit=15', driv
 await bench('admin orders', '/api/v1/admin/orders?limit=20', adminToken);
 await bench('admin customers', '/api/v1/admin/customers?page=1&limit=20', adminToken);
 await bench('admin customers (name search)', '/api/v1/admin/customers?page=1&limit=20&q=ahmad', adminToken);
+
+// Settlements. These aggregate over the DELIVERED-and-unsettled set, which is
+// the one part of the schema that grows when nobody is looking: it is emptied
+// by settling, so a backlog is both the slow case AND the case where somebody
+// is actually staring at the screen. The perf database is deliberately in that
+// state — 150k delivered orders, none settled.
+await bench('admin settlement worklist', '/api/v1/admin/settlements/outstanding?page=1&limit=20', adminToken);
+await bench('admin settlements list', '/api/v1/admin/settlements?page=1&limit=20', adminToken);
+await bench('settle preview (one driver)', '/api/v1/admin/drivers/d-3/settlements/preview', adminToken);
+await bench('driver: what do I owe', '/api/v1/driver/settlements/current', driverToken);
+await bench('driver settlements list', '/api/v1/driver/settlements?limit=10', driverToken);
 console.log('');

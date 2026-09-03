@@ -267,4 +267,55 @@ test.describe('Arabic & RTL', () => {
     // active tab uses the darkened --primary-strong instead.
     expect(ratio).toBeGreaterThanOrEqual(4.5);
   });
+  test("the driver's money screens survive Arabic: owed, receipt and the itemised list", async ({
+    browser,
+    baseURL,
+  }) => {
+    const ctx = await newContext(browser, baseURL!);
+    const driver = await ctx.newPage();
+    await loginAs(driver, DRIVER1_PHONE, '/driver');
+    await switchToArabic(driver, baseURL!);
+    await driver.goto('/driver/earnings');
+
+    // Handovers exist by now (spec 10 settles this driver).
+    await expect(driver.getByRole('heading', { name: 'الأرباح' })).toBeVisible();
+    const handovers = driver.getByRole('heading', { name: 'عمليات التسليم' });
+    await expect(handovers).toBeVisible();
+
+    // Amounts on the earnings screen must not be reordered.
+    for (const el of await driver.locator('main .data-mono, main bdi').all()) {
+      const mode = await el.evaluate((n) => getComputedStyle(n).unicodeBidi);
+      expect(['plaintext', 'isolate', 'isolate-override']).toContain(mode);
+    }
+
+    // Open a receipt: the screen a driver is looking at while handing over cash.
+    // Skip a VOIDED handover — voiding releases its orders, so there is
+    // correctly nothing left to itemise on that one.
+    const receiptLink = driver
+      .locator('li')
+      .filter({ has: driver.locator('a[href*="/driver/settlements/"]') })
+      .filter({ hasNotText: 'ملغاة' })
+      .first()
+      .locator('a[href*="/driver/settlements/"]');
+    await expect(receiptLink).toBeVisible();
+    await receiptLink.click();
+    await driver.waitForURL(/\/driver\/settlements\/[a-z0-9]{20,}/);
+    await expect(driver.getByText('الإجمالي المستحق')).toBeVisible();
+    expect(await driver.evaluate(() => document.documentElement.getAttribute('dir'))).toBe('rtl');
+
+    // "What is this for?" — the itemised evidence behind the figure.
+    const disclosure = driver.getByRole('button', { name: 'ما سبب هذا المبلغ؟' }).first();
+    await expect(disclosure).toBeVisible();
+    await disclosure.click();
+    await expect(driver.getByText('العمولة من هذه التوصيلات')).toBeVisible();
+
+    // Nothing may scroll sideways on a phone-width money screen.
+    await driver.setViewportSize({ width: 390, height: 844 });
+    const overflow = await driver.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(1);
+
+    await ctx.close();
+  });
 });
