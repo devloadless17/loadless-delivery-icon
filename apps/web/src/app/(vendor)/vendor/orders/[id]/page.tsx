@@ -86,7 +86,7 @@ export default function VendorOrderDetailPage() {
               <a
                 href={`tel:${order.customer.normalizedPhone}`}
                 dir="ltr"
-                className="data-mono text-sm text-primary hover:underline"
+                className="data-mono text-sm text-primary-strong hover:underline"
               >
                 {displayPhone(order.customer.normalizedPhone)}
               </a>

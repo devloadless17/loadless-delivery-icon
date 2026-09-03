@@ -212,7 +212,7 @@ export default function AdminOrdersPage() {
                   <TableCell>
                     <Link
                       href={`/admin/orders/${order.id}`}
-                      className="data-mono font-semibold text-primary hover:underline"
+                      className="data-mono font-semibold text-primary-strong hover:underline"
                     >
                       {order.orderNumber}
                     </Link>

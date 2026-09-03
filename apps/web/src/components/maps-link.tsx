@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { ExternalLink, MapPin, Navigation } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,31 +17,33 @@ export function MapsLinkField({
   value,
   onChange,
   id = 'maps-link',
-  label = 'Google Maps link (from the customer)',
+  label,
 }: {
   value: string;
   onChange: (value: string) => void;
   id?: string;
   label?: string;
 }) {
+  const t = useTranslations('address');
   const valid = LINK_OK.test(value.trim());
   return (
     <div className="space-y-2">
       <Label htmlFor={id} className="flex items-center gap-1.5">
-        <MapPin className="size-3.5 text-muted-foreground" aria-hidden /> {label}
+        <MapPin className="size-3.5 text-muted-foreground" aria-hidden /> {label ?? t('mapsLinkFromCustomer')}
       </Label>
       <div className="flex gap-2">
         <Input
           id={id}
           type="url"
           inputMode="url"
-          placeholder="Paste the location link — https://maps.app.goo.gl/…"
+          placeholder={t('mapsPlaceholder')}
           value={value}
           onChange={(e) => onChange(e.target.value)}
+          dir="ltr"
           className={cn('data-mono text-sm', value && !valid && 'border-warning')}
         />
         {valid && (
-          <a href={value.trim()} target="_blank" rel="noopener noreferrer" aria-label="Preview location link">
+          <a href={value.trim()} target="_blank" rel="noopener noreferrer" aria-label={t('previewLink')}>
             <Button type="button" variant="outline" size="icon">
               <ExternalLink />
             </Button>
@@ -48,7 +51,7 @@ export function MapsLinkField({
         )}
       </div>
       {value && !valid && (
-        <p className="text-xs text-warning">That doesn&apos;t look like a link — it should start with https://</p>
+        <p className="text-xs text-warning">{t('notALink')}</p>
       )}
     </div>
   );

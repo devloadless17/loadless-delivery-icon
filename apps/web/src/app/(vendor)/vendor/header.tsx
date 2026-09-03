@@ -65,7 +65,7 @@ export function VendorHeader() {
                 className={cn(
                   'whitespace-nowrap border-b-2 px-3 py-2.5 text-sm font-medium transition-colors duration-150',
                   active
-                    ? 'border-primary text-primary'
+                    ? 'border-primary-strong text-primary-strong'
                     : 'border-transparent text-muted-foreground hover:text-foreground',
                 )}
               >

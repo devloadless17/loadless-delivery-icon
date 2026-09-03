@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { MapPinPlus, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
@@ -33,13 +34,14 @@ export function AddressManager({
   /** ADMIN: rows are editable and removable. Vendors only ever add. */
   canManageAll?: boolean;
 }) {
+  const t = useTranslations('address');
   const [editing, setEditing] = useState<EditTarget>(null);
   const [draft, setDraft] = useState<AddressDraft>(emptyAddressDraft);
   const addAddress = useAddAddress();
 
   async function save() {
     if (draft.addressText.trim().length < 3) {
-      toast.error('Enter an address first.');
+      toast.error(t('enterFirst'));
       return;
     }
     try {
@@ -63,16 +65,16 @@ export function AddressManager({
         // exactly what happened the first time this message existed.
         toast.error(
           saved.matchedOn === 'link'
-            ? 'That Google Maps link is already saved for this customer. Clear the link to add a separate description of the place.'
-            : 'That address is already saved for this customer.',
+            ? t('dupLink')
+            : t('dupText'),
         );
         return;
       }
       setDraft(emptyAddressDraft);
       setEditing(null);
-      toast.success('Address saved');
+      toast.success(t('addressSaved'));
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Could not save the address.');
+      toast.error(err instanceof ApiError ? err.message : t('saveFailed'));
     }
   }
 
@@ -103,13 +105,13 @@ export function AddressManager({
           <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed py-8 text-center">
             <MapPinPlus className="size-7 text-muted-foreground" aria-hidden />
             <div>
-              <p className="text-sm font-medium">No saved addresses yet</p>
+              <p className="text-sm font-medium">{t('noSaved')}</p>
               <p className="text-sm text-muted-foreground">
-                Add the one they&apos;re giving you right now.
+                {t('noSavedBody')}
               </p>
             </div>
             <Button size="sm" onClick={() => setEditing({ kind: 'new' })}>
-              <Plus /> Add address
+              <Plus /> {t('addAddress')}
             </Button>
           </div>
         )
@@ -117,7 +119,7 @@ export function AddressManager({
 
       {editing?.kind === 'new' ? (
         <form
-          aria-label="New address"
+          aria-label={t('newAddress')}
           className="space-y-3 rounded-lg border border-dashed p-3"
           onSubmit={(e) => {
             e.preventDefault();
@@ -140,7 +142,7 @@ export function AddressManager({
       ) : (
         addresses.length > 0 && (
           <Button variant="outline" size="sm" onClick={() => setEditing({ kind: 'new' })}>
-            <Plus /> Add address
+            <Plus /> {t('addAddress')}
           </Button>
         )
       )}

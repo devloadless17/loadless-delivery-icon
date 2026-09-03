@@ -1,10 +1,11 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { displayAddress, isSameAddress } from '@loadless/shared';
 import { Check, Plus, TriangleAlert } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import { LABEL_ICON, LABEL_TEXT } from './label-meta';
+import { LABEL_ICON } from './label-meta';
 import type { CustomerAddress } from '../api';
 
 /**
@@ -26,8 +27,10 @@ export function AddressPicker({
   onSomewhereElse: () => void;
   oneOffActive: boolean;
 }) {
+  const t = useTranslations('address');
+  const tl = useTranslations('address.label');
   return (
-    <div role="radiogroup" aria-label="Delivery address" className="grid gap-2 sm:grid-cols-2">
+    <div role="radiogroup" aria-label={t('deliverTo')} className="grid gap-2 sm:grid-cols-2">
       {addresses.map((address) => {
         const Icon = LABEL_ICON[address.label];
         const selected = address.id === selectedId;
@@ -42,17 +45,17 @@ export function AddressPicker({
             className={cn(
               'flex min-h-[5.5rem] cursor-pointer flex-col gap-1 rounded-lg border p-3 text-left transition-all duration-150',
               selected
-                ? 'border-primary bg-primary/5 ring-2 ring-primary/15'
-                : 'bg-card hover:border-primary/40',
+                ? 'border-primary-strong bg-primary/5 ring-2 ring-primary-strong/15'
+                : 'bg-card hover:border-primary-strong/40',
             )}
           >
             <span className="flex items-center gap-1.5">
               <Icon className="size-3.5 text-muted-foreground" aria-hidden />
               <span className="text-xs font-medium text-muted-foreground">
-                {LABEL_TEXT[address.label]}
+                {tl(address.label)}
               </span>
               {isUsual && <Badge className="ml-0.5">Usual</Badge>}
-              {selected && <Check className="ml-auto size-4 text-primary" aria-hidden />}
+              {selected && <Check className="ms-auto size-4 text-primary-strong" aria-hidden />}
             </span>
             <span className="line-clamp-2 text-sm">
               {displayAddress(address.addressText, address.mapsUrl)}
@@ -77,12 +80,12 @@ export function AddressPicker({
           'flex min-h-[5.5rem] cursor-pointer flex-col justify-center gap-1 rounded-lg border border-dashed p-3 text-left transition-all duration-150',
           addresses.length <= 1 && 'sm:col-span-2',
           oneOffActive
-            ? 'border-primary bg-primary/5 ring-2 ring-primary/15'
-            : 'hover:border-primary/40',
+            ? 'border-primary-strong bg-primary/5 ring-2 ring-primary-strong/15'
+            : 'hover:border-primary-strong/40',
         )}
       >
         <span className="flex items-center gap-1.5 text-sm font-medium">
-          <Plus className="size-4 text-muted-foreground" aria-hidden /> Somewhere else
+          <Plus className="size-4 text-muted-foreground" aria-hidden /> {t('somewhereElse')}
         </span>
         <span className="text-xs text-muted-foreground">
           They&apos;re at work or a friend&apos;s place today

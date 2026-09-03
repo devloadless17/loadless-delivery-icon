@@ -1,4 +1,29 @@
 import { NextResponse, type NextRequest } from 'next/server';
+import { DEFAULT_LOCALE, isLocale, LOCALE_COOKIE } from '@/i18n/config';
+
+/**
+ * The locale this REQUEST should render in.
+ *
+ * Admin is pinned to English by path, not by provider nesting: the operator
+ * console stays English on a shared device where a driver last chose Arabic.
+ * Deciding it here (rather than in a nested provider) is what lets the ROOT
+ * layout put `dir` on <html> — and that is the only place `dir` actually
+ * works, because Radix mounts dialogs and dropdowns in a portal on
+ * document.body and Sonner reads document.documentElement.direction. A `dir`
+ * on some nested wrapper leaves every dialog and toast rendering LTR.
+ */
+function localeFor(req: NextRequest): string {
+  if (req.nextUrl.pathname.startsWith('/admin')) return 'en';
+  const cookie = req.cookies.get(LOCALE_COOKIE)?.value;
+  return isLocale(cookie) ? cookie : DEFAULT_LOCALE;
+}
+
+/** Handing the resolved locale to the layout as a request header. */
+function withLocale(req: NextRequest) {
+  const headers = new Headers(req.headers);
+  headers.set('x-fd-locale', localeFor(req));
+  return NextResponse.next({ request: { headers } });
+}
 
 /**
  * Coarse UX gating only — the API is the authorization authority. We decode
@@ -32,7 +57,7 @@ export function middleware(req: NextRequest) {
   const home = role ? (ROLE_HOME[role] ?? '/login') : null;
 
   if (pathname === '/login') {
-    return home ? NextResponse.redirect(new URL(home, req.url)) : NextResponse.next();
+    return home ? NextResponse.redirect(new URL(home, req.url)) : withLocale(req);
   }
 
   if (!role || !home) {
@@ -50,7 +75,7 @@ export function middleware(req: NextRequest) {
     return NextResponse.redirect(new URL(home, req.url));
   }
 
-  return NextResponse.next();
+  return withLocale(req);
 }
 
 export const config = {

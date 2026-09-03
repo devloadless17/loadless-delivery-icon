@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { Check, Copy, Pencil, RotateCcw } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { toast } from 'sonner';
@@ -30,6 +31,7 @@ export function IdentityHeader({
   onEditingChange: (editing: boolean) => void;
   actionSlot?: ReactNode;
 }) {
+  const t = useTranslations('customer');
   const [name, setName] = useState(customer.name);
   const [copied, setCopied] = useState(false);
   const updateName = useUpdateCustomerName();
@@ -44,7 +46,7 @@ export function IdentityHeader({
   async function save() {
     const trimmed = name.trim();
     if (trimmed.length < 2) {
-      toast.error('Enter the customer’s name.');
+      toast.error(t('errName'));
       return;
     }
     if (trimmed === customer.name) {
@@ -54,23 +56,23 @@ export function IdentityHeader({
     try {
       if (isGlobal) {
         await updateName.mutateAsync({ id: customer.id, name: trimmed });
-        toast.success('Name updated');
+        toast.success(t('nameUpdated'));
       } else {
         await setDisplayName.mutateAsync({ id: customer.id, displayName: trimmed });
-        toast.success('Saved — only you see this name');
+        toast.success(t('aliasSaved'));
       }
       onEditingChange(false);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Could not update the name.');
+      toast.error(err instanceof ApiError ? err.message : t('nameFailed'));
     }
   }
 
   async function usePlatformName() {
     try {
       await clearDisplayName.mutateAsync({ id: customer.id });
-      toast.success(`Now showing ${customer.baseName}`);
+      toast.success(t('nowShowing', { name: customer.baseName }));
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Could not reset the name.');
+      toast.error(err instanceof ApiError ? err.message : t('resetFailed'));
     }
   }
 
@@ -87,7 +89,7 @@ export function IdentityHeader({
         <span
           aria-hidden
           className={cn(
-            'flex shrink-0 items-center justify-center rounded-xl bg-primary/10 font-display font-semibold text-primary',
+            'flex shrink-0 items-center justify-center rounded-xl bg-primary/10 font-display font-semibold text-primary-strong',
             dense ? 'size-9 text-sm' : 'size-11 text-base',
           )}
         >
@@ -136,7 +138,7 @@ export function IdentityHeader({
                 I got confused". */}
             <p className="text-xs text-muted-foreground">
               {isGlobal
-                ? 'Everyone on the platform sees this name.'
+                ? t('everyoneSees')
                 : `Only you will see this name — the platform record keeps “${customer.baseName}”.`}
             </p>
             </div>
@@ -151,7 +153,7 @@ export function IdentityHeader({
               <Button
                 variant="ghost"
                 size="icon"
-                aria-label="Edit name"
+                aria-label={t('editName')}
                 className="size-8 text-muted-foreground"
                 onClick={() => {
                   setName(customer.name);
@@ -169,7 +171,7 @@ export function IdentityHeader({
               <button
                 type="button"
                 onClick={() => void usePlatformName()}
-                className="ml-1.5 inline-flex cursor-pointer items-center gap-1 font-medium text-primary hover:underline"
+                className="ml-1.5 inline-flex cursor-pointer items-center gap-1 font-medium text-primary-strong hover:underline"
               >
                 <RotateCcw className="size-3" aria-hidden /> Use platform name
               </button>
@@ -178,13 +180,13 @@ export function IdentityHeader({
           <div className="flex items-center gap-1.5">
             <a
               href={`tel:${customer.normalizedPhone}`}
-              className="data-mono text-sm text-muted-foreground hover:text-primary hover:underline"
+              className="data-mono text-sm text-muted-foreground hover:text-primary-strong hover:underline"
             >
               {displayPhone(customer.normalizedPhone)}
             </a>
             <button
               type="button"
-              aria-label="Copy phone number"
+              aria-label={t('copyPhone')}
               onClick={copyPhone}
               className="cursor-pointer text-muted-foreground transition-colors hover:text-foreground"
             >
@@ -200,9 +202,9 @@ export function IdentityHeader({
       <div className="flex shrink-0 items-center gap-2">
         {!dense &&
           (customer.addedByYou ? (
-            <Badge variant="muted">Added by you</Badge>
+            <Badge variant="muted">{t('addedByYou')}</Badge>
           ) : (
-            <Badge variant="muted">Shared customer</Badge>
+            <Badge variant="muted">{t('sharedCustomer')}</Badge>
           ))}
         {actionSlot}
       </div>

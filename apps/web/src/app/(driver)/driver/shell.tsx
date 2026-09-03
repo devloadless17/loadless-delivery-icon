@@ -56,7 +56,7 @@ export function DriverShell({ children }: { children: ReactNode }) {
                 aria-current={active ? 'page' : undefined}
                 className={cn(
                   'group flex min-h-14 flex-col items-center justify-center gap-0.5 text-[11px] font-medium transition-colors duration-150',
-                  active ? 'text-primary' : 'text-muted-foreground hover:text-foreground',
+                  active ? 'text-primary-strong' : 'text-muted-foreground hover:text-foreground',
                 )}
               >
                 <span

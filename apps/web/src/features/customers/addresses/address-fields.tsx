@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { ADDRESS_LABELS, type AddressLabel } from '@loadless/shared';
 import { MapsLinkField } from '@/components/maps-link';
 import { Input } from '@/components/ui/input';
@@ -11,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { LABEL_TEXT } from './label-meta';
+
 
 export interface AddressDraft {
   label: AddressLabel;
@@ -39,13 +40,15 @@ export function AddressFields({
   showLabel?: boolean;
   autoFocus?: boolean;
 }) {
+  const t = useTranslations('address');
+  const tl = useTranslations('address.label');
   const textId = idPrefix === 'new-address' ? 'new-address' : `${idPrefix}-address`;
   return (
     <div className="space-y-3">
       <div className={showLabel ? 'grid gap-3 sm:grid-cols-[8rem_1fr]' : ''}>
         {showLabel && (
           <div className="space-y-1.5">
-            <Label htmlFor={`${idPrefix}-label`}>Label</Label>
+            <Label htmlFor={`${idPrefix}-label`}>{t('labelField')}</Label>
             <Select
               value={value.label}
               onValueChange={(label) => onChange({ ...value, label: label as AddressLabel })}
@@ -56,7 +59,7 @@ export function AddressFields({
               <SelectContent>
                 {ADDRESS_LABELS.map((label) => (
                   <SelectItem key={label} value={label}>
-                    {LABEL_TEXT[label]}
+                    {tl(label)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -64,11 +67,11 @@ export function AddressFields({
           </div>
         )}
         <div className="space-y-1.5">
-          <Label htmlFor={textId}>Address</Label>
+          <Label htmlFor={textId}>{t('addressField')}</Label>
           <Input
             id={textId}
             className="h-10"
-            placeholder="Street, building, floor"
+            placeholder={t('addressPlaceholder')}
             value={value.addressText}
             onChange={(e) => onChange({ ...value, addressText: e.target.value })}
             autoFocus={autoFocus}

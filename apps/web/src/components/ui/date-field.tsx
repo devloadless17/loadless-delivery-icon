@@ -62,7 +62,7 @@ export const DateField = React.forwardRef<HTMLInputElement, DateFieldProps>(
           onChange={(e) => onValueChange(e.target.value)}
           className={cn(
             'flex h-10 w-full rounded-lg border border-input bg-card py-2 ps-9 pe-9 text-sm shadow-none transition-all duration-150',
-            'hover:border-input focus-visible:border-primary focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-primary/15',
+            'hover:border-input focus-visible:border-primary-strong focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-primary-strong/15',
             'disabled:cursor-not-allowed disabled:opacity-50',
             // The browser's own picker button is replaced by the icon above;
             // it stays in the layout as a full-field click target so tapping

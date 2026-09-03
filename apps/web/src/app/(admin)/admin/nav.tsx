@@ -51,7 +51,7 @@ export function AdminNavLinks({
               // on the desktop sidebar it is indistinguishable from before.
               'relative flex min-h-11 items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150',
               active
-                ? 'bg-primary/10 text-primary shadow-none'
+                ? 'bg-primary/10 text-primary-strong shadow-none'
                 : 'text-muted-foreground hover:bg-muted hover:text-foreground',
             )}
           >

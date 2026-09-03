@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { displayAddress } from '@loadless/shared';
 import { ExternalLink, Pencil, Trash2, TriangleAlert } from 'lucide-react';
 import { useState } from 'react';
@@ -9,7 +10,7 @@ import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { AddressFields, type AddressDraft } from './address-fields';
-import { LABEL_ICON, LABEL_TEXT } from './label-meta';
+import { LABEL_ICON } from './label-meta';
 import { useArchiveAddress, useUpdateAddress, type CustomerAddress } from '../api';
 
 export type RowMode = 'view' | 'edit' | 'confirmRemove';
@@ -37,6 +38,9 @@ export function AddressRow({
   /** ADMIN only. Vendors add addresses but never edit or remove them. */
   canManageAll?: boolean;
 }) {
+  const t = useTranslations('address');
+  const tc = useTranslations('common');
+  const tl = useTranslations('address.label');
   const updateAddress = useUpdateAddress();
   const archiveAddress = useArchiveAddress();
   const [draft, setDraft] = useState<AddressDraft>({
@@ -63,7 +67,7 @@ export function AddressRow({
   async function save() {
     // Either half is a complete location — a shared pin needs no typed text.
     if (draft.addressText.trim().length < 3 && !draft.mapsUrl.trim()) {
-      toast.error('Add an address or paste a Google Maps link.');
+      toast.error(t('addOrPaste'));
       return;
     }
     try {
@@ -77,25 +81,25 @@ export function AddressRow({
         },
       });
       onModeChange('view');
-      toast.success('Address updated');
+      toast.success(t('addressUpdated'));
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Could not save the address.');
+      toast.error(err instanceof ApiError ? err.message : t('saveFailed'));
     }
   }
 
   async function remove() {
     try {
       await archiveAddress.mutateAsync({ customerId, addressId: address.id });
-      toast.success('Address removed');
+      toast.success(t('addressRemoved'));
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Could not remove the address.');
+      toast.error(err instanceof ApiError ? err.message : t('removeFailed'));
       onModeChange('view');
     }
   }
 
   if (mode === 'edit') {
     return (
-      <li className="rounded-lg border border-primary/40 bg-card p-3.5 ring-2 ring-primary/10">
+      <li className="rounded-lg border border-primary-strong/40 bg-card p-3.5 ring-2 ring-primary-strong/10">
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -114,10 +118,10 @@ export function AddressRow({
           />
           <div className="flex justify-end gap-2">
             <Button type="button" size="sm" variant="ghost" onClick={() => onModeChange('view')}>
-              Cancel
+              {tc('cancel')}
             </Button>
             <Button type="submit" size="sm" loading={updateAddress.isPending}>
-              Save
+              {t('save')}
             </Button>
           </div>
         </form>
@@ -129,11 +133,11 @@ export function AddressRow({
     return (
       <li className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-3.5 py-3">
         <p className="text-sm">
-          Remove the {LABEL_TEXT[address.label].toLowerCase()} address? It stays on past orders.
+          {t('removeConfirm', { label: tl(address.label).toLowerCase() })}
         </p>
         <div className="flex gap-2">
           <Button size="sm" variant="ghost" onClick={() => onModeChange('view')}>
-            Keep
+            {t('keep')}
           </Button>
           <Button
             size="sm"
@@ -141,7 +145,7 @@ export function AddressRow({
             loading={archiveAddress.isPending}
             onClick={() => void remove()}
           >
-            Remove
+            {t('remove')}
           </Button>
         </div>
       </li>
@@ -149,16 +153,16 @@ export function AddressRow({
   }
 
   return (
-    <li className="group rounded-lg border px-3.5 py-3 transition-colors duration-150 hover:border-primary/40">
+    <li className="group rounded-lg border px-3.5 py-3 transition-colors duration-150 hover:border-primary-strong/40">
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-2.5">
           <Icon className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <p className="text-xs font-medium text-muted-foreground">
-                {LABEL_TEXT[address.label]}
+                {tl(address.label)}
               </p>
-              {isUsual && <Badge>Usual</Badge>}
+              {isUsual && <Badge>{t('usual')}</Badge>}
             </div>
             <p className="text-sm">{displayAddress(address.addressText, address.mapsUrl)}</p>
             {address.mapsUrl ? (
@@ -166,7 +170,7 @@ export function AddressRow({
                 href={address.mapsUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="mt-0.5 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                className="mt-0.5 inline-flex items-center gap-1 text-xs font-medium text-primary-strong hover:underline"
               >
                 <ExternalLink className="size-3" aria-hidden /> Open in Google Maps
               </a>
@@ -192,13 +196,13 @@ export function AddressRow({
         </div>
         {canEdit && (
           <div className="flex shrink-0 items-center gap-0.5">
-            <Button variant="ghost" size="icon" aria-label="Edit address" onClick={beginEdit}>
+            <Button variant="ghost" size="icon" aria-label={t('editAddress')} onClick={beginEdit}>
               <Pencil />
             </Button>
             <Button
               variant="ghost"
               size="icon"
-              aria-label="Remove address"
+              aria-label={t('removeAddress')}
               className="text-muted-foreground hover:text-destructive"
               onClick={() => onModeChange('confirmRemove')}
             >
@@ -210,7 +214,7 @@ export function AddressRow({
       {onStartOrder && (
         <div className={cn('mt-2 flex justify-end')}>
           <Button size="sm" variant="outline" onClick={() => onStartOrder(address)}>
-            Start order here
+            {t('startOrderHere')}
           </Button>
         </div>
       )}

@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { displayAddress, isSameAddress, type AddressLabel } from '@loadless/shared';
 import { History, MapPin, TriangleAlert } from 'lucide-react';
 import { MapsLinkField } from '@/components/maps-link';
@@ -11,7 +12,6 @@ import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import {
   LABEL_ICON,
-  LABEL_TEXT,
 } from '@/features/customers/addresses/label-meta';
 import { AddressPicker } from '@/features/customers/addresses/address-picker';
 import { type CustomerAddress, type CustomerProfile } from '@/features/customers/api';
@@ -49,6 +49,8 @@ export function DeliverToStep({
   state: DeliverState;
   onChange: (next: DeliverState) => void;
 }) {
+  const t = useTranslations('address');
+  const tl = useTranslations('address.label');
   const selected = customer?.addresses.find((a) => a.id === state.selectedAddressId) ?? null;
   const usualAddressText = customer?.stats.topAddress?.addressText ?? null;
 
@@ -104,14 +106,14 @@ export function DeliverToStep({
     <Card>
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-base">
-          <MapPin className="size-4 text-primary" aria-hidden /> Deliver to
+          <MapPin className="size-4 text-primary-strong" aria-hidden /> {t('deliverTo')}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
         {hasSaved && customer && (
           <>
             <p className="text-xs font-medium text-muted-foreground">
-              Saved for {customer.name.split(' ')[0]} — tap to choose
+              {t('savedFor', { name: customer.name.split(' ')[0] ?? customer.name })}
             </p>
             <AddressPicker
               addresses={customer.addresses}
@@ -128,16 +130,16 @@ export function DeliverToStep({
           <button
             type="button"
             onClick={useSuggestion}
-            className="flex w-full cursor-pointer items-center justify-between gap-3 rounded-lg border border-dashed px-3.5 py-2.5 text-left transition-colors duration-150 hover:border-primary/40"
+            className="flex w-full cursor-pointer items-center justify-between gap-3 rounded-lg border border-dashed px-3.5 py-2.5 text-start transition-colors duration-150 hover:border-primary-strong/40"
           >
             <span className="min-w-0">
               <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                <History className="size-3.5" aria-hidden /> Usually delivered to
-                {suggestion.orderCount > 1 ? ` · ${suggestion.orderCount} orders` : ''}
+                <History className="size-3.5" aria-hidden /> {t('usuallyDeliveredTo')}
+                {suggestion.orderCount > 1 ? t('ordersCount', { count: suggestion.orderCount }) : ''}
               </span>
               <span className="mt-0.5 block truncate text-sm">{suggestion.addressText}</span>
             </span>
-            <span className="shrink-0 text-xs font-semibold text-primary">Use this</span>
+            <span className="shrink-0 text-xs font-semibold text-primary-strong">{t('useThis')}</span>
           </button>
         )}
 
@@ -147,19 +149,19 @@ export function DeliverToStep({
               <div className="min-w-0">
                 <p className="flex items-center gap-1.5 text-sm font-medium">
                   <SelectedIcon className="size-4 text-muted-foreground" aria-hidden />
-                  Delivering to {LABEL_TEXT[selected.label]}
+                  {t('deliveringTo', { label: tl(selected.label) })}
                 </p>
                 <p className="mt-0.5 text-sm text-muted-foreground">
                   {displayAddress(selected.addressText, selected.mapsUrl)}
                 </p>
               </div>
               <Button type="button" variant="ghost" size="sm" onClick={somewhereElse}>
-                Edit for this order
+                {t('editForOrder')}
               </Button>
             </div>
 
             {selected.mapsUrl ? (
-              <p className="text-xs text-muted-foreground">Maps link ready for the driver.</p>
+              <p className="text-xs text-muted-foreground">{t('mapsReady')}</p>
             ) : (
               // The mid-call repair: the customer is right there, so ask now.
               // The link goes onto THIS ORDER — which is what the driver taps.
@@ -168,11 +170,11 @@ export function DeliverToStep({
               <div className="space-y-2 rounded-md border border-warning/30 bg-warning/5 p-3">
                 <p className="flex items-center gap-1.5 text-xs font-medium text-warning">
                   <TriangleAlert className="size-3.5" aria-hidden />
-                  {LABEL_TEXT[selected.label]} has no maps link — ask them to send it now.
+                  {t('noMapsLink', { label: tl(selected.label) })}
                 </p>
                 <MapsLinkField
                   id="deliver-fix-maps"
-                  label="Google Maps link"
+                  label={t('mapsLink')}
                   value={state.mapsUrl}
                   onChange={(mapsUrl) => onChange({ ...state, mapsUrl })}
                 />
@@ -182,17 +184,17 @@ export function DeliverToStep({
         ) : (
           <>
             <div className="space-y-2">
-              <Label htmlFor="no-address">Address for THIS order</Label>
+              <Label htmlFor="no-address">{t('addressForThisOrder')}</Label>
               <Input
                 id="no-address"
                 value={state.addressText}
                 onChange={(e) =>
                   onChange({ ...state, addressText: e.target.value, selectedAddressId: null, mode: 'oneoff' })
                 }
-                placeholder="Street, building, floor — e.g. Hamra st, Salame bldg, 3rd"
+                placeholder={t('addressPlaceholder')}
               />
               <p className="text-xs text-muted-foreground">
-                Changing it here never touches the customer&apos;s saved addresses.
+                {t('neverTouchesSaved')}
               </p>
             </div>
             <MapsLinkField
@@ -209,7 +211,7 @@ export function DeliverToStep({
                     onCheckedChange={(saveToProfile) => onChange({ ...state, saveToProfile })}
                   />
                   <Label htmlFor="save-address" className="cursor-pointer">
-                    Also save this address to the customer&apos;s profile
+                    {t('alsoSave')}
                   </Label>
                 </div>
                 {state.saveToProfile && (
@@ -222,11 +224,11 @@ export function DeliverToStep({
                         className={cn(
                           'cursor-pointer rounded-full border px-3 py-1 text-xs font-medium transition-colors duration-150',
                           state.saveLabel === label
-                            ? 'border-primary bg-primary/10 text-primary'
-                            : 'text-muted-foreground hover:border-primary/50 hover:text-foreground',
+                            ? 'border-primary-strong bg-primary/10 text-primary-strong'
+                            : 'text-muted-foreground hover:border-primary-strong/50 hover:text-foreground',
                         )}
                       >
-                        {LABEL_TEXT[label]}
+                        {tl(label)}
                       </button>
                     ))}
                   </div>

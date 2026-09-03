@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { Download, Share, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -36,6 +37,7 @@ function readDismissed(): boolean {
  * decides to install.
  */
 export function InstallBanner() {
+  const t = useTranslations('install');
   const [promptEvent, setPromptEvent] = useState<BeforeInstallPromptEvent | null>(null);
   const [isIos, setIsIos] = useState(false);
   const [standalone, setStandalone] = useState(true);
@@ -83,15 +85,15 @@ export function InstallBanner() {
 
   return (
     <div className="mx-4 mb-2 flex items-center gap-3 rounded-lg border bg-card p-3 shadow-sm">
-      <Download className="size-5 shrink-0 text-primary" aria-hidden />
+      <Download className="size-5 shrink-0 text-primary-strong" aria-hidden />
       <div className="min-w-0 flex-1 text-sm">
         {showIosHint ? (
           <span>
-            Install the app: tap <Share className="inline size-3.5" aria-label="Share" /> then{' '}
-            <strong>Add to Home Screen</strong>.
+            {t('iosPrefix')} <Share className="inline size-3.5" aria-label={t('share')} />{' '}
+            {t('iosSuffix')} <strong>{t('iosAction')}</strong>.
           </span>
         ) : (
-          <span>Install Flash Delivery for one-tap access and faster loading.</span>
+          <span>{t('body')}</span>
         )}
       </div>
       {canPrompt && (
@@ -102,12 +104,12 @@ export function InstallBanner() {
             void promptEvent.userChoice.then(() => dismiss());
           }}
         >
-          Install
+          {t('cta')}
         </Button>
       )}
       <button
         type="button"
-        aria-label="Dismiss install banner"
+        aria-label={t('dismiss')}
         onClick={dismiss}
         className="cursor-pointer text-muted-foreground hover:text-foreground"
       >

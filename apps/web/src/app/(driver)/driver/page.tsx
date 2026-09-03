@@ -73,7 +73,7 @@ function FeedCard({ order }: { order: FeedOrder }) {
           <span className="min-w-0">
             {displayAddress(order.deliveryAddressText, order.deliveryMapsUrl)}
             {order.deliveryMapsUrl && (
-              <span className="ms-1.5 inline-flex items-center gap-0.5 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
+              <span className="ms-1.5 inline-flex items-center gap-0.5 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary-strong">
                 {t('mapsLink')}
               </span>
             )}

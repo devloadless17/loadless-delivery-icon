@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { PackageSearch } from 'lucide-react';
 import { displayAddress, formatMoney } from '@loadless/shared';
 import { displayRelative } from '@/lib/format';
@@ -13,6 +14,7 @@ import { useCustomerOrders, type CustomerProfile } from '../api';
  * opening the tab costs zero requests; only "Load more" hits the network.
  */
 export function RecentOrders({ customer }: { customer: CustomerProfile }) {
+  const t = useTranslations('customerStats');
   const query = useCustomerOrders(customer.id, {
     orders: customer.recentOrders,
     nextCursor: customer.recentOrdersNextCursor,
@@ -28,12 +30,12 @@ export function RecentOrders({ customer }: { customer: CustomerProfile }) {
       <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed py-8 text-center">
         <PackageSearch className="size-7 text-muted-foreground" aria-hidden />
         <p className="text-sm font-medium">
-          {isPlatform ? 'No orders yet' : 'No orders with you yet'}
+          {isPlatform ? t('noOrders') : t('noOrdersWithYou')}
         </p>
         <p className="text-sm text-muted-foreground">
           {isPlatform
-            ? 'Nobody on the platform has delivered to this customer.'
-            : 'Their orders with other vendors are not yours to see.'}
+            ? t('nobodyDelivered')
+            : t('notYoursToSee')}
         </p>
       </div>
     );
@@ -69,7 +71,7 @@ export function RecentOrders({ customer }: { customer: CustomerProfile }) {
 
       {query.isError && (
         <div className="flex items-center justify-between rounded-lg border border-destructive/30 bg-destructive/5 px-3.5 py-2 text-sm">
-          <span>Couldn&apos;t load more orders.</span>
+          <span>{t('loadMoreFailed')}</span>
           <Button size="sm" variant="ghost" onClick={() => void query.refetch()}>
             Retry
           </Button>

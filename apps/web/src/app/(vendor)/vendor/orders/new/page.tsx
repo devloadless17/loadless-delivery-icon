@@ -158,7 +158,7 @@ function NewOrderForm() {
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-base">
-            <UserRound className="size-4 text-primary" aria-hidden /> {t('customer')}
+            <UserRound className="size-4 text-primary-strong" aria-hidden /> {t('customer')}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -203,7 +203,7 @@ function NewOrderForm() {
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-base">
-            <Banknote className="size-4 text-primary" aria-hidden /> {t('charge')}
+            <Banknote className="size-4 text-primary-strong" aria-hidden /> {t('charge')}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">

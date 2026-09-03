@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { UserPlus } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
@@ -14,6 +15,7 @@ import { useCreateCustomer } from './api';
 
 /** Shown when a valid phone has no match — creates the global customer inline. */
 export function NewCustomerForm({ normalizedPhone }: { normalizedPhone: string }) {
+  const t = useTranslations('customer');
   const [name, setName] = useState('');
   const [addressText, setAddressText] = useState('');
   const [mapsUrl, setMapsUrl] = useState('');
@@ -21,7 +23,7 @@ export function NewCustomerForm({ normalizedPhone }: { normalizedPhone: string }
 
   async function submit() {
     if (name.trim().length < 2) {
-      toast.error('Enter the customer’s name.');
+      toast.error(t('errName'));
       return;
     }
     try {
@@ -38,12 +40,12 @@ export function NewCustomerForm({ normalizedPhone }: { normalizedPhone: string }
             }
           : {}),
       });
-      toast.success('Customer created');
+      toast.success(t('created'));
       setName('');
       setAddressText('');
       setMapsUrl('');
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Could not create the customer.');
+      toast.error(err instanceof ApiError ? err.message : t('createFailed'));
     }
   }
 
@@ -51,12 +53,14 @@ export function NewCustomerForm({ normalizedPhone }: { normalizedPhone: string }
     <Card>
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-base">
-          <UserPlus className="size-4 text-primary" aria-hidden />
-          New customer
+          <UserPlus className="size-4 text-primary-strong" aria-hidden />
+          {t('newCustomer')}
         </CardTitle>
         <CardDescription>
-          <span className="data-mono">{displayPhone(normalizedPhone)}</span> isn&apos;t on the
-          platform yet. Add them once — every vendor can then find them by phone.
+          <span dir="ltr" className="data-mono">
+            {displayPhone(normalizedPhone)}
+          </span>{' '}
+          {t('notOnPlatform')}
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -68,27 +72,27 @@ export function NewCustomerForm({ normalizedPhone }: { normalizedPhone: string }
           }}
         >
           <div className="space-y-2">
-            <Label htmlFor="nc-name">Name</Label>
+            <Label htmlFor="nc-name">{t('name')}</Label>
             <Input
               id="nc-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Customer name"
+              placeholder={t('namePlaceholder')}
               autoFocus
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="nc-address">Address (optional)</Label>
+            <Label htmlFor="nc-address">{t('addressOptional')}</Label>
             <Input
               id="nc-address"
               value={addressText}
               onChange={(e) => setAddressText(e.target.value)}
-              placeholder="Street, building, floor"
+              placeholder={t('addressPlaceholder')}
             />
           </div>
           <MapsLinkField id="nc-maps" value={mapsUrl} onChange={setMapsUrl} />
           <Button type="submit" loading={createCustomer.isPending}>
-            Create customer
+            {t('create')}
           </Button>
         </form>
       </CardContent>

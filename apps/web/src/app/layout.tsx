@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import type { ReactNode } from 'react';
 import { fontVariables } from '@/lib/fonts';
+import { dirFor } from '@/i18n/config';
 import { I18nProvider } from '@/i18n/i18n-provider';
 import { getLocale, messagesFor } from '@/i18n/server';
 import { Providers } from './providers';
@@ -36,15 +37,20 @@ export const viewport: Viewport = {
 export default async function RootLayout({ children }: { children: ReactNode }) {
   const locale = await getLocale();
   return (
-    <html lang="en" suppressHydrationWarning>
+    // dir/lang belong on <html>, not on a wrapper: Radix portals (dialogs,
+    // selects) mount on document.body and Sonner reads
+    // document.documentElement.direction, so anything nested leaves every
+    // dialog and toast LTR in Arabic. The middleware has already pinned
+    // /admin to English.
+    <html lang={locale} dir={dirFor(locale)} suppressHydrationWarning>
       <body className={`${fontVariables} min-h-dvh`}>
         {/*
-          One provider over the WHOLE app, on the locale from the cookie. It
-          exists at the root for two reasons: next-intl's useTranslations throws
-          with no provider above it (and shared components like the sign-out
-          button render in every role), and globally-mounted UI — the update
-          toast, Sonner — would otherwise be stuck in English for an Arabic
-          driver. The admin console nests its own English provider to opt out.
+          One provider over the whole app, on the locale the middleware
+          resolved. next-intl's useTranslations throws with no provider above
+          it, and shared components (sign-out, change-password, the status
+          badge) render in every role — so this has to be at the root. Because
+          the middleware already answers "is this admin?", globally-mounted UI
+          like the update toast and Sonner get the right language too.
         */}
         <I18nProvider locale={locale} messages={messagesFor(locale)}>
           <Providers>{children}</Providers>

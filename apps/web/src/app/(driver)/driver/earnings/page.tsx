@@ -138,7 +138,7 @@ export default function DriverEarningsPage() {
         <button
           type="button"
           onClick={() => void history.fetchNextPage()}
-          className="w-full cursor-pointer py-2 text-center text-sm text-primary hover:underline"
+          className="w-full cursor-pointer py-2 text-center text-sm text-primary-strong hover:underline"
         >
           {history.isFetchingNextPage ? tc('loading') : tc('showMore')}
         </button>

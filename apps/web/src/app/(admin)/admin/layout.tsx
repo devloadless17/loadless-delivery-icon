@@ -6,18 +6,15 @@ import { RealtimeProvider } from '@/components/realtime-provider';
 import { BrandWordmark } from '@/components/brand';
 import { SignOutButton } from '@/components/sign-out-button';
 import { ThemeToggle } from '@/components/theme-toggle';
-import { I18nProvider } from '@/i18n/i18n-provider';
-import en from '@/i18n/messages/en.json';
 
 export const metadata: Metadata = { title: { default: 'Admin', template: '%s · Flash Delivery Admin' } };
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
   return (
-    // The operator console stays English and LTR whatever language this device
-    // last used for the vendor or driver app — translating it would triple the
-    // work for no user benefit (CLAUDE.md / product decision). The nested
-    // provider's dir="ltr" wrapper overrides an RTL ancestor.
-    <I18nProvider locale="en" messages={en}>
+    // English and LTR whatever this device last used for the vendor or driver
+    // app: the middleware pins /admin to English, so the root provider and
+    // <html dir> are already correct here — including for toasts and portals,
+    // which a nested provider could never have reached.
     <RealtimeProvider>
     <div className="flex min-h-dvh">
       <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 flex-col border-r bg-card lg:flex">
@@ -50,6 +47,5 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       </div>
     </div>
     </RealtimeProvider>
-    </I18nProvider>
   );
 }

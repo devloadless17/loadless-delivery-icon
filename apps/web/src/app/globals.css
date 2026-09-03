@@ -18,6 +18,11 @@
   --primary: #ffc300;
   --primary-foreground: #000000;
   --primary-deep: #e6ae00;
+  /* Brand gold is a FILL. As a foreground on white #ffc300 measures 1.6:1 —
+     unreadable — so text, icons, focus borders and other on-light marks use
+     this darkened gold (~5:1 on white). In dark mode the bright gold already
+     has ~11:1 on the page ground, so it is itself. */
+  --primary-strong: #8a6a00;
   --secondary: #edf1f9;
   --secondary-foreground: #3f3a2e;
   --muted: #eef1f6;
@@ -43,7 +48,11 @@
 
   /* Order lifecycle — the product's core vocabulary */
   --status-pending: #d97706; /* waiting for a driver */
-  --status-assigned: #475569; /* claimed */
+  /* A claimed order must be distinguishable from a cancelled one at a glance:
+     the rail and badge tint are the only difference on a dense list. The
+     neutral slate this briefly used sat right next to --status-cancelled.
+     Blue is functional here, not brand — the status scale is signal. */
+  --status-assigned: #2563eb; /* claimed */
   --status-picked-up: #ea580c; /* in motion */
   --status-delivered: #16a34a;
   --status-cancelled: #64748b;
@@ -66,6 +75,7 @@
   --primary: #ffc300;
   --primary-foreground: #000000;
   --primary-deep: #ffd21f;
+  --primary-strong: #ffc300;
   --secondary: #172238;
   --secondary-foreground: #e0dcd2;
   --muted: #151f33;
@@ -88,7 +98,7 @@
   --shadow-live: 0 4px 16px rgba(249, 115, 22, 0.35);
 
   --status-pending: #fbbf24;
-  --status-assigned: #94a3b8;
+  --status-assigned: #5b8bf7;
   --status-picked-up: #f97316;
   --status-delivered: #4ade80;
   --status-cancelled: #7c8aa0;
@@ -110,6 +120,7 @@
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
   --color-primary-deep: var(--primary-deep);
+  --color-primary-strong: var(--primary-strong);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);

@@ -1,6 +1,7 @@
 'use client';
 
 import { Globe } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import { displayPhone } from '@/lib/format';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -29,13 +30,14 @@ export function PlatformMatches({
   omitYours?: boolean;
   onSelect: (phone: string) => void;
 }) {
+  const t = useTranslations('lookup');
   const { data, isPending, isError, fetchStatus } = usePlatformLookup(typed);
 
   // `enabled: false` reports isPending with an idle fetchStatus — not loading.
   if (fetchStatus === 'idle' && !data) return null;
   if (isError) return null;
 
-  const heading = omitYours ? 'On the platform' : 'Matching numbers';
+  const heading = omitYours ? t('onPlatform') : t('matching');
 
   if (isPending) {
     return (
@@ -60,25 +62,21 @@ export function PlatformMatches({
             <button
               type="button"
               onClick={() => onSelect(match.normalizedPhone)}
-              className="flex w-full cursor-pointer items-center justify-between gap-3 px-3.5 py-2.5 text-left transition-colors hover:bg-muted/50"
+              className="flex w-full cursor-pointer items-center justify-between gap-3 px-3.5 py-2.5 text-start transition-colors hover:bg-muted/50"
             >
               <span className="flex min-w-0 items-center gap-2">
                 <span className="truncate text-sm font-medium">{match.name}</span>
-                {match.isYours && <Badge variant="muted">Your customer</Badge>}
+                {match.isYours && <Badge variant="muted">{t('yourCustomer')}</Badge>}
               </span>
               <span className="data-mono shrink-0 text-sm text-muted-foreground">
-                {displayPhone(match.normalizedPhone)}
+                <bdi>{displayPhone(match.normalizedPhone)}</bdi>
               </span>
             </button>
           </li>
         ))}
       </ul>
       <p className="text-xs text-muted-foreground">
-        {data?.hasMore
-          ? 'More numbers start this way — type another digit to narrow it down.'
-          : omitYours
-            ? "You haven't served these customers — open one to see their details."
-            : 'Pick one, or finish the number to open it directly.'}
+        {data?.hasMore ? t('hasMore') : omitYours ? t('notServed') : t('pickOne')}
       </p>
     </section>
   );

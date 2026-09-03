@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { normalizePhone } from '@loadless/shared';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
@@ -33,6 +34,7 @@ export function CustomerCreateDialog({
   initialPhone?: string;
   onCreated: (customer: CustomerProfile, created: boolean) => void;
 }) {
+  const t = useTranslations('customer');
   const [phone, setPhone] = useState(initialPhone);
   const [name, setName] = useState('');
   const [addressText, setAddressText] = useState('');
@@ -53,11 +55,11 @@ export function CustomerCreateDialog({
   async function submit() {
     const normalized = normalizePhone(phone);
     if (!normalized) {
-      setPhoneError('Enter a valid number — 03 123 456, or +971… for another country');
+      setPhoneError(t('invalidPhone'));
       return;
     }
     if (name.trim().length < 2) {
-      toast.error('Enter the customer’s name.');
+      toast.error(t('errName'));
       return;
     }
     try {
@@ -79,10 +81,10 @@ export function CustomerCreateDialog({
       onOpenChange(false);
       onCreated(result.customer, result.created);
       toast.success(
-        result.created ? 'Customer created' : 'That number already exists — opening their profile.',
+        result.created ? t('created') : t('alreadyExists'),
       );
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Could not create the customer.');
+      toast.error(err instanceof ApiError ? err.message : t('createFailed'));
     }
   }
 
@@ -90,7 +92,7 @@ export function CustomerCreateDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>New customer</DialogTitle>
+          <DialogTitle>{t('newCustomer')}</DialogTitle>
           <DialogDescription>
             Added once and shared across the whole platform — any vendor can then find them by
             phone.
@@ -105,13 +107,13 @@ export function CustomerCreateDialog({
           noValidate
         >
           <div className="space-y-2">
-            <Label htmlFor="cc-phone">Phone number</Label>
+            <Label htmlFor="cc-phone">{t('phone')}</Label>
             <Input
               id="cc-phone"
               type="tel"
               inputMode="tel"
               className="data-mono"
-              placeholder="03 123 456 or +971 50 123 4567"
+              placeholder={t('phonePlaceholder')}
               value={phone}
               onChange={(e) => {
                 setPhone(e.target.value);
@@ -119,7 +121,7 @@ export function CustomerCreateDialog({
               }}
               onBlur={() => {
                 if (phone && !normalizePhone(phone)) {
-                  setPhoneError('Enter a valid number — 03 123 456, or +971… for another country');
+                  setPhoneError(t('invalidPhone'));
                 }
               }}
               aria-invalid={!!phoneError}
@@ -128,21 +130,21 @@ export function CustomerCreateDialog({
             {phoneError && <p className="text-sm text-destructive">{phoneError}</p>}
           </div>
           <div className="space-y-2">
-            <Label htmlFor="cc-name">Name</Label>
+            <Label htmlFor="cc-name">{t('name')}</Label>
             <Input
               id="cc-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Customer name"
+              placeholder={t('namePlaceholder')}
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="cc-address">Address (optional)</Label>
+            <Label htmlFor="cc-address">{t('addressOptional')}</Label>
             <Input
               id="cc-address"
               value={addressText}
               onChange={(e) => setAddressText(e.target.value)}
-              placeholder="Street, building, floor"
+              placeholder={t('addressPlaceholder')}
             />
           </div>
           <MapsLinkField id="cc-maps" value={mapsUrl} onChange={setMapsUrl} />

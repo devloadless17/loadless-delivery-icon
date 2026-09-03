@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { PackagePlus } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
@@ -39,6 +40,7 @@ export function CustomerProfilePanel({
   orderActions = 'navigate',
   className,
 }: CustomerProfilePanelProps) {
+  const t = useTranslations('customer');
   const router = useRouter();
   const [tab, setTab] = useState<Tab>('addresses');
   const [editingName, setEditingName] = useState(false);
@@ -75,7 +77,7 @@ export function CustomerProfilePanel({
               } with you${
                 profile.stats.lastOrderAt ? ` · last ${displayRelative(profile.stats.lastOrderAt)}` : ''
               }`
-            : 'First order with you'}
+            : t('firstOrderWithYou')}
         </p>
       </div>
     );
@@ -112,8 +114,8 @@ export function CustomerProfilePanel({
           value={tab}
           onChange={setTab}
           options={[
-            { value: 'addresses', label: 'Addresses', count: profile.addresses.length },
-            { value: 'orders', label: 'Orders', count: profile.stats.ordersInScope },
+            { value: 'addresses', label: t('addressesTab'), count: profile.addresses.length },
+            { value: 'orders', label: t('ordersTab'), count: profile.stats.ordersInScope },
           ]}
         />
         {tab === 'addresses' ? (

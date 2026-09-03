@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { Search, TriangleAlert, UserPlus } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
@@ -36,6 +37,7 @@ export function MyCustomersList({
   q: string;
   onSelect: (phone: string) => void;
 }) {
+  const t = useTranslations('customer');
   const [page, setPage] = useState(1);
   const { data, isPending, isError, refetch } = useMyCustomers({ page, q });
 
@@ -51,7 +53,7 @@ export function MyCustomersList({
   return (
     <section className="space-y-3" aria-label="My customers">
       <h2 className="text-sm font-semibold text-muted-foreground">
-        {q ? 'Matching your customers' : 'My customers'}
+        {q ? t('matchingYours') : t('myCustomers')}
         {meta ? <span className="ml-1.5 font-normal">({meta.total})</span> : null}
       </h2>
 
@@ -78,7 +80,7 @@ export function MyCustomersList({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Name</TableHead>
+                  <TableHead>{t('nameCol')}</TableHead>
                   {/* A vendor reads this standing at a counter, on a phone.
                       Five columns at 390px wraps every name onto three lines,
                       so below `sm` the secondary facts collapse into a single
@@ -115,7 +117,7 @@ export function MyCustomersList({
                         >
                           {row.name}
                         </button>
-                        {row.addedByYou && <Badge variant="muted">Added by you</Badge>}
+                        {row.addedByYou && <Badge variant="muted">{t('addedByYou')}</Badge>}
                       </span>
                       {/* Only when they diverge: the shared record still says
                           something else, and hiding that is what causes the

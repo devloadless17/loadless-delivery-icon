@@ -50,7 +50,7 @@ function StatTile({
         </div>
         <div
           className={`flex size-11 items-center justify-center rounded-xl ${
-            accent ? 'bg-accent/12 text-accent' : 'bg-primary/10 text-primary'
+            accent ? 'bg-accent/12 text-accent' : 'bg-primary/10 text-primary-strong'
           }`}
         >
           <Icon className="size-5" aria-hidden />

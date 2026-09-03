@@ -118,7 +118,7 @@ export default function VendorOrdersPage() {
               <li key={order.id}>
                 <Link
                   href={`/vendor/orders/${order.id}`}
-                  className="flex overflow-hidden rounded-lg border bg-card transition-colors duration-150 hover:border-primary/40"
+                  className="flex overflow-hidden rounded-lg border bg-card transition-colors duration-150 hover:border-primary-strong/40"
                 >
                   <span className={cn('w-1.5 shrink-0', STATUS_META[order.status].railClass)} aria-hidden />
                   <div className="flex min-w-0 flex-1 flex-col gap-2 p-4">

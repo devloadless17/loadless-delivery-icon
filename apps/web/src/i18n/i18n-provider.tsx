@@ -1,17 +1,25 @@
 'use client';
 
+import { DirectionProvider } from '@radix-ui/react-direction';
 import { NextIntlClientProvider } from 'next-intl';
 import type { ReactNode } from 'react';
 import { dirFor, type Locale } from './config';
 
 /**
- * Wraps a subtree in its language AND its direction.
+ * Messages and reading direction for the client tree.
  *
- * `dir` is set on a wrapper rather than on <html> on purpose: the root layout
- * is shared with the admin console, which stays English/LTR. `display:contents`
- * keeps this element out of layout entirely — it draws no box, but `direction`
- * is an inherited property so everything below it, including the driver's
- * fixed bottom nav, still flips.
+ * It renders no DOM of its own. Direction reaches the page two ways, and BOTH
+ * are needed:
+ *
+ *  1. `dir` on <html> (set by the root layout) — inherited CSS direction, which
+ *     is what ordinary markup and the portalled DOM under document.body pick
+ *     up, and what Sonner reads off documentElement.
+ *  2. Radix's DirectionProvider — Radix does NOT inherit. Every primitive reads
+ *     this context (defaulting to 'ltr') and writes an explicit dir attribute
+ *     onto its content, including content it portals to document.body. Without
+ *     this the confirm dialogs and the currency dropdown render LTR inside an
+ *     otherwise RTL app, which is exactly where the driver's irreversible
+ *     actions live.
  */
 export function I18nProvider({
   locale,
@@ -24,9 +32,7 @@ export function I18nProvider({
 }) {
   return (
     <NextIntlClientProvider locale={locale} messages={messages} timeZone="Asia/Beirut">
-      <div dir={dirFor(locale)} lang={locale} style={{ display: 'contents' }}>
-        {children}
-      </div>
+      <DirectionProvider dir={dirFor(locale)}>{children}</DirectionProvider>
     </NextIntlClientProvider>
   );
 }
