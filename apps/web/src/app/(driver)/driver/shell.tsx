@@ -32,7 +32,7 @@ export function DriverShell({ children }: { children: ReactNode }) {
         className="sticky top-0 z-20 flex h-14 items-center justify-between border-b bg-card/95 px-4 backdrop-blur"
         style={{ paddingTop: 'env(safe-area-inset-top)' }}
       >
-        <BrandMark className="size-7" />
+        <BrandMark className="h-7" />
         <DutyToggle />
       </header>
 

@@ -69,7 +69,7 @@ export function LoginContent() {
               <LanguageToggle />
             </div>
             <div className="mb-8 flex flex-col items-center gap-3 text-center lg:items-start lg:text-start">
-              <BrandMark className="size-11 lg:hidden" />
+              <BrandMark className="h-11 lg:hidden" />
               <div>
                 <h2 className="font-display text-2xl font-bold tracking-tight">{t('welcomeBack')}</h2>
                 <p className="mt-1 text-sm text-muted-foreground">{t('subtitle')}</p>

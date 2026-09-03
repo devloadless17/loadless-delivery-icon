@@ -37,7 +37,7 @@ export function VendorHeader() {
               className="size-8 shrink-0 rounded-lg border object-cover shadow-card"
             />
           ) : (
-            <BrandMark className="size-7 shrink-0" />
+            <BrandMark className="h-7" />
           )}
           {isPending ? (
             <Skeleton className="h-4 w-32" />

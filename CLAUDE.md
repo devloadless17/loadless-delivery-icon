@@ -10,6 +10,24 @@ worth: the npm scopes (`@loadless/api`, `@loadless/web`, `@loadless/shared`), th
 Postgres role and database, the deploy directory and the Docker Hub
 repositories. Never put "Loadless" in user-facing copy.
 
+**The logo is the client's artwork, not an interpretation.** Every curve of the
+FD monogram comes from `docs/Flash Delivery Logo.pdf` (Illustrator vector,
+decoded out of the page content stream) and lives in
+`apps/web/src/components/brand-paths.ts` — the ONE source for the React
+`BrandMark`, the PWA/apple/favicon PNGs, and the `public/brand/*.svg` for
+off-app use. That file imports nothing so plain Node can read it. Rules:
+- **Never redraw it.** A previous approximation shipped an FD that read as "AD",
+  a stubby bolt and an undersized pin, all the way into the installed app icon,
+  because it looked plausible. `e2e/12-brand.spec.ts` now pixel-diffs every
+  committed PNG against the vector and compares the rendered `d` attributes.
+- Edit `brand-paths.ts` ⇒ run `pnpm --filter @loadless/web icons` in the same
+  commit. Never hand-edit a PNG.
+- **Size the mark by HEIGHT** (`h-7`, `h-10`) — the lockup is 1.86:1 and
+  `size-*` would squash it.
+- The letterforms are `currentColor` (black on light, white on the ink login
+  hero and in dark theme); the gold `#ffc300` is fixed. The pin's ring and tick
+  are a **knockout** in the artwork — filling them white breaks the mark on dark.
+
 The live hostname is **`flashdelivery.ink`** (187.77.167.2) — the apex, not a
 subdomain. Everything under `loadless.site` is retired: `delivery.loadless.site`
 and `flashdelivery.loadless.site` are no longer ours and no longer served. Do
@@ -61,7 +79,7 @@ fails in a way that looks exactly like production being down.
 ## Workflow
 
 - `docker compose -f docker-compose.dev.yml up -d` then `pnpm dev`. Dev accounts: admin `admin@gmail.com`, vendor `vendor@gmail.com`, driver `70 123 456` — all password `loadless`.
-- Verify with `pnpm -r lint && pnpm -r typecheck && pnpm -r test` before finishing any task. Integration: `pnpm --filter @loadless/api test:integration` — **`maxWorkers: 1` is load-bearing**: every spec TRUNCATEs the whole database in `beforeAll`, so running them in parallel silently wipes another spec's fixtures. Browser e2e: `bash apps/web/e2e/prepare.sh && (cd apps/web && pnpm e2e)` — 49 tests in TWO projects: `desktop` runs 01–08, `mobile` runs `09-mobile.spec.ts` at Pixel 5 size with touch (`--project=mobile` for just those). The phone is where the product lives, so 09 covers a driver's whole job, the mid-call lookup, installability, and the caching invariant; it also asserts no screen scrolls sideways and that the driver's irreversible actions are ≥40px tall.
+- Verify with `pnpm -r lint && pnpm -r typecheck && pnpm -r test` before finishing any task. Integration: `pnpm --filter @loadless/api test:integration` — **`maxWorkers: 1` is load-bearing**: every spec TRUNCATEs the whole database in `beforeAll`, so running them in parallel silently wipes another spec's fixtures. Browser e2e: `bash apps/web/e2e/prepare.sh && (cd apps/web && pnpm e2e)` — 85 tests in TWO projects: `desktop` runs 01–08 and 10–12, `mobile` runs `09-mobile.spec.ts` at Pixel 5 size with touch (`--project=mobile` for just those). The phone is where the product lives, so 09 covers a driver's whole job, the mid-call lookup, installability, and the caching invariant; it also asserts no screen scrolls sideways and that the driver's irreversible actions are ≥40px tall. **The desktop project is STATEFUL and serial** — 10 and 11 spend the orders that 04–06 deliver, so running a later file on its own fails on missing fixtures rather than on a real defect; and `prepare.sh` resets the database, so a suite run on top of a previous one fails in 02 with a duplicate vendor. Re-prepare before drawing conclusions from a red run.
 - **What the e2e harness cannot test**: a service-worker-served offline navigation. Playwright's `context.setOffline` stops the worker responding at all (even a precached fetch throws), and aborting the route bypasses it too. So 09 asserts what IS provable — the worker controls the page, `/api/*` and `/socket.io/*` are in NO cache, `/offline` is precached and renders. Verify the actual offline fallback by hand in Chrome DevTools › Network › Offline.
 - The reusable design system lives in the tokens in `apps/web/src/app/globals.css` (shadows, status colors, `surface-brand`); UI primitives in `src/components/ui/` are restyled on those tokens — never introduce raw hex in components.
 - **Performance is measured, not assumed**: `bash apps/api/test/perf/run.sh` runs the real API against 400k orders / 120k customers and prints p50/p95/p99 per endpoint (`CONC=1` for single-user latency). Baselines and the two traps it caught are in `apps/api/test/perf/README.md`. Two rules that came out of it:

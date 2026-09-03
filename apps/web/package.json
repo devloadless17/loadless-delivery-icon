@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "test": "echo 'no web tests yet'",
     "e2e": "playwright test",
-    "e2e:prepare": "bash e2e/prepare.sh"
+    "e2e:prepare": "bash e2e/prepare.sh",
+    "icons": "node scripts/generate-icons.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.1",
