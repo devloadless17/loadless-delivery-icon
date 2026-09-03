@@ -54,14 +54,19 @@ export default defineConfig({
     {
       command: 'node ../api/dist/main.js',
       url: 'http://localhost:4190/api/v1/health',
-      reuseExistingServer: !process.env.CI,
+      // Never reuse. A server left behind by an interrupted run keeps answering
+      // on this port while serving the BUILD IT STARTED WITH — so the suite gets
+      // HTML referencing chunks that no longer exist, the page never hydrates,
+      // and every test fails on a 60s timeout with a healthy-looking 200 behind
+      // it. Starting our own costs seconds; diagnosing that costs an afternoon.
+      reuseExistingServer: false,
       timeout: 30_000,
       env: apiEnv,
     },
     {
       command: 'pnpm exec next start -p 3190',
       url: 'http://localhost:3190/login',
-      reuseExistingServer: !process.env.CI,
+      reuseExistingServer: false, // see above
       timeout: 60_000,
       env: { API_ORIGIN: 'http://localhost:4190', PORT: '3190' },
     },

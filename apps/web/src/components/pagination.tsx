@@ -1,6 +1,7 @@
 'use client';
 
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/button';
 
 export interface PageMeta {
@@ -17,6 +18,7 @@ export function Pagination({
   meta: PageMeta;
   onPageChange: (page: number) => void;
 }) {
+  const t = useTranslations('pagination');
   if (meta.total === 0) return null;
   const from = (meta.page - 1) * meta.limit + 1;
   const to = Math.min(meta.page * meta.limit, meta.total);
@@ -24,13 +26,13 @@ export function Pagination({
   return (
     <div className="flex items-center justify-between gap-3 text-sm text-muted-foreground">
       <span>
-        {from}–{to} of {meta.total}
+        <bdi>{t('range', { from, to, total: meta.total })}</bdi>
       </span>
       <div className="flex items-center gap-1">
         <Button
           variant="outline"
           size="icon"
-          aria-label="Previous page"
+          aria-label={t('previous')}
           disabled={meta.page <= 1}
           onClick={() => onPageChange(meta.page - 1)}
         >
@@ -39,7 +41,7 @@ export function Pagination({
         <Button
           variant="outline"
           size="icon"
-          aria-label="Next page"
+          aria-label={t('next')}
           disabled={meta.page >= meta.totalPages}
           onClick={() => onPageChange(meta.page + 1)}
         >

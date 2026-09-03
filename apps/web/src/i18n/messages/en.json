@@ -386,5 +386,10 @@
     "nobodyDelivered": "Nobody on the platform has delivered to this customer.",
     "notYoursToSee": "Their orders with other vendors are not yours to see.",
     "loadMoreFailed": "Couldn't load more orders."
+  },
+  "pagination": {
+    "range": "{from}–{to} of {total}",
+    "previous": "Previous page",
+    "next": "Next page"
   }
 }

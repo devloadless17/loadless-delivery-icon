@@ -300,14 +300,17 @@ test.describe('Arabic & RTL', () => {
     await expect(receiptLink).toBeVisible();
     await receiptLink.click();
     await driver.waitForURL(/\/driver\/settlements\/[a-z0-9]{20,}/);
-    await expect(driver.getByText('الإجمالي المستحق')).toBeVisible();
+    // .first(): a receipt carries one block per CURRENCY, so a driver who ran
+    // both LBP and USD has two "total due" rows. That is the multi-currency
+    // rule working, not a duplicate.
+    await expect(driver.getByText('الإجمالي المستحق').first()).toBeVisible();
     expect(await driver.evaluate(() => document.documentElement.getAttribute('dir'))).toBe('rtl');
 
     // "What is this for?" — the itemised evidence behind the figure.
     const disclosure = driver.getByRole('button', { name: 'ما سبب هذا المبلغ؟' }).first();
     await expect(disclosure).toBeVisible();
     await disclosure.click();
-    await expect(driver.getByText('العمولة من هذه التوصيلات')).toBeVisible();
+    await expect(driver.getByText('العمولة من هذه التوصيلات').first()).toBeVisible();
 
     // Nothing may scroll sideways on a phone-width money screen.
     await driver.setViewportSize({ width: 390, height: 844 });

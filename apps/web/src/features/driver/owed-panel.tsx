@@ -2,6 +2,8 @@
 
 import { useTranslations } from 'next-intl';
 import Link from 'next/link';
+import { useState } from 'react';
+import { Pagination } from '@/components/pagination';
 import { CheckCircle2, Wallet } from 'lucide-react';
 import { formatMoney } from '@loadless/shared';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -126,7 +128,8 @@ export function OwedPanel() {
 /** His own receipts — proof he handed the money over. */
 export function MySettlements() {
   const t = useTranslations('driver.settlement');
-  const { data, isPending } = useMySettlements();
+  const [page, setPage] = useState(1);
+  const { data, isPending } = useMySettlements(page);
 
   if (isPending) return <Skeleton className="h-24 w-full" />;
   if (!data || data.data.length === 0) return null;
@@ -205,6 +208,9 @@ export function MySettlements() {
           </li>
         ))}
       </ul>
+      {/* Ten at a time, but every one of them reachable. The page height stays
+          fixed however long the driver has been working. */}
+      {data.meta.totalPages > 1 && <Pagination meta={data.meta} onPageChange={setPage} />}
     </>
   );
 }

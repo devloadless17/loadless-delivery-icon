@@ -11,6 +11,7 @@ import type {
   OrderStatus,
   SettlementView,
 } from '@loadless/shared';
+import type { PageMeta } from '@/components/pagination';
 import { api } from '@/lib/api-client';
 
 export interface FeedOrder {
@@ -155,13 +156,19 @@ export function useMySettlement(id: string) {
   });
 }
 
-export function useMySettlements() {
+/**
+ * The driver's own handovers, PAGED.
+ *
+ * This used to request a flat `limit=10` with no way to go further: a driver
+ * who had settled forty times could reach only the last ten, with nothing on
+ * screen saying the rest existed. His receipts are the record he argues from,
+ * so silently truncating them is the wrong kind of tidy.
+ */
+export function useMySettlements(page = 1) {
   return useQuery({
-    queryKey: ['driver', 'settlements'],
+    queryKey: ['driver', 'settlements', page],
     queryFn: ({ signal }) =>
-      api.page<SettlementView[], { page: number; totalPages: number }>(
-        '/driver/settlements?limit=10',
-        signal,
-      ),
+      api.page<SettlementView[], PageMeta>(`/driver/settlements?page=${page}&limit=10`, signal),
+    placeholderData: (previous) => previous,
   });
 }

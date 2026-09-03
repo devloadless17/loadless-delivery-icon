@@ -364,7 +364,12 @@ test.describe('driver settlements', () => {
     // The handover list tells him there IS an adjustment and names it, so he
     // has a reason to open the receipt rather than just seeing a number.
     await driver.goto('/driver/earnings');
-    await expect(driver.getByText(/Includes an adjustment: Lost the thermal bag/)).toBeVisible();
+    // .first(): this spec types "Lost the thermal bag" for more than one
+    // adjustment, so the string is not unique across the handover list. The
+    // claim here is about the NEWEST handover, and the list is newest-first.
+    await expect(
+      driver.getByText(/Includes an adjustment: Lost the thermal bag/).first(),
+    ).toBeVisible();
 
     // And the receipt states it in full, with the direction in words and the
     // amount as a magnitude rather than a minus under a positive phrase.

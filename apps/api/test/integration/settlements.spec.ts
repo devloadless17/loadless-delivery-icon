@@ -1085,4 +1085,50 @@ describe('driver settlements (integration)', () => {
     const after = await previewOf(driver.id).expect(200);
     expect(lineFor(after.body.data, 'LBP')).toBeUndefined();
   });
+  /**
+   * A driver's receipts are the record he argues from, so every one of them has
+   * to be reachable — not just the last page's worth. The UI asked for a flat
+   * ten and offered no way past it; this pins the contract the fixed UI relies
+   * on, so the route can never quietly go back to answering only page one.
+   */
+  it('pages a driver through every handover he has ever made', async () => {
+    const { driver, token } = await makeDriver('Many Handovers');
+    const TOTAL = 12; // one more than a single page of 10
+
+    for (let i = 0; i < TOTAL; i += 1) {
+      await seedOrder({ driverId: driver.id, charge: 1_000n, currency: 'LBP' });
+      const preview = await previewOf(driver.id).expect(200);
+      const line = lineFor(preview.body.data, 'LBP')! as unknown as PreviewLine;
+      await request(server)
+        .post(`/api/v1/admin/drivers/${driver.id}/settlements`)
+        .set(auth(adminToken))
+        .send(settleBody([line], { LBP: line.totalDue }))
+        .expect(201);
+    }
+
+    const first = await request(server)
+      .get('/api/v1/driver/settlements?page=1&limit=10')
+      .set(auth(token))
+      .expect(200);
+    expect(first.body.data).toHaveLength(10);
+    expect(first.body.meta).toMatchObject({ page: 1, limit: 10, total: TOTAL, totalPages: 2 });
+
+    const second = await request(server)
+      .get('/api/v1/driver/settlements?page=2&limit=10')
+      .set(auth(token))
+      .expect(200);
+    expect(second.body.data).toHaveLength(TOTAL - 10);
+
+    // No gaps and no repeats: every handover appears exactly once across pages.
+    const ids = [...first.body.data, ...second.body.data].map((s: { id: string }) => s.id);
+    expect(new Set(ids).size).toBe(TOTAL);
+
+    // And the oldest one — unreachable before — is on the last page.
+    const oldest = await prisma.driverSettlement.findFirst({
+      where: { driverId: driver.id },
+      orderBy: { settledAt: 'asc' },
+      select: { id: true },
+    });
+    expect(second.body.data.map((s: { id: string }) => s.id)).toContain(oldest!.id);
+  });
 });
