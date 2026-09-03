@@ -21,15 +21,15 @@ export default function LoginPage() {
           >
             <path
               d="M20 170 L150 80 L240 140 L440 30"
-              stroke="#ea580c"
+              stroke="var(--primary)"
               strokeWidth="10"
               strokeLinecap="round"
               strokeLinejoin="round"
               opacity="0.9"
             />
-            <circle cx="440" cy="30" r="14" fill="#ea580c" />
-            <circle cx="440" cy="30" r="6" fill="#fff" />
-            <circle cx="20" cy="170" r="7" fill="#5b8bf7" />
+            <circle cx="440" cy="30" r="14" fill="var(--primary)" />
+            <circle cx="440" cy="30" r="6" fill="var(--primary-foreground)" />
+            <circle cx="20" cy="170" r="7" fill="var(--primary)" />
           </svg>
           <h1 className="font-display max-w-md text-4xl font-bold leading-tight tracking-tight">
             Every order, every driver,
@@ -44,13 +44,13 @@ export default function LoginPage() {
 
         <div className="flex items-center gap-6 text-xs text-white/50">
           <span className="inline-flex items-center gap-1.5">
-            <span className="size-1.5 rounded-full bg-[#4ade80]" aria-hidden /> Real-time dispatch
+            <span className="size-1.5 rounded-full bg-[color:var(--success)]" aria-hidden /> Real-time dispatch
           </span>
           <span className="inline-flex items-center gap-1.5">
-            <span className="size-1.5 rounded-full bg-[#f97316]" aria-hidden /> Live driver network
+            <span className="size-1.5 rounded-full bg-accent" aria-hidden /> Live driver network
           </span>
           <span className="inline-flex items-center gap-1.5">
-            <span className="size-1.5 rounded-full bg-[#5b8bf7]" aria-hidden /> Exact settlements
+            <span className="size-1.5 rounded-full bg-primary" aria-hidden /> Exact settlements
           </span>
         </div>
       </aside>
