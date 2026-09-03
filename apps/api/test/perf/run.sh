@@ -34,3 +34,10 @@ trap 'kill $API_PID 2>/dev/null || true' EXIT
 
 until curl -sf "http://127.0.0.1:$PORT/api/v1/health" >/dev/null; do sleep 1; done
 node apps/api/test/perf/loadtest.mjs
+
+# Write path. The seed leaves one driver on duty; the accept race needs a yard
+# of them, and an off-duty driver is refused before the race is even reached.
+DRIVERS_RACING=${DRIVERS:-12}
+docker exec loadless-postgres psql -U loadless -d "$DB" -q -c \
+  "UPDATE drivers SET duty_status='ON_DUTY' WHERE id IN (SELECT 'd-'||g FROM generate_series(1,$DRIVERS_RACING) g);"
+DRIVERS=$DRIVERS_RACING node apps/api/test/perf/contention.mjs
