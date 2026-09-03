@@ -1,6 +1,7 @@
 'use client';
 
 import { TriangleAlert, UserPlus } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { useCustomerSearch } from '@/features/customers/api';
@@ -13,6 +14,8 @@ import { CustomerProfileSkeleton } from '@/features/customers/profile/profile-sk
 import { PhoneSearchInput, usePhoneSearch } from '@/features/customers/phone-search';
 
 export default function VendorCustomersPage() {
+  const t = useTranslations('vendor.customers');
+  const tc = useTranslations('common');
   const { raw, setRaw, normalized, isTyping, debounced } = usePhoneSearch();
   const search = useCustomerSearch(normalized);
   const [createOpen, setCreateOpen] = useState(false);
@@ -27,13 +30,11 @@ export default function VendorCustomersPage() {
     <div className="mx-auto max-w-3xl space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold">Customers</h1>
-          <p className="text-sm text-muted-foreground">
-            Start typing a name or number. A full phone number reaches anyone on the platform.
-          </p>
+          <h1 className="text-2xl font-semibold">{t('title')}</h1>
+          <p className="text-sm text-muted-foreground">{t('subtitle')}</p>
         </div>
         <Button onClick={() => setCreateOpen(true)}>
-          <UserPlus /> New customer
+          <UserPlus /> {t('new')}
         </Button>
       </div>
 
@@ -59,13 +60,11 @@ export default function VendorCustomersPage() {
         <div className="flex flex-col items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-6 text-center">
           <TriangleAlert className="size-7 text-destructive" aria-hidden />
           <div>
-            <p className="font-medium">Couldn&apos;t load this customer</p>
-            <p className="text-sm text-muted-foreground">
-              Check your connection and try again.
-            </p>
+            <p className="font-medium">{t('loadFailed')}</p>
+            <p className="text-sm text-muted-foreground">{t('loadFailedBody')}</p>
           </div>
           <Button variant="outline" onClick={() => void search.refetch()}>
-            Try again
+            {tc('tryAgain')}
           </Button>
         </div>
       ) : search.data?.customer ? (

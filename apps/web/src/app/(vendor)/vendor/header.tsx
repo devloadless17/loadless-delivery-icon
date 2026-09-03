@@ -1,24 +1,27 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { BrandMark } from '@/components/brand';
 import { fileUrl } from '@/lib/format';
 import { SignOutButton } from '@/components/sign-out-button';
 import { ThemeToggle } from '@/components/theme-toggle';
+import { LanguageToggle } from '@/components/language-toggle';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useMe } from '@/features/auth/use-me';
 import { cn } from '@/lib/utils';
 
 const TABS = [
-  { href: '/vendor', label: 'Orders', exact: true },
-  { href: '/vendor/orders/new', label: 'New order' },
-  { href: '/vendor/customers', label: 'Customers' },
-  { href: '/vendor/stats', label: 'Stats' },
-  { href: '/vendor/settings', label: 'Settings' },
+  { href: '/vendor', key: 'orders', exact: true },
+  { href: '/vendor/orders/new', key: 'newOrder' },
+  { href: '/vendor/customers', key: 'customers' },
+  { href: '/vendor/stats', key: 'stats' },
+  { href: '/vendor/settings', key: 'settings' },
 ];
 
 export function VendorHeader() {
+  const t = useTranslations('vendor.nav');
   const pathname = usePathname();
   const { data, isPending } = useMe();
   const businessName = data?.user.vendor?.businessName;
@@ -40,18 +43,19 @@ export function VendorHeader() {
             <Skeleton className="h-4 w-32" />
           ) : (
             <span className="truncate font-display text-base font-semibold">
-              {businessName ?? 'Vendor'}
+              {businessName ?? t('fallbackName')}
             </span>
           )}
         </div>
         <div className="flex items-center">
+          <LanguageToggle />
           <ThemeToggle />
           <SignOutButton iconOnly />
         </div>
       </div>
-      <nav className="mx-auto w-full max-w-5xl px-4" aria-label="Vendor">
+      <nav className="mx-auto w-full max-w-5xl px-4" aria-label={t('label')}>
         <div className="flex gap-1 overflow-x-auto">
-          {TABS.map(({ href, label, exact }) => {
+          {TABS.map(({ href, key, exact }) => {
             const active = exact ? pathname === href : pathname.startsWith(href);
             return (
               <Link
@@ -65,7 +69,7 @@ export function VendorHeader() {
                     : 'border-transparent text-muted-foreground hover:text-foreground',
                 )}
               >
-                {label}
+                {t(key)}
               </Link>
             );
           })}

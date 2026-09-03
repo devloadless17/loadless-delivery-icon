@@ -10,3 +10,9 @@ allowBuilds:
   '@nestjs/core': true
   unrs-resolver: true
   sharp: true
+  # Added when next-intl was installed: pnpm now demands an explicit decision
+  # for every package with a build script. Both were silently ignored before
+  # and the app built and ran fine, so `false` keeps the previous behaviour
+  # rather than newly running native builds nothing here needs.
+  '@parcel/watcher': false
+  '@swc/core': false

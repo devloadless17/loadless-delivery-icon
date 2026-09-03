@@ -3,6 +3,7 @@
 import { displayAddress } from '@loadless/shared';
 import { ArrowLeft, Navigation, Phone, Store } from 'lucide-react';
 import Link from 'next/link';
+import { useTranslations } from 'next-intl';
 import { useParams, useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { toast } from 'sonner';
@@ -30,6 +31,8 @@ import {
 import { OrderStatusBadge } from '@/features/orders/order-status';
 
 export default function DriverOrderDetailPage() {
+  const t = useTranslations('driver.order');
+  const tc = useTranslations('common');
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const { data: order, isPending } = useDriverOrder(id);
@@ -56,35 +59,35 @@ export default function DriverOrderDetailPage() {
     try {
       if (action === 'pickup') {
         await pickupOrder.mutateAsync(order!.id);
-        toast.success('Picked up — safe ride!');
+        toast.success(t('pickedUpToast'));
       } else {
         await deliverOrder.mutateAsync(order!.id);
-        toast.success('Delivered. Earnings added.');
+        toast.success(t('deliveredToast'));
         router.push('/driver/active');
       }
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Something went wrong — try again.');
+      toast.error(err instanceof ApiError ? err.message : tc('somethingWrong'));
     }
   }
 
   async function submitReason() {
     if (reason.trim().length < 3) {
-      toast.error('A short reason is required.');
+      toast.error(t('reasonRequired'));
       return;
     }
     try {
       if (reasonDialog === 'release') {
         await releaseOrder.mutateAsync({ id: order!.id, reason: reason.trim() });
-        toast.success('Order released back to the feed.');
+        toast.success(t('releasedToast'));
         router.push('/driver');
       } else {
         await failOrder.mutateAsync({ id: order!.id, reason: reason.trim() });
-        toast.success('Marked as failed.');
+        toast.success(t('failedToast'));
         router.push('/driver/active');
       }
       setReasonDialog(null);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Something went wrong — try again.');
+      toast.error(err instanceof ApiError ? err.message : tc('somethingWrong'));
     }
   }
 
@@ -93,12 +96,12 @@ export default function DriverOrderDetailPage() {
       <div className="flex items-center gap-2">
         <Link
           href="/driver/active"
-          aria-label="Back"
+          aria-label={tc('back')}
           className="flex size-10 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted"
         >
           <ArrowLeft className="size-5" />
         </Link>
-        <span className="data-mono flex-1 text-lg font-semibold">{order.orderNumber}</span>
+        <span dir="ltr" className="data-mono flex-1 text-lg font-semibold">{order.orderNumber}</span>
         <OrderStatusBadge status={order.status} />
       </div>
 
@@ -129,7 +132,7 @@ export default function DriverOrderDetailPage() {
           <div className="grid grid-cols-2 gap-2">
             <a href={`tel:${order.customer.normalizedPhone}`}>
               <Button variant="outline" className="w-full">
-                <Phone /> Call
+                <Phone /> {t('call')}
               </Button>
             </a>
             {/* "Location", not "Navigate": the word has to be understood at a
@@ -138,17 +141,20 @@ export default function DriverOrderDetailPage() {
             {order.deliveryMapsUrl ? (
               <a href={order.deliveryMapsUrl} target="_blank" rel="noopener noreferrer">
                 <Button variant="outline" className="w-full">
-                  <Navigation /> Location
+                  <Navigation /> {t('location')}
                 </Button>
               </a>
             ) : (
               <Button variant="outline" disabled className="w-full">
-                <Navigation /> No location
+                <Navigation /> {t('noLocation')}
               </Button>
             )}
           </div>
-          <p className="data-mono text-center text-xs text-muted-foreground">
-            {displayPhone(order.customer.normalizedPhone)} · charge{' '}
+          {/* dir="ltr": a phone number and an amount inside an RTL paragraph
+              get visually reordered by the bidi algorithm — "+961 3 …" is not
+              a string a driver should have to decode. */}
+          <p dir="ltr" className="data-mono text-center text-xs text-muted-foreground">
+            {displayPhone(order.customer.normalizedPhone)} · {t('charge')}{' '}
             {displayMoney(order.deliveryCharge, order.currency)}
           </p>
         </CardContent>
@@ -162,7 +168,7 @@ export default function DriverOrderDetailPage() {
           {order.status === 'DRIVER_ASSIGNED' ? (
             <>
               <Button variant="live" size="touch" loading={pickupOrder.isPending} onClick={() => void act('pickup')}>
-                Picked up from {order.vendor.businessName}
+                {t('pickedUpFrom', { vendor: order.vendor.businessName })}
               </Button>
               <button
                 type="button"
@@ -172,13 +178,13 @@ export default function DriverOrderDetailPage() {
                 }}
                 className="w-full cursor-pointer py-1 text-center text-sm text-muted-foreground hover:text-foreground"
               >
-                Can&apos;t take this one? Release it
+                {t('release')}
               </button>
             </>
           ) : (
             <>
               <Button variant="live" size="touch" onClick={() => setConfirmDeliver(true)}>
-                Delivered to customer
+                {t('delivered')}
               </Button>
               <button
                 type="button"
@@ -188,7 +194,7 @@ export default function DriverOrderDetailPage() {
                 }}
                 className="w-full cursor-pointer py-1 text-center text-sm text-muted-foreground hover:text-destructive"
               >
-                Couldn&apos;t deliver? Mark as failed
+                {t('markFailed')}
               </button>
             </>
           )}
@@ -198,12 +204,14 @@ export default function DriverOrderDetailPage() {
       <Dialog open={confirmDeliver} onOpenChange={setConfirmDeliver}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Confirm delivery</DialogTitle>
+            <DialogTitle>{t('confirmDelivery')}</DialogTitle>
             <DialogDescription>
-              Package handed to {order.customer.name}
               {order.driverEarnings
-                ? ` — ${displayMoney(order.driverEarnings, order.currency)} added to your earnings.`
-                : '.'}
+                ? t('handedToEarnings', {
+                    customer: order.customer.name,
+                    amount: displayMoney(order.driverEarnings, order.currency),
+                  })
+                : t('handedTo', { customer: order.customer.name })}
             </DialogDescription>
           </DialogHeader>
           {/* size="lg" (48px), not the 40px default: a driver taps these
@@ -212,7 +220,7 @@ export default function DriverOrderDetailPage() {
               on the two actions that cannot be undone. */}
           <div className="flex justify-end gap-2">
             <Button variant="ghost" size="lg" onClick={() => setConfirmDeliver(false)}>
-              Not yet
+              {t('notYet')}
             </Button>
             <Button
               variant="live"
@@ -223,7 +231,7 @@ export default function DriverOrderDetailPage() {
                 void act('deliver');
               }}
             >
-              Yes, delivered
+              {t('yesDelivered')}
             </Button>
           </div>
         </DialogContent>
@@ -233,27 +241,25 @@ export default function DriverOrderDetailPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {reasonDialog === 'release' ? 'Release this order?' : 'Mark as failed?'}
+              {reasonDialog === 'release' ? t('releaseTitle') : t('failTitle')}
             </DialogTitle>
             <DialogDescription>
-              {reasonDialog === 'release'
-                ? 'It goes back to the feed for other drivers. Your earnings for it are removed.'
-                : 'Use this when the customer is unreachable or refused the delivery.'}
+              {reasonDialog === 'release' ? t('releaseBody') : t('failBody')}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
-            <Label htmlFor="reason">Reason</Label>
+            <Label htmlFor="reason">{t('reason')}</Label>
             <Input
               id="reason"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              placeholder={reasonDialog === 'release' ? 'e.g. Bike problem' : 'e.g. Customer unreachable'}
+              placeholder={reasonDialog === 'release' ? t('releasePlaceholder') : t('failPlaceholder')}
               autoFocus
             />
           </div>
           <div className="flex justify-end gap-2">
             <Button variant="ghost" size="lg" onClick={() => setReasonDialog(null)}>
-              Cancel
+              {tc('cancel')}
             </Button>
             <Button
               variant={reasonDialog === 'fail' ? 'destructive' : 'default'}
@@ -261,7 +267,7 @@ export default function DriverOrderDetailPage() {
               loading={releaseOrder.isPending || failOrder.isPending}
               onClick={() => void submitReason()}
             >
-              Confirm
+              {tc('confirm')}
             </Button>
           </div>
         </DialogContent>

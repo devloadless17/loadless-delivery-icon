@@ -1,6 +1,7 @@
 'use client';
 
 import { Bike, CircleDollarSign, Radar, User } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { ReactNode } from 'react';
@@ -10,10 +11,10 @@ import { DutyToggle } from '@/features/driver/duty-toggle';
 import { cn } from '@/lib/utils';
 
 const TABS = [
-  { href: '/driver', label: 'Feed', icon: Radar, exact: true },
-  { href: '/driver/active', label: 'Active', icon: Bike },
-  { href: '/driver/earnings', label: 'Earnings', icon: CircleDollarSign },
-  { href: '/driver/profile', label: 'Profile', icon: User },
+  { href: '/driver', key: 'feed', icon: Radar, exact: true },
+  { href: '/driver/active', key: 'active', icon: Bike },
+  { href: '/driver/earnings', key: 'earnings', icon: CircleDollarSign },
+  { href: '/driver/profile', key: 'profile', icon: User },
 ];
 
 /**
@@ -23,6 +24,7 @@ const TABS = [
  */
 export function DriverShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const t = useTranslations('driver.nav');
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-lg flex-col">
@@ -40,12 +42,12 @@ export function DriverShell({ children }: { children: ReactNode }) {
       <main className="flex-1 px-4 py-2 pb-24">{children}</main>
 
       <nav
-        aria-label="Driver"
+        aria-label={t('label')}
         className="fixed inset-x-0 bottom-0 z-20 mx-auto w-full max-w-lg border-t bg-card/95 backdrop-blur"
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
         <div className="grid grid-cols-4">
-          {TABS.map(({ href, label, icon: Icon, exact }) => {
+          {TABS.map(({ href, key, icon: Icon, exact }) => {
             const active = exact ? pathname === href : pathname.startsWith(href);
             return (
               <Link
@@ -65,7 +67,7 @@ export function DriverShell({ children }: { children: ReactNode }) {
                 >
                   <Icon className={cn('size-5', active && 'stroke-[2.25]')} aria-hidden />
                 </span>
-                {label}
+                {t(key)}
               </Link>
             );
           })}

@@ -2,6 +2,7 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { ERROR_CODES, loginSchema, type LoginInput } from '@loadless/shared';
+import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
@@ -12,14 +13,16 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
-const ERROR_MESSAGES: Record<string, string> = {
-  [ERROR_CODES.INVALID_CREDENTIALS]: 'Incorrect phone number or password.',
-  [ERROR_CODES.ACCOUNT_LOCKED]: 'Too many failed attempts. Wait a minute, then try again.',
-  [ERROR_CODES.ACCOUNT_DEACTIVATED]: 'This account is deactivated. Contact your administrator.',
-  [ERROR_CODES.RATE_LIMITED]: 'Too many attempts. Wait a minute, then try again.',
+/** API error code -> message key under `auth.errors`. */
+const ERROR_KEYS: Record<string, string> = {
+  [ERROR_CODES.INVALID_CREDENTIALS]: 'invalidCredentials',
+  [ERROR_CODES.ACCOUNT_LOCKED]: 'accountLocked',
+  [ERROR_CODES.ACCOUNT_DEACTIVATED]: 'accountDeactivated',
+  [ERROR_CODES.RATE_LIMITED]: 'rateLimited',
 };
 
 export function LoginForm() {
+  const t = useTranslations('auth');
   const router = useRouter();
   const [serverError, setServerError] = useState<string | null>(null);
 
@@ -35,10 +38,13 @@ export function LoginForm() {
       router.replace(ROLE_HOME[user.role]);
       router.refresh();
     } catch (err) {
+      const key = err instanceof ApiError ? ERROR_KEYS[err.code] : undefined;
       setServerError(
-        err instanceof ApiError
-          ? (ERROR_MESSAGES[err.code] ?? 'Sign-in failed. Try again.')
-          : 'Network problem. Check your connection and try again.',
+        key
+          ? t(`errors.${key}` as 'errors.invalidCredentials')
+          : err instanceof ApiError
+            ? t('errors.signInFailed')
+            : t('errors.network'),
       );
     }
   });
@@ -50,12 +56,13 @@ export function LoginForm() {
       <CardContent className="pt-6">
         <form onSubmit={onSubmit} className="space-y-5" noValidate>
           <div className="space-y-2">
-            <Label htmlFor="identifier">Email or phone number</Label>
+            <Label htmlFor="identifier">{t('identifier')}</Label>
             <Input
               id="identifier"
               type="text"
+              dir="ltr"
               autoComplete="username"
-              placeholder="you@business.com — drivers use 03 123 456"
+              placeholder={t('identifierPlaceholder')}
               aria-invalid={!!errors.identifier}
               {...form.register('identifier')}
             />
@@ -67,10 +74,11 @@ export function LoginForm() {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
+            <Label htmlFor="password">{t('password')}</Label>
             <Input
               id="password"
               type="password"
+              dir="ltr"
               autoComplete="current-password"
               aria-invalid={!!errors.password}
               {...form.register('password')}
@@ -92,7 +100,7 @@ export function LoginForm() {
           )}
 
           <Button type="submit" size="lg" className="w-full" loading={isSubmitting}>
-            Sign in
+            {t('signIn')}
           </Button>
         </form>
       </CardContent>

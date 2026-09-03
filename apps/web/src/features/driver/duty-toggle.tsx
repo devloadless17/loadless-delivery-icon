@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
 import { Switch } from '@/components/ui/switch';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -9,6 +10,7 @@ import { useSetDuty } from './api';
 
 /** The duty switch — always one tap away, orange when live. */
 export function DutyToggle() {
+  const t = useTranslations('driver.duty');
   const { data, isPending } = useMe();
   const setDuty = useSetDuty();
   const dutyStatus = data?.user.driver?.dutyStatus;
@@ -24,17 +26,17 @@ export function DutyToggle() {
           onDuty ? 'text-accent' : 'text-muted-foreground',
         )}
       >
-        {onDuty ? 'On duty' : 'Off duty'}
+        {onDuty ? t('on') : t('off')}
       </span>
       <Switch
         live
         checked={onDuty}
-        aria-label={onDuty ? 'Go off duty' : 'Go on duty'}
+        aria-label={onDuty ? t('goOff') : t('goOn')}
         onCheckedChange={(checked) =>
           setDuty
             .mutateAsync(checked ? 'ON_DUTY' : 'OFF_DUTY')
-            .then(() => toast.success(checked ? 'You are on duty — orders will appear live' : 'You are off duty'))
-            .catch(() => toast.error('Could not change duty status.'))
+            .then(() => toast.success(checked ? t('nowOn') : t('nowOff')))
+            .catch(() => toast.error(t('failed')))
         }
       />
     </label>

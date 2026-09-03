@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -20,6 +21,7 @@ import { ApiError, api } from '@/lib/api-client';
  * changing it stays signed in here and is signed out everywhere else.
  */
 export function ChangePasswordCard() {
+  const t = useTranslations('password');
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -28,11 +30,11 @@ export function ChangePasswordCard() {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (next.length < 8) {
-      toast.error('The new password must be at least 8 characters.');
+      toast.error(t('tooShort'));
       return;
     }
     if (next !== confirm) {
-      toast.error('The two new passwords do not match.');
+      toast.error(t('mismatch'));
       return;
     }
     setBusy(true);
@@ -41,11 +43,9 @@ export function ChangePasswordCard() {
       setCurrent('');
       setNext('');
       setConfirm('');
-      toast.success('Password changed. Any other device you were signed in on has been signed out.');
+      toast.success(t('changed'));
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : 'Could not change the password.',
-      );
+      toast.error(err instanceof ApiError ? err.message : t('failed'));
     } finally {
       setBusy(false);
     }
@@ -54,15 +54,13 @@ export function ChangePasswordCard() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Password</CardTitle>
-        <CardDescription>
-          Changing it signs out every other device. You stay signed in here.
-        </CardDescription>
+        <CardTitle>{t('title')}</CardTitle>
+        <CardDescription>{t('description')}</CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={submit} className="grid max-w-sm gap-4">
           <div className="grid gap-1.5">
-            <Label htmlFor="current-password">Current password</Label>
+            <Label htmlFor="current-password">{t('current')}</Label>
             <Input
               id="current-password"
               name="currentPassword"
@@ -74,7 +72,7 @@ export function ChangePasswordCard() {
             />
           </div>
           <div className="grid gap-1.5">
-            <Label htmlFor="new-password">New password</Label>
+            <Label htmlFor="new-password">{t('new')}</Label>
             <Input
               id="new-password"
               name="newPassword"
@@ -85,10 +83,10 @@ export function ChangePasswordCard() {
               value={next}
               onChange={(e) => setNext(e.target.value)}
             />
-            <p className="text-xs text-muted-foreground">At least 8 characters.</p>
+            <p className="text-xs text-muted-foreground">{t('hint')}</p>
           </div>
           <div className="grid gap-1.5">
-            <Label htmlFor="confirm-password">Confirm new password</Label>
+            <Label htmlFor="confirm-password">{t('confirm')}</Label>
             <Input
               id="confirm-password"
               name="confirmPassword"
@@ -100,7 +98,7 @@ export function ChangePasswordCard() {
             />
           </div>
           <Button type="submit" loading={busy} className="justify-self-start">
-            Change password
+            {t('submit')}
           </Button>
         </form>
       </CardContent>

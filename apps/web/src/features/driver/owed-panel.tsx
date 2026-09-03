@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import Link from 'next/link';
 import { CheckCircle2, Wallet } from 'lucide-react';
 import { formatMoney } from '@loadless/shared';
@@ -18,6 +19,8 @@ import { useMyOwed, useMySettlements } from './api';
  * himself go clear.
  */
 export function OwedPanel() {
+  const t = useTranslations('driver.settlement');
+  const td = useTranslations('driver.earnings');
   const { data, isPending } = useMyOwed();
 
   if (isPending) return <Skeleton className="h-28 w-full" />;
@@ -41,22 +44,23 @@ export function OwedPanel() {
       <div className="flex items-start gap-3 rounded-lg border border-success/30 bg-success/10 p-4">
         <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-success" aria-hidden />
         <div>
-          <p className="font-semibold text-success">You&apos;re all settled</p>
+          <p className="font-semibold text-success">{t('allSettled')}</p>
           <p className="text-sm text-muted-foreground">
-            Nothing is owed to the platform
-            {data.lastSettledAt ? ` — last handover ${displayDateTime(data.lastSettledAt)}` : ''}.
+            {data.lastSettledAt
+              ? t('nothingOwedSince', { when: displayDateTime(data.lastSettledAt) })
+              : t('nothingOwed')}
           </p>
           {creditLines.map((line) => (
             <p key={line.currency} className="mt-1 text-sm font-medium text-success">
-              You paid {displayMoney(-BigInt(line.totalDue), line.currency)} too much last time —
-              it comes off your next handover.
+              {t('overpaid', { amount: displayMoney(-BigInt(line.totalDue), line.currency) })}
             </p>
           ))}
           {coveredByCredit.map((line) => (
             <p key={line.currency} className="mt-1 text-sm text-muted-foreground">
-              Your credit covered the {displayMoney(line.unsettledCommission, line.currency)}{' '}
-              commission on {line.unsettledOrderCount}{' '}
-              {line.unsettledOrderCount === 1 ? 'delivery' : 'deliveries'}.
+              {t('creditCovered', {
+                amount: displayMoney(line.unsettledCommission, line.currency),
+                count: line.unsettledOrderCount,
+              })}
             </p>
           ))}
         </div>
@@ -69,12 +73,12 @@ export function OwedPanel() {
     // should be reachable directly by anyone navigating by region rather than
     // found by scrolling. It also gives a test something honest to scope to.
     <section
-      aria-label="To hand over"
+      aria-label={t('toHandOver')}
       className="rounded-lg border border-warning/30 bg-warning/10 p-4"
     >
       <div className="flex items-center gap-2">
         <Wallet className="size-5 shrink-0 text-warning" aria-hidden />
-        <p className="font-semibold text-warning">To hand over</p>
+        <p className="font-semibold text-warning">{t('toHandOver')}</p>
       </div>
       <div className="mt-3 space-y-4">
         {owedLines.map((line) => (
@@ -82,13 +86,14 @@ export function OwedPanel() {
           // separate piles of cash and the driver counts them separately.
           <div key={line.currency}>
             <p className="data-mono whitespace-nowrap text-2xl font-bold">
-              {formatMoney(line.totalDue, line.currency)}
+              <bdi>{formatMoney(line.totalDue, line.currency)}</bdi>
             </p>
             <p className="text-xs text-muted-foreground">
-              {line.unsettledOrderCount}{' '}
-              {line.unsettledOrderCount === 1 ? 'delivery' : 'deliveries'}
+              {td('deliveries', { count: line.unsettledOrderCount })}
               {BigInt(line.broughtForward) !== 0n &&
-                ` · includes ${displayMoney(line.broughtForward, line.currency)} carried over`}
+                t('includesCarried', {
+                  amount: displayMoney(line.broughtForward, line.currency),
+                })}
             </p>
 
             {/* Every delivery behind the figure, on his own phone, before he
@@ -102,8 +107,7 @@ export function OwedPanel() {
             />
             {BigInt(line.broughtForward) !== 0n && (
               <p className="mt-2 text-xs text-muted-foreground">
-                Plus {displayMoney(line.broughtForward, line.currency)} left over from your last
-                handover.
+                {t('plusLeftOver', { amount: displayMoney(line.broughtForward, line.currency) })}
               </p>
             )}
           </div>
@@ -111,8 +115,7 @@ export function OwedPanel() {
 
         {creditLines.map((line) => (
           <p key={line.currency} className="text-sm font-medium text-success">
-            You are {displayMoney(-BigInt(line.totalDue), line.currency)} in credit — it comes off
-            your next handover.
+            {t('inCredit', { amount: displayMoney(-BigInt(line.totalDue), line.currency) })}
           </p>
         ))}
       </div>
@@ -122,6 +125,7 @@ export function OwedPanel() {
 
 /** His own receipts — proof he handed the money over. */
 export function MySettlements() {
+  const t = useTranslations('driver.settlement');
   const { data, isPending } = useMySettlements();
 
   if (isPending) return <Skeleton className="h-24 w-full" />;
@@ -129,7 +133,7 @@ export function MySettlements() {
 
   return (
     <>
-      <h2 className="pt-2 text-base font-semibold">Handovers</h2>
+      <h2 className="pt-2 text-base font-semibold">{t('handovers')}</h2>
       <ul className="space-y-2">
         {data.data.map((settlement) => (
           <li key={settlement.id} className="rounded-lg border bg-card">
@@ -139,29 +143,33 @@ export function MySettlements() {
             >
             <div className="flex items-center justify-between gap-3">
               <span className="data-mono text-sm font-semibold">
-                {settlement.settlementNumber}
+                <bdi>{settlement.settlementNumber}</bdi>
               </span>
               <span className="text-xs text-muted-foreground">
-                {displayDateTime(settlement.settledAt)}
+                <bdi>{displayDateTime(settlement.settledAt)}</bdi>
               </span>
             </div>
             {settlement.status === 'VOIDED' ? (
-              <p className="mt-1 text-xs text-destructive">Voided — this handover was reversed.</p>
+              <p className="mt-1 text-xs text-destructive">{t('voidedShort')}</p>
             ) : (
               <div className="mt-1 space-y-0.5">
                 {settlement.lines.map((line) => (
                   <p key={line.currency} className="data-mono text-sm">
-                    Paid {displayMoney(line.amountCollected, line.currency)}
+                    {t('paid', { amount: displayMoney(line.amountCollected, line.currency) })}
                     {BigInt(line.carriedForward) > 0n && (
-                      <span className="ml-2 text-xs text-warning">
-                        {displayMoney(line.carriedForward, line.currency)} carried over
+                      <span className="ms-2 text-xs text-warning">
+                        {t('carriedOver', {
+                          amount: displayMoney(line.carriedForward, line.currency),
+                        })}
                       </span>
                     )}
                     {BigInt(line.carriedForward) < 0n && (
                       // Overpaying was invisible here. Money the driver is owed
                       // should never be the thing his receipt declines to show.
-                      <span className="ml-2 text-xs text-success">
-                        {displayMoney(-BigInt(line.carriedForward), line.currency)} in credit
+                      <span className="ms-2 text-xs text-success">
+                        {t('creditShort', {
+                          amount: displayMoney(-BigInt(line.carriedForward), line.currency),
+                        })}
                       </span>
                     )}
                   </p>
@@ -172,8 +180,8 @@ export function MySettlements() {
                   // should announce itself where he will actually see it.
                   <p className="text-xs text-muted-foreground">
                     {settlement.adjustments.length === 1
-                      ? `Includes an adjustment: ${settlement.adjustments[0]!.reason}`
-                      : `Includes ${settlement.adjustments.length} adjustments — tap to see why`}
+                      ? t('includesAdjustment', { reason: settlement.adjustments[0]!.reason })
+                      : t('includesAdjustments', { count: settlement.adjustments.length })}
                   </p>
                 )}
               </div>

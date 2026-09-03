@@ -1,4 +1,7 @@
+'use client';
+
 import type { OrderStatus } from '@loadless/shared';
+import { useTranslations } from 'next-intl';
 import { cn } from '@/lib/utils';
 
 /**
@@ -56,6 +59,10 @@ export function OrderStatusBadge({
   className?: string;
 }) {
   const meta = STATUS_META[status];
+  // Labels come from the catalogue, not STATUS_META: the badge renders in the
+  // vendor and driver apps (translated) and in admin (English, via the root
+  // English provider). STATUS_META keeps the colour story only.
+  const t = useTranslations('statusLong');
   return (
     <span
       className={cn(
@@ -72,7 +79,7 @@ export function OrderStatusBadge({
         )}
         aria-hidden
       />
-      {meta.label}
+      {t(status)}
     </span>
   );
 }

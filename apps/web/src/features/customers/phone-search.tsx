@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { normalizePhone } from '@loadless/shared';
 import { Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
@@ -36,16 +37,18 @@ export function PhoneSearchInput({
    */
   mode?: 'phone' | 'any';
 }) {
+  const t = useTranslations('vendor.customers');
   const isPhone = mode === 'phone';
   return (
     <div className="relative">
-      <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+      <Search className="absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
       <Input
         type={isPhone ? 'tel' : 'text'}
         inputMode={isPhone ? 'tel' : 'text'}
         autoFocus={autoFocus}
-        placeholder={isPhone ? 'Customer phone — 03 123 456' : 'Search by name or phone'}
-        className={cn('h-12 pl-9 text-base', isPhone && 'data-mono')}
+        dir={isPhone ? 'ltr' : 'auto'}
+        placeholder={isPhone ? t('searchPhone') : t('searchAny')}
+        className={cn('h-12 ps-9 text-base', isPhone && 'data-mono')}
         value={value}
         onChange={(e) => onChange(e.target.value)}
       />

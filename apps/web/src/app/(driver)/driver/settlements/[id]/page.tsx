@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
@@ -18,11 +19,13 @@ import { OrderBreakdown } from '@/features/settlements/order-breakdown';
  * able to open the record himself rather than take somebody's word for it.
  */
 export default function DriverSettlementPage() {
+  const t = useTranslations('driver.settlement');
+  const te = useTranslations('driver.earnings');
   const { id } = useParams<{ id: string }>();
   const { data, isPending } = useMySettlement(id);
 
   if (isPending) return <Skeleton className="h-80 w-full" />;
-  if (!data) return <p className="text-sm text-muted-foreground">Handover not found.</p>;
+  if (!data) return <p className="text-sm text-muted-foreground">{t('notFound')}</p>;
 
   return (
     <div className="space-y-4">
@@ -30,20 +33,25 @@ export default function DriverSettlementPage() {
         href="/driver/earnings"
         className="inline-flex items-center gap-1.5 text-sm text-muted-foreground"
       >
-        <ArrowLeft className="size-4" /> Earnings
+        <ArrowLeft className="size-4" /> {te('title')}
       </Link>
 
       <div>
-        <h1 className="data-mono text-xl font-semibold">{data.settlementNumber}</h1>
-        <p className="text-sm text-muted-foreground">{displayDateTimeFull(data.settledAt)}</p>
+        <h1 className="data-mono text-xl font-semibold">
+          <bdi>{data.settlementNumber}</bdi>
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          <bdi>{displayDateTimeFull(data.settledAt)}</bdi>
+        </p>
       </div>
 
       {data.status === 'VOIDED' && (
         <div className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
-          <Badge variant="destructive">Voided</Badge>
+          <Badge variant="destructive">{t('voidedBadge')}</Badge>
           <p className="mt-1.5">
-            This handover was reversed{data.voidReason ? ` — ${data.voidReason}` : ''}. Its
-            deliveries went back to unsettled.
+            {data.voidReason
+              ? t('voidedBodyReason', { reason: data.voidReason })
+              : t('voidedBody')}
           </p>
         </div>
       )}
@@ -54,24 +62,26 @@ export default function DriverSettlementPage() {
         <div key={line.currency} className="rounded-lg border bg-card p-4">
           <p className="font-semibold">{line.currency}</p>
           <dl className="mt-2 space-y-1 text-sm">
-            <Row label="Commission" value={displayMoney(line.commissionDue, line.currency)} />
+            <Row label={t('commission')} value={displayMoney(line.commissionDue, line.currency)} />
             {BigInt(line.adjustmentsTotal) !== 0n && (
               <Row
-                label="Adjustments"
+                label={t('adjustments')}
                 value={displayMoney(line.adjustmentsTotal, line.currency)}
               />
             )}
             {BigInt(line.broughtForward) !== 0n && (
               <Row
-                label="Brought forward"
+                label={t('broughtForward')}
                 value={displayMoney(line.broughtForward, line.currency)}
               />
             )}
             <div className="flex justify-between border-t pt-1 font-semibold">
-              <dt>Total due</dt>
-              <dd className="data-mono">{formatMoney(line.totalDue, line.currency)}</dd>
+              <dt>{t('totalDue')}</dt>
+              <dd className="data-mono">
+                <bdi>{formatMoney(line.totalDue, line.currency)}</bdi>
+              </dd>
             </div>
-            <Row label="You paid" value={displayMoney(line.amountCollected, line.currency)} />
+            <Row label={t('youPaid')} value={displayMoney(line.amountCollected, line.currency)} />
             {BigInt(line.carriedForward) !== 0n &&
               // The label already flips on the sign; the AMOUNT has to flip too,
               // or it reads "In credit  -10,000 LBP" — a negative under a
@@ -79,12 +89,12 @@ export default function DriverSettlementPage() {
               // should not be painted in the warning colour.
               (BigInt(line.carriedForward) > 0n ? (
                 <div className="flex justify-between font-medium text-warning">
-                  <dt>Carried over</dt>
+                  <dt>{t('carriedOverLabel')}</dt>
                   <dd className="data-mono">{displayMoney(line.carriedForward, line.currency)}</dd>
                 </div>
               ) : (
                 <div className="flex justify-between font-medium text-success">
-                  <dt>In credit</dt>
+                  <dt>{t('inCreditLabel')}</dt>
                   <dd className="data-mono">
                     {displayMoney(-BigInt(line.carriedForward), line.currency)}
                   </dd>
@@ -103,16 +113,14 @@ export default function DriverSettlementPage() {
 
       {data.adjustments.length > 0 && (
         <div className="rounded-lg border bg-card p-4">
-          <p className="mb-2 font-semibold">Adjustments</p>
+          <p className="mb-2 font-semibold">{t('adjustments')}</p>
           <ul className="space-y-2 text-sm">
             {data.adjustments.map((adjustment) => (
               <li key={adjustment.id} className="flex justify-between gap-3">
                 <span>
                   <span>{adjustment.reason}</span>
                   <span className="block text-xs text-muted-foreground">
-                    {adjustment.direction === 'DEBIT'
-                      ? 'Added to what you owed'
-                      : 'Taken off what you owed'}
+                    {adjustment.direction === 'DEBIT' ? t('addedToOwed') : t('takenOffOwed')}
                   </span>
                 </span>
                 {/* The direction word carries the sign, so the number must
@@ -144,7 +152,9 @@ function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between">
       <dt className="text-muted-foreground">{label}</dt>
-      <dd className="data-mono">{value}</dd>
+      <dd className="data-mono">
+        <bdi>{value}</bdi>
+      </dd>
     </div>
   );
 }

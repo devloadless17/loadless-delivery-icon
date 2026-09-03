@@ -2,6 +2,7 @@
 
 import { createOrderSchema, CURRENCIES, type Currency } from '@loadless/shared';
 import { Banknote, StickyNote, TriangleAlert, UserRound } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
@@ -30,6 +31,9 @@ import {
 } from '@/features/orders/new-order/deliver-to-step';
 
 function NewOrderForm() {
+  const t = useTranslations('vendor.newOrder');
+  const tcu = useTranslations('vendor.customers');
+  const tc = useTranslations('common');
   const router = useRouter();
   const params = useSearchParams();
   const { raw, setRaw, debounced, normalized, isTyping } = usePhoneSearch();
@@ -107,11 +111,11 @@ function NewOrderForm() {
 
   async function submit() {
     if (!normalized) {
-      toast.error('Enter the customer’s phone number first.');
+      toast.error(t('errPhone'));
       return;
     }
     if (search.isError) {
-      toast.error('Customer lookup failed — try the search again before creating the order.');
+      toast.error(t('errLookup'));
       return;
     }
     const input = {
@@ -127,34 +131,34 @@ function NewOrderForm() {
     };
     const parsed = createOrderSchema.safeParse(input);
     if (!parsed.success) {
-      toast.error(parsed.error.issues[0]?.message ?? 'Check the form and try again.');
+      toast.error(parsed.error.issues[0]?.message ?? t('errForm'));
       return;
     }
     if (isNewCustomer && customerName.trim().length < 2) {
-      toast.error('Enter the customer’s name.');
+      toast.error(t('errName'));
       return;
     }
     try {
       const order = await createOrder.mutateAsync(parsed.data);
-      toast.success(`Order ${order.orderNumber} created`);
+      toast.success(t('created', { orderNumber: order.orderNumber }));
       router.push(`/vendor/orders/${order.id}`);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Could not create the order.');
+      toast.error(err instanceof ApiError ? err.message : t('createFailed'));
     }
   }
 
   return (
     <div className="mx-auto max-w-2xl space-y-5 pb-10">
       <div>
-        <h1 className="text-2xl font-semibold">New order</h1>
-        <p className="text-sm text-muted-foreground">Start with the customer&apos;s phone number.</p>
+        <h1 className="text-2xl font-semibold">{t('title')}</h1>
+        <p className="text-sm text-muted-foreground">{t('subtitle')}</p>
       </div>
 
       {/* 1 — customer */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-base">
-            <UserRound className="size-4 text-primary" aria-hidden /> Customer
+            <UserRound className="size-4 text-primary" aria-hidden /> {t('customer')}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -170,22 +174,22 @@ function NewOrderForm() {
               <div className="flex items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-3.5 py-3">
                 <p className="flex items-center gap-2 text-sm">
                   <TriangleAlert className="size-4 text-destructive" aria-hidden />
-                  Couldn&apos;t load this customer
+                  {tcu('loadFailed')}
                 </p>
                 <Button variant="outline" size="sm" onClick={() => void search.refetch()}>
-                  Try again
+                  {tc('tryAgain')}
                 </Button>
               </div>
             ) : customer ? (
               <CustomerProfilePanel profile={customer} variant="compact" orderActions="none" />
             ) : (
               <div className="space-y-2">
-                <Label htmlFor="no-name">Customer name (new customer)</Label>
+                <Label htmlFor="no-name">{t('nameLabel')}</Label>
                 <Input
                   id="no-name"
                   value={customerName}
                   onChange={(e) => setCustomerName(e.target.value)}
-                  placeholder="Their name — saved for every vendor"
+                  placeholder={t('namePlaceholder')}
                 />
               </div>
             ))}
@@ -199,16 +203,17 @@ function NewOrderForm() {
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-base">
-            <Banknote className="size-4 text-primary" aria-hidden /> Delivery charge
+            <Banknote className="size-4 text-primary" aria-hidden /> {t('charge')}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="grid grid-cols-[1fr_7rem] gap-3">
             <div className="space-y-2">
-              <Label htmlFor="no-charge">Amount</Label>
+              <Label htmlFor="no-charge">{t('amount')}</Label>
               <Input
                 id="no-charge"
                 inputMode="decimal"
+                dir="ltr"
                 className="data-mono"
                 placeholder={currency === 'LBP' ? '150000' : '5.00'}
                 value={charge}
@@ -216,7 +221,7 @@ function NewOrderForm() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="no-currency">Currency</Label>
+              <Label htmlFor="no-currency">{t('currency')}</Label>
               <Select value={currency} onValueChange={(v) => setCurrency(v as Currency)}>
                 <SelectTrigger id="no-currency">
                   <SelectValue />
@@ -233,21 +238,21 @@ function NewOrderForm() {
           </div>
           <div className="space-y-2">
             <Label htmlFor="no-instructions" className="flex items-center gap-1.5">
-              <StickyNote className="size-3.5 text-muted-foreground" aria-hidden /> Delivery
-              instructions (optional)
+              <StickyNote className="size-3.5 text-muted-foreground" aria-hidden />{' '}
+              {t('instructions')}
             </Label>
             <Input
               id="no-instructions"
               value={instructions}
               onChange={(e) => setInstructions(e.target.value)}
-              placeholder="e.g. Call when downstairs, 3rd floor"
+              placeholder={t('instructionsPlaceholder')}
             />
           </div>
         </CardContent>
       </Card>
 
       <Button size="lg" className="w-full" loading={createOrder.isPending} onClick={() => void submit()}>
-        Create order
+        {t('create')}
       </Button>
     </div>
   );

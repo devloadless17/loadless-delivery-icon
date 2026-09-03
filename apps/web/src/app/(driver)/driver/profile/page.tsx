@@ -1,21 +1,25 @@
 'use client';
 
 import { Bike, UserRound } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { SignOutButton } from '@/components/sign-out-button';
 import { ChangePasswordCard } from '@/components/change-password-card';
 import { ThemeToggle } from '@/components/theme-toggle';
+import { LanguageToggle } from '@/components/language-toggle';
 import { displayPhone, fileUrl } from '@/lib/format';
 import { useMe } from '@/features/auth/use-me';
 
 export default function DriverProfilePage() {
+  const t = useTranslations('driver.profile');
+  const tc = useTranslations('common');
   const { data, isPending } = useMe();
   const driver = data?.user.driver;
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-semibold">Profile</h1>
+      <h1 className="text-2xl font-semibold">{t('title')}</h1>
       {isPending || !driver ? (
         <Skeleton className="h-40 w-full rounded-lg" />
       ) : (
@@ -44,8 +48,14 @@ export default function DriverProfilePage() {
                 </p>
               </div>
             </div>
+            {/* Language sits beside Theme: the driver shell header has no room,
+                and this is where a driver looks for their own settings. */}
             <div className="flex items-center justify-between rounded-md border px-3 py-2.5">
-              <span className="text-sm">Theme</span>
+              <span className="text-sm">{tc('language')}</span>
+              <LanguageToggle />
+            </div>
+            <div className="flex items-center justify-between rounded-md border px-3 py-2.5">
+              <span className="text-sm">{tc('theme')}</span>
               <ThemeToggle />
             </div>
             <SignOutButton className="w-full justify-center border" />
@@ -54,7 +64,7 @@ export default function DriverProfilePage() {
       )}
       <ChangePasswordCard />
       <p className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
-        <Bike className="size-3.5" aria-hidden /> Photos and details are managed by the platform.
+        <Bike className="size-3.5" aria-hidden /> {t('managed')}
       </p>
     </div>
   );

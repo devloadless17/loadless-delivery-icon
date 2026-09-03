@@ -2,6 +2,7 @@
 
 import { displayAddress } from '@loadless/shared';
 import { Bike } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import Link from 'next/link';
 import { Skeleton } from '@/components/ui/skeleton';
 import { displayMoney, displayPhone } from '@/lib/format';
@@ -10,12 +11,13 @@ import { useDriverOrders } from '@/features/driver/api';
 import { OrderStatusBadge, STATUS_META } from '@/features/orders/order-status';
 
 export default function DriverActivePage() {
+  const t = useTranslations('driver.active');
   const { data, isPending } = useDriverOrders('active');
   const orders = data?.pages.flatMap((p) => p.data) ?? [];
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-semibold">Active deliveries</h1>
+      <h1 className="text-2xl font-semibold">{t('title')}</h1>
       {isPending ? (
         <div className="space-y-2">
           {Array.from({ length: 2 }).map((_, i) => (
@@ -33,7 +35,9 @@ export default function DriverActivePage() {
                 <span className={cn('w-1.5 shrink-0', STATUS_META[order.status].railClass)} aria-hidden />
                 <div className="flex min-w-0 flex-1 flex-col gap-2 p-4">
                   <div className="flex items-center justify-between gap-3">
-                    <span className="data-mono text-sm font-semibold">{order.orderNumber}</span>
+                    <span className="data-mono text-sm font-semibold">
+                      <bdi>{order.orderNumber}</bdi>
+                    </span>
                     <OrderStatusBadge status={order.status} />
                   </div>
                   <div className="flex items-end justify-between gap-3">
@@ -43,12 +47,16 @@ export default function DriverActivePage() {
                         {displayAddress(order.deliveryAddressText, order.deliveryMapsUrl)}
                       </p>
                       <p className="data-mono mt-0.5 text-xs text-muted-foreground">
-                        {order.customer.name} · {displayPhone(order.customer.normalizedPhone)}
+                        {order.customer.name} · <bdi>{displayPhone(order.customer.normalizedPhone)}</bdi>
                       </p>
                     </div>
-                    <div className="text-right">
+                    <div className="text-end">
                       <p className="data-mono text-sm font-bold text-accent">
-                        {order.driverEarnings ? `+${displayMoney(order.driverEarnings, order.currency)}` : ''}
+                        <bdi>
+                          {order.driverEarnings
+                            ? `+${displayMoney(order.driverEarnings, order.currency)}`
+                            : ''}
+                        </bdi>
                       </p>
                     </div>
                   </div>
@@ -61,8 +69,8 @@ export default function DriverActivePage() {
         <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed py-16 text-center">
           <Bike className="size-9 text-muted-foreground" aria-hidden />
           <div>
-            <p className="font-medium">No active deliveries</p>
-            <p className="text-sm text-muted-foreground">Accept an order from the feed to start one.</p>
+            <p className="font-medium">{t('empty')}</p>
+            <p className="text-sm text-muted-foreground">{t('emptyBody')}</p>
           </div>
         </div>
       )}

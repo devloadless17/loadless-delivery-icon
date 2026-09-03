@@ -2,6 +2,7 @@
 
 import { displayAddress, ERROR_CODES } from '@loadless/shared';
 import { MapPin, Radar, Store } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { ApiError } from '@/lib/api-client';
@@ -20,6 +21,7 @@ import { useAcceptOrder, useAvailableOrders, type FeedOrder } from '@/features/d
 import { DutyToggle } from '@/features/driver/duty-toggle';
 
 function FeedCard({ order }: { order: FeedOrder }) {
+  const t = useTranslations('driver.feed');
   const acceptOrder = useAcceptOrder();
   const [gone, setGone] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -27,15 +29,15 @@ function FeedCard({ order }: { order: FeedOrder }) {
   async function accept() {
     try {
       await acceptOrder.mutateAsync(order.id);
-      toast.success(`Order ${order.orderNumber} is yours`);
+      toast.success(t('yours', { orderNumber: order.orderNumber }));
     } catch (err) {
       if (err instanceof ApiError && err.code === ERROR_CODES.ORDER_NO_LONGER_AVAILABLE) {
         setGone(true);
-        toast.info('That order was just taken.');
+        toast.info(t('justTaken'));
       } else if (err instanceof ApiError && err.code === ERROR_CODES.DRIVER_NOT_AVAILABLE) {
         toast.error(err.message);
       } else {
-        toast.error('Could not accept the order. Try again.');
+        toast.error(t('acceptFailed'));
       }
     }
   }
@@ -57,11 +59,13 @@ function FeedCard({ order }: { order: FeedOrder }) {
             )}
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold">{order.vendor.businessName}</p>
-              <p className="text-xs text-muted-foreground">{displayDateTime(order.createdAt)}</p>
+              <p className="text-xs text-muted-foreground">
+                <bdi>{displayDateTime(order.createdAt)}</bdi>
+              </p>
             </div>
           </div>
           <p className="data-mono text-base font-bold">
-            {displayMoney(order.deliveryCharge, order.currency)}
+            <bdi>{displayMoney(order.deliveryCharge, order.currency)}</bdi>
           </p>
         </div>
         <p className="flex items-start gap-1.5 text-sm text-muted-foreground">
@@ -69,14 +73,14 @@ function FeedCard({ order }: { order: FeedOrder }) {
           <span className="min-w-0">
             {displayAddress(order.deliveryAddressText, order.deliveryMapsUrl)}
             {order.deliveryMapsUrl && (
-              <span className="ml-1.5 inline-flex items-center gap-0.5 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
-                MAPS LINK
+              <span className="ms-1.5 inline-flex items-center gap-0.5 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
+                {t('mapsLink')}
               </span>
             )}
           </span>
         </p>
         <Button variant="live" size="touch" onClick={() => setConfirming(true)}>
-          Accept order
+          {t('accept')}
         </Button>
 
         {/* Accepting is a commitment, not a preference: it takes the order off
@@ -86,7 +90,7 @@ function FeedCard({ order }: { order: FeedOrder }) {
         <Dialog open={confirming} onOpenChange={setConfirming}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Take this delivery?</DialogTitle>
+              <DialogTitle>{t('takeThis')}</DialogTitle>
               <DialogDescription>
                 {order.vendor.businessName} ·{' '}
                 {displayAddress(order.deliveryAddressText, order.deliveryMapsUrl)}
@@ -94,7 +98,7 @@ function FeedCard({ order }: { order: FeedOrder }) {
             </DialogHeader>
             <div className="flex justify-end gap-2">
               <Button variant="ghost" size="lg" onClick={() => setConfirming(false)}>
-                Not now
+                {t('notNow')}
               </Button>
               <Button
                 variant="live"
@@ -105,7 +109,7 @@ function FeedCard({ order }: { order: FeedOrder }) {
                   void accept();
                 }}
               >
-                Yes, accept
+                {t('yesAccept')}
               </Button>
             </div>
           </DialogContent>
@@ -116,6 +120,8 @@ function FeedCard({ order }: { order: FeedOrder }) {
 }
 
 export default function DriverFeedPage() {
+  const t = useTranslations('driver.feed');
+  const tc = useTranslations('common');
   const { data: me, isPending: mePending } = useMe();
   const onDuty = me?.user.driver?.dutyStatus === 'ON_DUTY';
   const feed = useAvailableOrders();
@@ -123,7 +129,7 @@ export default function DriverFeedPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-semibold">Available orders</h1>
+      <h1 className="text-2xl font-semibold">{t('title')}</h1>
 
       {mePending ? (
         <Skeleton className="h-40 w-full rounded-lg" />
@@ -131,8 +137,8 @@ export default function DriverFeedPage() {
         <div className="flex flex-col items-center gap-4 rounded-lg border border-dashed py-16 text-center">
           <Radar className="size-9 text-muted-foreground" aria-hidden />
           <div>
-            <p className="font-medium">You&apos;re off duty</p>
-            <p className="text-sm text-muted-foreground">Go on duty to see orders the moment they appear.</p>
+            <p className="font-medium">{t('offDuty')}</p>
+            <p className="text-sm text-muted-foreground">{t('offDutyBody')}</p>
           </div>
           <DutyToggle />
         </div>
@@ -152,7 +158,7 @@ export default function DriverFeedPage() {
           {feed.hasNextPage && (
             <div className="flex justify-center pt-1">
               <Button variant="outline" loading={feed.isFetchingNextPage} onClick={() => void feed.fetchNextPage()}>
-                Load more
+                {tc('loadMore')}
               </Button>
             </div>
           )}
@@ -161,10 +167,8 @@ export default function DriverFeedPage() {
         <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed py-16 text-center">
           <Radar className="size-9 text-accent" aria-hidden />
           <div>
-            <p className="font-medium">Watching for orders…</p>
-            <p className="text-sm text-muted-foreground">
-              New orders appear here instantly — keep the app open.
-            </p>
+            <p className="font-medium">{t('watching')}</p>
+            <p className="text-sm text-muted-foreground">{t('watchingBody')}</p>
           </div>
         </div>
       )}

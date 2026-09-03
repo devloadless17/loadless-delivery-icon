@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { ChangePasswordCard } from '@/components/change-password-card';
 
 /**
@@ -8,13 +9,12 @@ import { ChangePasswordCard } from '@/components/change-password-card';
  * logo stay admin-managed; this is only what is theirs to change.
  */
 export default function VendorSettingsPage() {
+  const t = useTranslations('vendor.settings');
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-2xl font-semibold">Settings</h1>
-        <p className="text-sm text-muted-foreground">
-          Your business name and logo are managed by the platform.
-        </p>
+        <h1 className="text-2xl font-semibold">{t('title')}</h1>
+        <p className="text-sm text-muted-foreground">{t('subtitle')}</p>
       </div>
       <ChangePasswordCard />
     </div>

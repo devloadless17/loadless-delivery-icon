@@ -2,6 +2,7 @@
 
 import { displayAddress, type OrderStatus } from '@loadless/shared';
 import { PackagePlus, X } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import Link from 'next/link';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -13,16 +14,21 @@ import { cn } from '@/lib/utils';
 import { useVendorOrdersList } from '@/features/orders/api';
 import { OrderStatusBadge, STATUS_META } from '@/features/orders/order-status';
 
-const TABS: Array<{ key: OrderStatus | 'ALL'; label: string }> = [
-  { key: 'ALL', label: 'All' },
-  { key: 'PENDING', label: 'Waiting' },
-  { key: 'DRIVER_ASSIGNED', label: 'Assigned' },
-  { key: 'PICKED_UP', label: 'On the way' },
-  { key: 'DELIVERED', label: 'Delivered' },
-  { key: 'CANCELLED', label: 'Cancelled' },
+// Labels come from the shared `status` catalogue so a status reads the same
+// word here, on the driver's screen and in the badge.
+const TABS: Array<OrderStatus | 'ALL'> = [
+  'ALL',
+  'PENDING',
+  'DRIVER_ASSIGNED',
+  'PICKED_UP',
+  'DELIVERED',
+  'CANCELLED',
 ];
 
 export default function VendorOrdersPage() {
+  const t = useTranslations('vendor.orders');
+  const ts = useTranslations('status');
+  const tc = useTranslations('common');
   const [tab, setTab] = useState<OrderStatus | 'ALL'>('ALL');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
@@ -35,16 +41,16 @@ export default function VendorOrdersPage() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold">Orders</h1>
+        <h1 className="text-2xl font-semibold">{t('title')}</h1>
         <Link href="/vendor/orders/new">
           <Button>
-            <PackagePlus /> New order
+            <PackagePlus /> {t('new')}
           </Button>
         </Link>
       </div>
 
       <div className="flex gap-1 overflow-x-auto pb-1">
-        {TABS.map(({ key, label }) => (
+        {TABS.map((key) => (
           <button
             key={key}
             type="button"
@@ -56,7 +62,7 @@ export default function VendorOrdersPage() {
                 : 'text-muted-foreground hover:bg-muted hover:text-foreground',
             )}
           >
-            {label}
+            {key === 'ALL' ? t('all') : ts(key)}
           </button>
         ))}
       </div>
@@ -66,23 +72,23 @@ export default function VendorOrdersPage() {
           Tuesday" should not have to scroll a list to find it. */}
       <div className="grid grid-cols-2 items-end gap-2 sm:flex sm:flex-wrap">
         <div className="space-y-1.5">
-          <Label htmlFor="vo-from">From</Label>
+          <Label htmlFor="vo-from">{t('from')}</Label>
           <DateField
             id="vo-from"
             className="w-full sm:w-44"
             value={from}
             onValueChange={setFrom}
-            clearLabel="from date"
+            clearLabel={t('fromDate')}
           />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="vo-to">To</Label>
+          <Label htmlFor="vo-to">{t('to')}</Label>
           <DateField
             id="vo-to"
             className="w-full sm:w-44"
             value={to}
             onValueChange={setTo}
-            clearLabel="to date"
+            clearLabel={t('toDate')}
           />
         </div>
         {filtered && (
@@ -94,7 +100,7 @@ export default function VendorOrdersPage() {
               setTo('');
             }}
           >
-            <X /> Clear dates
+            <X /> {t('clearDates')}
           </Button>
         )}
       </div>
@@ -117,7 +123,9 @@ export default function VendorOrdersPage() {
                   <span className={cn('w-1.5 shrink-0', STATUS_META[order.status].railClass)} aria-hidden />
                   <div className="flex min-w-0 flex-1 flex-col gap-2 p-4">
                     <div className="flex items-center justify-between gap-3">
-                      <span className="data-mono text-sm font-semibold">{order.orderNumber}</span>
+                      <span className="data-mono text-sm font-semibold">
+                        <bdi>{order.orderNumber}</bdi>
+                      </span>
                       <OrderStatusBadge status={order.status} />
                     </div>
                     <div className="flex items-end justify-between gap-3">
@@ -128,16 +136,20 @@ export default function VendorOrdersPage() {
                         </p>
                         {order.driver && (
                           <p className="mt-0.5 text-xs text-muted-foreground">
-                            Driver: {order.driver.fullName} ·{' '}
-                            <span className="data-mono">{displayPhone(order.driver.contactPhone)}</span>
+                            {t('driver', { name: order.driver.fullName })} ·{' '}
+                            <span dir="ltr" className="data-mono">
+                              {displayPhone(order.driver.contactPhone)}
+                            </span>
                           </p>
                         )}
                       </div>
-                      <div className="text-right">
+                      <div className="text-end">
                         <p className="data-mono text-sm font-semibold">
-                          {displayMoney(order.deliveryCharge, order.currency)}
+                          <bdi>{displayMoney(order.deliveryCharge, order.currency)}</bdi>
                         </p>
-                        <p className="text-xs text-muted-foreground">{displayDateTime(order.createdAt)}</p>
+                        <p className="text-xs text-muted-foreground">
+                          <bdi>{displayDateTime(order.createdAt)}</bdi>
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -148,7 +160,7 @@ export default function VendorOrdersPage() {
           {hasNextPage && (
             <div className="flex justify-center pt-2">
               <Button variant="outline" loading={isFetchingNextPage} onClick={() => void fetchNextPage()}>
-                Load more
+                {tc('loadMore')}
               </Button>
             </div>
           )}
@@ -157,13 +169,9 @@ export default function VendorOrdersPage() {
         <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed py-16 text-center">
           <PackagePlus className="size-8 text-muted-foreground" aria-hidden />
           <div>
-            <p className="font-medium">
-              {filtered ? 'No orders in this date range' : 'No orders here yet'}
-            </p>
+            <p className="font-medium">{filtered ? t('emptyFiltered') : t('empty')}</p>
             <p className="text-sm text-muted-foreground">
-              {filtered
-                ? 'Try widening the dates, or clear them to see everything.'
-                : 'Create an order and drivers will see it instantly.'}
+              {filtered ? t('emptyFilteredBody') : t('emptyBody')}
             </p>
           </div>
           {filtered ? (
@@ -174,12 +182,12 @@ export default function VendorOrdersPage() {
                 setTo('');
               }}
             >
-              <X /> Clear dates
+              <X /> {t('clearDates')}
             </Button>
           ) : (
             <Link href="/vendor/orders/new">
               <Button>
-                <PackagePlus /> New order
+                <PackagePlus /> {t('new')}
               </Button>
             </Link>
           )}

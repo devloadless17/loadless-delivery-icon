@@ -50,7 +50,7 @@ export const DateField = React.forwardRef<HTMLInputElement, DateFieldProps>(
     return (
       <div className="relative">
         <CalendarDays
-          className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+          className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
           aria-hidden
         />
         <input
@@ -61,7 +61,7 @@ export const DateField = React.forwardRef<HTMLInputElement, DateFieldProps>(
           value={value}
           onChange={(e) => onValueChange(e.target.value)}
           className={cn(
-            'flex h-10 w-full rounded-lg border border-input bg-card py-2 pl-9 pr-9 text-sm shadow-none transition-all duration-150',
+            'flex h-10 w-full rounded-lg border border-input bg-card py-2 ps-9 pe-9 text-sm shadow-none transition-all duration-150',
             'hover:border-input focus-visible:border-primary focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-primary/15',
             'disabled:cursor-not-allowed disabled:opacity-50',
             // The browser's own picker button is replaced by the icon above;
@@ -83,7 +83,7 @@ export const DateField = React.forwardRef<HTMLInputElement, DateFieldProps>(
               onValueChange('');
               inner.current?.focus();
             }}
-            className="absolute right-2 top-1/2 z-10 -translate-y-1/2 cursor-pointer rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            className="absolute end-2 top-1/2 z-10 -translate-y-1/2 cursor-pointer rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >
             <X className="size-3.5" />
           </button>
@@ -93,7 +93,7 @@ export const DateField = React.forwardRef<HTMLInputElement, DateFieldProps>(
             tabIndex={-1}
             aria-hidden
             onClick={openPicker}
-            className="absolute right-2 top-1/2 -translate-y-1/2 cursor-pointer p-1 opacity-0"
+            className="absolute end-2 top-1/2 -translate-y-1/2 cursor-pointer p-1 opacity-0"
           />
         )}
       </div>

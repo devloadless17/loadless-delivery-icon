@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 
@@ -18,7 +19,14 @@ import { toast } from 'sonner';
  * the guard.
  */
 export function UpdatePrompt() {
+  const t = useTranslations('update');
   const shown = useRef(false);
+  // The effect runs once (mount-only) but reads the translator when the toast
+  // actually fires, so a language switch mid-session still shows the right
+  // words. A ref keeps `t` out of the dependency list, which would otherwise
+  // tear down and re-register the service-worker listeners on every render.
+  const tRef = useRef(t);
+  tRef.current = t;
 
   useEffect(() => {
     if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
@@ -39,10 +47,10 @@ export function UpdatePrompt() {
       }
       if (shown.current) return;
       shown.current = true;
-      toast('A new version is ready', {
-        description: 'Refresh to pick up the latest changes.',
+      toast(tRef.current('ready'), {
+        description: tRef.current('body'),
         duration: Infinity,
-        action: { label: 'Refresh', onClick: () => window.location.reload() },
+        action: { label: tRef.current('refresh'), onClick: () => window.location.reload() },
       });
     }
 
