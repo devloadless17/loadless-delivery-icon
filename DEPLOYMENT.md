@@ -227,15 +227,16 @@ crontab -l                       # as deploy@187.77.167.2
 | `uploads-<stamp>.tar.gz` | driver face/bike photos and vendor logos — `STORAGE_DRIVER=local`, so this disk is the only copy |
 | `caddy-<stamp>.tar.gz` | TLS certs + ACME account; losing it means reissue and rate-limit risk |
 
-**Retention**: 7 daily + 4 weekly (Sundays), pruned per artifact type so one large
-kind cannot evict another kind's history. About 200 MB total at current volume,
-against 88 GB free.
+**Retention: ONE backup set on the server, replaced daily (Ali's decision,
+2026-09-04).** Not seven, not weekly copies — the current set and nothing else,
+about 18 MB. The depth argument (a bad delete noticed three days later overwrites
+the last good copy) was put to him and he chose the simpler thing knowingly. Do not
+quietly raise `KEEP` back up.
 
-**Why more than one copy is kept, deliberately:** the failure that actually destroys a
-business is not the server dying — it is a bad delete or a corruption that nobody
-notices for a few days. With a single rolling backup, that night's run faithfully
-backs up the already-broken data over the last good copy. Depth is what makes a
-backup a recovery rather than a mirror of the mistake.
+What that decision makes load-bearing: the new set is written **and read back**
+before the previous one is deleted. `prune` runs last in the script for exactly this
+reason. Prune-then-write would mean a failed run leaves the server with no backup at
+all, and at this retention there is nothing behind it.
 
 **Verification is part of the run, not a separate habit.** Each artifact is read back
 immediately after it is written: `pg_restore --list` on the dump, `tar tzf` on the

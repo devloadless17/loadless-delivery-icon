@@ -10,5 +10,5 @@ grep -q '^status=OK' "$STATUS" || { echo ">>> LAST RUN FAILED — read backups/b
 [ "$AGE_H" -lt 36 ] || { echo ">>> STALE: no successful backup in $AGE_H hours"; exit 1; }
 echo ">>> healthy"
 echo
-echo "Most recent files:"
-ls -lh /home/deploy/backups/daily/ 2>/dev/null | tail -6
+echo "The backup currently on the server:"
+ls -lh /home/deploy/backups/daily/ 2>/dev/null | tail -4

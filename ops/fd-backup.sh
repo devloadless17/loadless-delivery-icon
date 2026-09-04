@@ -17,19 +17,23 @@
 # possible; what IS still possible is nobody looking, which is what the status
 # file and `fd-backup-status` are for.
 #
-# Retention: 7 daily + 4 weekly (Sundays), pruned per artifact type.
+# Retention: ONE backup set, replaced daily (Ali's decision, 2026-09-04).
+#
+# The previous night's set is deleted only AFTER the new one is written AND read
+# back. That ordering is load-bearing at this retention: prune-then-write would
+# mean a failed run leaves the server with no backup at all, and with one copy
+# there is nothing behind it to fall back to.
 #
 set -Eeuo pipefail
 
 DEPLOY_DIR=/home/deploy/loadless
 BACKUP_ROOT=/home/deploy/backups
 DAILY_DIR="$BACKUP_ROOT/daily"
-WEEKLY_DIR="$BACKUP_ROOT/weekly"
 LOG="$BACKUP_ROOT/backup.log"
 STATUS="$BACKUP_ROOT/last-run.txt"
 
-KEEP_DAILY=7
-KEEP_WEEKLY=4
+# One of each artifact: the run that just succeeded.
+KEEP=1
 
 # The postgres image is already on this host, so the helper containers below
 # pull nothing at 04:00. A backup that needs the network to start is a backup
@@ -39,8 +43,8 @@ HELPER_IMAGE=postgres:16-alpine
 STAMP="$(date -u +%Y-%m-%d_%H%M)"
 STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
-mkdir -p "$DAILY_DIR" "$WEEKLY_DIR"
-chmod 700 "$BACKUP_ROOT" "$DAILY_DIR" "$WEEKLY_DIR"
+mkdir -p "$DAILY_DIR"
+chmod 700 "$BACKUP_ROOT" "$DAILY_DIR"
 
 log() { printf '%s  %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >> "$LOG"; }
 
@@ -117,24 +121,15 @@ backup_volume() {
 backup_volume loadless_uploads_data uploads
 backup_volume loadless_caddy_data   caddy
 
-# ------------------------------------------------------------------ weekly ---
-# Sunday's set is copied aside before the daily prune can reach it, so a fault
-# that is only noticed a fortnight later still has something to go back to.
-if [ "$(date -u +%u)" = "7" ]; then
-  for f in "$DAILY_DIR"/db-"$STAMP".dump "$DAILY_DIR"/uploads-"$STAMP".tar.gz "$DAILY_DIR"/caddy-"$STAMP".tar.gz; do
-    [ -f "$f" ] && cp -p "$f" "$WEEKLY_DIR/"
-  done
-  log "weekly copy kept"
-fi
-
 # ------------------------------------------------------------------- prune ---
 # Per PREFIX, not per directory: pruning by age across mixed artifacts would let
 # one large kind evict another kind's history.
 prune() {
   local dir="$1" prefix="$2" keep="$3" files
   # An unmatched glob passes the LITERAL pattern to ls, which then fails -- and
-  # under pipefail that aborted the whole run on the first night, when weekly/
-  # was still empty. Collect first, and treat "nothing to prune" as success.
+  # under pipefail that aborted the whole run on the very first night, when
+  # there was nothing to prune yet. Collect first, and treat "nothing to prune"
+  # as success rather than as an error.
   # shellcheck disable=SC2012 — names are ours and contain no whitespace
   files=$(ls -1t "$dir"/"$prefix"* 2>/dev/null || true)
   [ -n "$files" ] || return 0
@@ -142,9 +137,10 @@ prune() {
     rm -f "$old" && log "pruned $(basename "$old")"
   done
 }
+# Runs LAST, after every artifact above is written and verified — so the only
+# thing ever deleted is a set that has already been replaced by a good one.
 for p in db- uploads- caddy-; do
-  prune "$DAILY_DIR"  "$p" "$KEEP_DAILY"
-  prune "$WEEKLY_DIR" "$p" "$KEEP_WEEKLY"
+  prune "$DAILY_DIR" "$p" "$KEEP"
 done
 
 # ------------------------------------------------------------------ status ---
@@ -157,8 +153,7 @@ count_files() {
   find "$1" -maxdepth 1 -type f -name "$2*" 2>/dev/null | wc -l
 }
 
-DAILY_KEPT=$(count_files "$DAILY_DIR" db-)
-WEEKLY_KEPT=$(count_files "$WEEKLY_DIR" db-)
+KEPT=$(count_files "$DAILY_DIR" db-)
 DISK_AVAIL=$(df -h / | awk 'NR==2 {print $4}')
 BACKUP_SIZE=$(du -sh "$BACKUP_ROOT" | cut -f1)
 FINISHED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -169,8 +164,7 @@ started=$STARTED_AT
 finished=$FINISHED_AT
 database=$(basename "$DB_FILE")
 tables_with_data=$TABLES
-daily_kept=$DAILY_KEPT
-weekly_kept=$WEEKLY_KEPT
+backups_kept=$KEPT
 backups_total_size=$BACKUP_SIZE
 disk_available=$DISK_AVAIL
 EOF
