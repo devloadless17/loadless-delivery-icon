@@ -30,11 +30,23 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
       setDegraded(false);
     };
 
+    // COALESCED, because the admin room hears about every order on the whole
+    // platform. Each invalidation of ['admin','orders'] refetches every page an
+    // infinite list has loaded, so an admin who had pressed Load more a few
+    // times used to refire that whole stack once per event — the console janked
+    // hardest exactly when the platform was busiest. A burst of twenty events
+    // now costs one refresh instead of twenty, and the trailing edge means the
+    // screen still settles on the truth.
+    let invalidateTimer: ReturnType<typeof setTimeout> | null = null;
     const invalidateOrders = () => {
-      void queryClient.invalidateQueries({ queryKey: ['driver'] });
-      void queryClient.invalidateQueries({ queryKey: ['vendor', 'orders'] });
-      void queryClient.invalidateQueries({ queryKey: ['admin', 'orders'] });
-      void queryClient.invalidateQueries({ queryKey: ['admin', 'analytics'] });
+      if (invalidateTimer) return;
+      invalidateTimer = setTimeout(() => {
+        invalidateTimer = null;
+        void queryClient.invalidateQueries({ queryKey: ['driver'] });
+        void queryClient.invalidateQueries({ queryKey: ['vendor', 'orders'] });
+        void queryClient.invalidateQueries({ queryKey: ['admin', 'orders'] });
+        void queryClient.invalidateQueries({ queryKey: ['admin', 'analytics'] });
+      }, 400);
     };
 
     socket.on('connect', () => {
@@ -70,6 +82,7 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       if (degradeTimer) clearTimeout(degradeTimer);
+      if (invalidateTimer) clearTimeout(invalidateTimer);
       socket.disconnect();
     };
   }, [queryClient]);

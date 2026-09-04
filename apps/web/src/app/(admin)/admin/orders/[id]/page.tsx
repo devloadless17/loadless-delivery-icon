@@ -20,15 +20,10 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useDrivers } from '@/features/admin/drivers/api';
+import { EntityPicker, type PickerOption } from '@/components/ui/entity-picker';
+import { useDebouncedValue } from '@/lib/use-debounced-value';
 import {
   useAdminAssignOrder,
   useAdminCancelOrder,
@@ -44,7 +39,13 @@ export default function AdminOrderDetailPage() {
   const cancelOrder = useAdminCancelOrder();
   const assignOrder = useAdminAssignOrder();
   const reassignOrder = useAdminReassignOrder();
-  const { data: driversPage } = useDrivers(1, '');
+  // Searched, not listed. Page 1 of a newest-first list capped the picker at 20
+  // drivers, which quietly made everyone hired before the newest 20 impossible
+  // to assign — the failure got worse with every hire.
+  const [driverQuery, setDriverQuery] = useState('');
+  const [pickedDriver, setPickedDriver] = useState<PickerOption | null>(null);
+  const debouncedDriverQuery = useDebouncedValue(driverQuery, 250);
+  const { data: driversPage, isPending: driversPending } = useDrivers(1, debouncedDriverQuery);
 
   const [dialog, setDialog] = useState<'cancel' | 'assign' | 'reassign' | null>(null);
   const [reason, setReason] = useState('');
@@ -60,7 +61,17 @@ export default function AdminOrderDetailPage() {
   }
   if (!order) return null;
 
-  const drivers = driversPage?.data.filter((d) => d.status === 'ACTIVE') ?? [];
+  const driverOptions: PickerOption[] =
+    driversPage?.data
+      .filter((d) => d.status === 'ACTIVE' && d.id !== order.driver?.id)
+      .map((d) => ({
+        id: d.id,
+        label: d.fullName,
+        hint: `${displayPhone(d.contactPhone)} · ${d.dutyStatus === 'ON_DUTY' ? 'on duty' : 'off duty'}`,
+      })) ?? [];
+  // The server's total counts rows before the active/current-driver filter, so
+  // this can only over-report — which is the safe direction for "keep typing".
+  const driversHasMore = (driversPage?.meta.total ?? 0) > driverOptions.length;
   const isOpen = ['PENDING', 'DRIVER_ASSIGNED', 'PICKED_UP'].includes(order.status);
 
   async function runAction() {
@@ -193,12 +204,12 @@ export default function AdminOrderDetailPage() {
       {isOpen && (
         <div className="flex flex-wrap gap-2">
           {order.status === 'PENDING' && (
-            <Button onClick={() => { setDriverId(''); setDialog('assign'); }}>
+            <Button onClick={() => { setDriverId(''); setPickedDriver(null); setDriverQuery(''); setDialog('assign'); }}>
               <UserCog /> Assign driver
             </Button>
           )}
           {(order.status === 'DRIVER_ASSIGNED' || order.status === 'PICKED_UP') && (
-            <Button variant="outline" onClick={() => { setDriverId(''); setReason(''); setDialog('reassign'); }}>
+            <Button variant="outline" onClick={() => { setDriverId(''); setPickedDriver(null); setDriverQuery(''); setReason(''); setDialog('reassign'); }}>
               <UserCog /> Reassign driver
             </Button>
           )}
@@ -225,21 +236,22 @@ export default function AdminOrderDetailPage() {
           <div className="space-y-4">
             {(dialog === 'assign' || dialog === 'reassign') && (
               <div className="space-y-2">
-                <Label>Driver</Label>
-                <Select value={driverId} onValueChange={setDriverId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Pick a driver" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {drivers
-                      .filter((d) => d.id !== order.driver?.id)
-                      .map((d) => (
-                        <SelectItem key={d.id} value={d.id}>
-                          {d.fullName} · {d.dutyStatus === 'ON_DUTY' ? 'on duty' : 'off duty'}
-                        </SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
+                <Label htmlFor="assign-driver">Driver</Label>
+                <EntityPicker
+                  id="assign-driver"
+                  value={driverId}
+                  selectedLabel={pickedDriver?.label}
+                  onSelect={(option) => {
+                    setPickedDriver(option);
+                    setDriverId(option?.id ?? '');
+                  }}
+                  query={driverQuery}
+                  onQueryChange={setDriverQuery}
+                  options={driverOptions}
+                  isPending={driversPending}
+                  hasMore={driversHasMore}
+                  placeholder="Pick a driver"
+                />
               </div>
             )}
             {(dialog === 'cancel' || dialog === 'reassign') && (

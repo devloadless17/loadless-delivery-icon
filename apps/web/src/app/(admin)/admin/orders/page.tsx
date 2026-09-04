@@ -3,7 +3,7 @@
 import { CURRENCIES, ORDER_STATUSES, type Currency, type OrderStatus } from '@loadless/shared';
 import { Download, PackageSearch, X } from 'lucide-react';
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { Suspense, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { DateField } from '@/components/ui/date-field';
 import { Label } from '@/components/ui/label';
@@ -23,40 +23,78 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { displayDateTime, displayMoney } from '@/lib/format';
+import { displayDateTime, displayMoney, displayPhone } from '@/lib/format';
 import {
   buildAdminOrderParams,
   useAdminOrders,
   type AdminOrderFilters,
 } from '@/features/admin/orders/api';
 import { OrderStatusBadge, STATUS_META } from '@/features/orders/order-status';
-import { useVendors } from '@/features/admin/vendors/api';
-import { useDrivers } from '@/features/admin/drivers/api';
+import { useVendor, useVendors } from '@/features/admin/vendors/api';
+import { useDriver, useDrivers } from '@/features/admin/drivers/api';
+import { EntityPicker, type PickerOption } from '@/components/ui/entity-picker';
+import { useDebouncedValue } from '@/lib/use-debounced-value';
+import { useUrlState } from '@/lib/use-url-state';
+import { ListError } from '@/components/list-error';
+import { api, ApiError } from '@/lib/api-client';
+import { toast } from 'sonner';
+
+const FILTER_DEFAULTS = {
+  status: 'ALL',
+  from: '',
+  to: '',
+  vendorId: 'ALL',
+  driverId: 'ALL',
+  currency: 'ALL',
+};
 
 export default function AdminOrdersPage() {
-  const [status, setStatus] = useState<OrderStatus | 'ALL'>('ALL');
-  const [from, setFrom] = useState('');
-  const [to, setTo] = useState('');
-  const [vendorId, setVendorId] = useState('ALL');
-  const [driverId, setDriverId] = useState('ALL');
-  const [currency, setCurrency] = useState<Currency | 'ALL'>('ALL');
+  // useSearchParams needs a Suspense boundary on a statically rendered route.
+  return (
+    <Suspense fallback={<Skeleton className="h-96 w-full" />}>
+      <AdminOrdersView />
+    </Suspense>
+  );
+}
 
-  // A driver's detail dialog links here to answer "all their orders". Read the
-  // id ONCE on mount and strip it from the URL, so a later Clear filters isn't
-  // silently undone by a refresh. Done in an effect rather than through
-  // useSearchParams: this page is statically rendered, and reading the query
-  // during render would both demand a Suspense boundary and mismatch hydration.
-  useEffect(() => {
-    const fromUrl = new URLSearchParams(window.location.search).get('driverId');
-    if (!fromUrl) return;
-    setDriverId(fromUrl);
-    window.history.replaceState(null, '', window.location.pathname);
-  }, []);
+function AdminOrdersView() {
+  // The filters live in the URL, so a refresh keeps them and the view can be
+  // sent to someone. A driver's detail dialog deep-links here with ?driverId=
+  // and now simply works, instead of needing a read-once-then-strip dance.
+  const [urlState, setUrlState] = useUrlState(FILTER_DEFAULTS);
+  const { from, to } = urlState;
+  const status = urlState.status as OrderStatus | 'ALL';
+  const currency = urlState.currency as Currency | 'ALL';
+  const { vendorId, driverId } = urlState;
 
-  // The lists that fill the two pickers. Page 1 is enough for a platform of
-  // this size, and asking for more would slow the screen for nobody's benefit.
-  const vendors = useVendors(1, '');
-  const drivers = useDrivers(1, '');
+  const setStatus = (v: OrderStatus | 'ALL') => setUrlState({ status: v });
+  const setFrom = (v: string) => setUrlState({ from: v });
+  const setTo = (v: string) => setUrlState({ to: v });
+  const setCurrency = (v: Currency | 'ALL') => setUrlState({ currency: v });
+
+  // Searched server-side, not listed. These were page 1 at limit 20 of a
+  // newest-first list, so older vendors and drivers silently dropped out of the
+  // filter with nothing on screen admitting it.
+  const [vendorQuery, setVendorQuery] = useState('');
+  const [driverQuery, setDriverQuery] = useState('');
+  const [pickedVendor, setPickedVendor] = useState<PickerOption | null>(null);
+  const [pickedDriver, setPickedDriver] = useState<PickerOption | null>(null);
+  const vendors = useVendors(1, useDebouncedValue(vendorQuery, 250));
+  const drivers = useDrivers(1, useDebouncedValue(driverQuery, 250));
+
+  // A filter restored from the URL has an id but no name yet.
+  const vendorLabel = useVendor(vendorId !== 'ALL' && !pickedVendor ? vendorId : null);
+  const driverLabel = useDriver(driverId !== 'ALL' && !pickedDriver ? driverId : null);
+
+  const vendorOptions: PickerOption[] = (vendors.data?.data ?? []).map((v) => ({
+    id: v.id,
+    label: v.businessName,
+  }));
+  const driverOptions: PickerOption[] = (drivers.data?.data ?? []).map((d) => ({
+    id: d.id,
+    label: d.fullName,
+    hint: displayPhone(d.contactPhone),
+  }));
 
   const filters: AdminOrderFilters = {
     ...(status !== 'ALL' ? { status } : {}),
@@ -75,18 +113,34 @@ export default function AdminOrdersPage() {
     currency !== 'ALL';
 
   function clearFilters() {
-    setStatus('ALL');
-    setFrom('');
-    setTo('');
-    setVendorId('ALL');
-    setDriverId('ALL');
-    setCurrency('ALL');
+    setUrlState(FILTER_DEFAULTS);
+    setPickedVendor(null);
+    setPickedDriver(null);
+    setVendorQuery('');
+    setDriverQuery('');
   }
-  const { data, isPending, fetchNextPage, hasNextPage, isFetchingNextPage } =
+  const { data, isPending, isError, refetch, fetchNextPage, hasNextPage, isFetchingNextPage } =
     useAdminOrders(filters);
   const orders = data?.pages.flatMap((p) => p.data) ?? [];
 
-  const csvUrl = `/api/v1/admin/analytics/orders.csv?${buildAdminOrderParams(filters)}`;
+  // Through api.download, not a bare <a download>: a browser navigation skips
+  // the silent 401 refresh, so on a page open longer than the 15-minute access
+  // token the admin was handed a file named orders-….csv containing a JSON
+  // error — a broken report with a convincing name.
+  const [exporting, setExporting] = useState(false);
+  async function exportCsv() {
+    setExporting(true);
+    try {
+      await api.download(
+        `/admin/analytics/orders.csv?${buildAdminOrderParams(filters)}`,
+        `orders-${new Date().toISOString().slice(0, 10)}.csv`,
+      );
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Could not export those orders');
+    } finally {
+      setExporting(false);
+    }
+  }
 
   return (
     <div className="space-y-5">
@@ -95,11 +149,9 @@ export default function AdminOrdersPage() {
           <h1 className="text-2xl font-semibold">Orders</h1>
           <p className="text-sm text-muted-foreground">Every order on the platform, live.</p>
         </div>
-        <a href={csvUrl} download>
-          <Button variant="outline">
-            <Download /> Export CSV
-          </Button>
-        </a>
+        <Button variant="outline" onClick={exportCsv} disabled={exporting}>
+          <Download /> {exporting ? 'Exporting…' : 'Export CSV'}
+        </Button>
       </div>
 
       <div className="flex flex-wrap items-end gap-3">
@@ -132,35 +184,43 @@ export default function AdminOrdersPage() {
             reading the whole board. */}
         <div className="space-y-1.5">
           <Label>Vendor</Label>
-          <Select value={vendorId} onValueChange={setVendorId}>
-            <SelectTrigger className="h-10 w-48">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="ALL">All vendors</SelectItem>
-              {(vendors.data?.data ?? []).map((v) => (
-                <SelectItem key={v.id} value={v.id}>
-                  {v.businessName}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="w-48">
+            <EntityPicker
+              value={vendorId === 'ALL' ? '' : vendorId}
+              selectedLabel={pickedVendor?.label ?? vendorLabel.data?.businessName}
+              onSelect={(option) => {
+                setPickedVendor(option);
+                setUrlState({ vendorId: option?.id ?? 'ALL' });
+              }}
+              query={vendorQuery}
+              onQueryChange={setVendorQuery}
+              options={vendorOptions}
+              isPending={vendors.isPending}
+              hasMore={(vendors.data?.meta.total ?? 0) > vendorOptions.length}
+              placeholder="All vendors"
+              clearLabel="All vendors"
+            />
+          </div>
         </div>
         <div className="space-y-1.5">
           <Label>Driver</Label>
-          <Select value={driverId} onValueChange={setDriverId}>
-            <SelectTrigger className="h-10 w-48">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="ALL">All drivers</SelectItem>
-              {(drivers.data?.data ?? []).map((d) => (
-                <SelectItem key={d.id} value={d.id}>
-                  {d.fullName}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="w-48">
+            <EntityPicker
+              value={driverId === 'ALL' ? '' : driverId}
+              selectedLabel={pickedDriver?.label ?? driverLabel.data?.fullName}
+              onSelect={(option) => {
+                setPickedDriver(option);
+                setUrlState({ driverId: option?.id ?? 'ALL' });
+              }}
+              query={driverQuery}
+              onQueryChange={setDriverQuery}
+              options={driverOptions}
+              isPending={drivers.isPending}
+              hasMore={(drivers.data?.meta.total ?? 0) > driverOptions.length}
+              placeholder="All drivers"
+              clearLabel="All drivers"
+            />
+          </div>
         </div>
         <div className="space-y-1.5">
           <Label>Currency</Label>
@@ -185,7 +245,9 @@ export default function AdminOrdersPage() {
         )}
       </div>
 
-      {isPending ? (
+      {isError ? (
+        <ListError what="orders" onRetry={() => void refetch()} />
+      ) : isPending ? (
         <div className="space-y-2">
           {Array.from({ length: 6 }).map((_, i) => (
             <Skeleton key={i} className="h-12 w-full" />

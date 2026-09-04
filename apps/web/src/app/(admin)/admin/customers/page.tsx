@@ -2,7 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { Search, SlidersHorizontal, Trash2, UserPlus, Users } from 'lucide-react';
-import { useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { api } from '@/lib/api-client';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -17,14 +17,10 @@ import {
 import { Pagination, type PageMeta } from '@/components/pagination';
 import { Button } from '@/components/ui/button';
 import { IconAction } from '@/components/ui/icon-action';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { useVendors } from '@/features/admin/vendors/api';
+import { useVendor, useVendors } from '@/features/admin/vendors/api';
+import { EntityPicker, type PickerOption } from '@/components/ui/entity-picker';
+import { ListError } from '@/components/list-error';
+import { useUrlState } from '@/lib/use-url-state';
 import { CustomerManageDialog } from '@/features/admin/customers/manage-dialog';
 import { CustomerDeleteDialog } from '@/features/admin/customers/customer-delete-dialog';
 import { CustomerCreateDialog } from '@/features/customers/customer-create-dialog';
@@ -54,16 +50,44 @@ function useAdminCustomers(page: number, q: string, vendorId: string) {
   });
 }
 
+const DEFAULTS = { page: '1', q: '', vendorId: 'ALL' };
+
 export default function AdminCustomersPage() {
-  const [page, setPage] = useState(1);
-  const [search, setSearch] = useState('');
+  // useSearchParams needs a Suspense boundary on a statically rendered route.
+  return (
+    <Suspense fallback={<Skeleton className="h-96 w-full" />}>
+      <AdminCustomersView />
+    </Suspense>
+  );
+}
+
+function AdminCustomersView() {
+  const [urlState, setUrlState] = useUrlState(DEFAULTS);
+  const page = Number(urlState.page) || 1;
+  const { vendorId } = urlState;
+  const setPage = (p: number) => setUrlState({ page: String(p) });
+
+  // The box keeps its own state so typing stays instant; the URL follows the
+  // debounced value, so the address bar does not churn on every keystroke.
+  const [search, setSearch] = useState(urlState.q);
+  const q = useDebouncedValue(search, 300);
+  useEffect(() => {
+    if (q !== urlState.q) setUrlState({ q });
+  }, [q, urlState.q, setUrlState]);
+
   const [managingId, setManagingId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<AdminCustomer | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
-  const [vendorId, setVendorId] = useState('ALL');
-  const q = useDebouncedValue(search, 300);
-  const { data, isPending } = useAdminCustomers(page, q, vendorId);
-  const vendors = useVendors(1, '');
+  const { data, isPending, isError, refetch } = useAdminCustomers(page, q, vendorId);
+
+  const [vendorQuery, setVendorQuery] = useState('');
+  const [pickedVendor, setPickedVendor] = useState<PickerOption | null>(null);
+  const vendors = useVendors(1, useDebouncedValue(vendorQuery, 250));
+  const vendorLabel = useVendor(vendorId !== 'ALL' && !pickedVendor ? vendorId : null);
+  const vendorOptions: PickerOption[] = (vendors.data?.data ?? []).map((v) => ({
+    id: v.id,
+    label: v.businessName,
+  }));
 
   return (
     <div className="space-y-5">
@@ -86,34 +110,31 @@ export default function AdminCustomersPage() {
             placeholder="Search by name or phone"
             className="pl-9"
             value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(1);
-            }}
+            onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <Select
-          value={vendorId}
-          onValueChange={(v) => {
-            setVendorId(v);
-            setPage(1);
-          }}
-        >
-          <SelectTrigger className="h-10 w-52">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="ALL">All vendors</SelectItem>
-            {(vendors.data?.data ?? []).map((vendor) => (
-              <SelectItem key={vendor.id} value={vendor.id}>
-                {vendor.businessName}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="w-52">
+          <EntityPicker
+            value={vendorId === 'ALL' ? '' : vendorId}
+            selectedLabel={pickedVendor?.label ?? vendorLabel.data?.businessName}
+            onSelect={(option) => {
+              setPickedVendor(option);
+              setUrlState({ vendorId: option?.id ?? 'ALL' });
+            }}
+            query={vendorQuery}
+            onQueryChange={setVendorQuery}
+            options={vendorOptions}
+            isPending={vendors.isPending}
+            hasMore={(vendors.data?.meta.total ?? 0) > vendorOptions.length}
+            placeholder="All vendors"
+            clearLabel="All vendors"
+          />
+        </div>
       </div>
 
-      {isPending ? (
+      {isError ? (
+        <ListError what="customers" onRetry={() => void refetch()} />
+      ) : isPending ? (
         <div className="space-y-2">
           {Array.from({ length: 5 }).map((_, i) => (
             <Skeleton key={i} className="h-12 w-full" />

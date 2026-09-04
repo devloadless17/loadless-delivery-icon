@@ -30,6 +30,20 @@ export function useDrivers(page: number, q: string) {
   });
 }
 
+/**
+ * One driver by id, purely to put a NAME on a picker whose value arrived from
+ * the URL. A restored `?driverId=` filter would otherwise render the raw cuid,
+ * or nothing at all, until the admin happened to search for them.
+ */
+export function useDriver(id: string | null) {
+  return useQuery({
+    queryKey: ['admin', 'driver', id],
+    queryFn: () => api.get<AdminDriver>(`/admin/drivers/${id}`),
+    enabled: Boolean(id),
+    staleTime: 5 * 60_000,
+  });
+}
+
 export function useCreateDriver() {
   const qc = useQueryClient();
   return useMutation({

@@ -275,9 +275,11 @@ test.describe('order lifecycle', () => {
     // combobox lookup matches all of them.
     await admin.getByRole('combobox').first().click();
     await admin.getByRole('option', { name: 'Failed' }).click();
-    await expect(admin.getByRole('table')).toBeVisible();
-    const badges = admin.getByRole('table').getByText('Failed');
-    expect(await badges.count()).toBeGreaterThan(0);
+    // toHaveCount RETRIES; `expect(await ….count())` reads once, before the
+    // filtered rows have arrived, and the unfiltered first page happens to
+    // contain no failed order at all — so the old form was passing on a race it
+    // usually won rather than on the filter working.
+    await expect(admin.getByRole('table').getByText('Failed')).not.toHaveCount(0);
 
     // Narrow to ONE vendor: the platform board is unreadable otherwise, and
     // the API has accepted vendorId all along — only the screen lacked it.
@@ -286,9 +288,11 @@ test.describe('order lifecycle', () => {
     const vendorPicker = admin.getByRole('combobox').nth(1);
     await vendorPicker.click();
     await admin.getByRole('option', { name: 'E2E Burger House' }).click();
-    await expect(admin.getByRole('table')).toBeVisible();
-    const vendorCells = admin.getByRole('table').getByText('E2E Falafel Corner');
-    expect(await vendorCells.count()).toBe(0); // the other shop is filtered out
+    // Wait for the filter to actually land before asserting the other shop is
+    // gone: an absence assertion read too early passes while the screen is
+    // still showing everything, which is the opposite of what it claims.
+    await expect(admin.getByRole('table').getByText('E2E Burger House')).not.toHaveCount(0);
+    await expect(admin.getByRole('table').getByText('E2E Falafel Corner')).toHaveCount(0);
 
     // Clearing brings the whole board back.
     await admin.getByRole('button', { name: 'Clear filters' }).click();

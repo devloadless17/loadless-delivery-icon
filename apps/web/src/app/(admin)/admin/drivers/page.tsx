@@ -1,7 +1,7 @@
 'use client';
 
 import { Bike, Pencil, Plus, Search, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { formatBps } from '@loadless/shared';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -19,22 +19,43 @@ import {
 import { Pagination } from '@/components/pagination';
 import { displayDate, displayPhone, fileUrl } from '@/lib/format';
 import { useDebouncedValue } from '@/lib/use-debounced-value';
+import { useUrlState } from '@/lib/use-url-state';
+import { ListError } from '@/components/list-error';
 import { useDrivers, type AdminDriver } from '@/features/admin/drivers/api';
 import { DriverFormDialog } from '@/features/admin/drivers/driver-form-dialog';
 import { DriverDeleteDialog } from '@/features/admin/drivers/driver-delete-dialog';
 import { DriverDetailDialog } from '@/features/admin/drivers/driver-detail-dialog';
 import { useSettings } from '@/features/admin/settings/api';
 
+const DEFAULTS = { page: '1', q: '' };
+
 export default function AdminDriversPage() {
-  const [page, setPage] = useState(1);
-  const [search, setSearch] = useState('');
+  // useSearchParams needs a Suspense boundary on a statically rendered route.
+  return (
+    <Suspense fallback={<Skeleton className="h-96 w-full" />}>
+      <AdminDriversView />
+    </Suspense>
+  );
+}
+
+function AdminDriversView() {
+  // Filters and page live in the URL so a refresh keeps them and the view can
+  // be linked. useUrlState also resets the page whenever the search changes.
+  const [urlState, setUrlState] = useUrlState(DEFAULTS);
+  const page = Number(urlState.page) || 1;
+  const setPage = (p: number) => setUrlState({ page: String(p) });
+  // Local so typing stays instant; the URL follows the debounced value.
+  const [search, setSearch] = useState(urlState.q);
   const q = useDebouncedValue(search, 300);
+  useEffect(() => {
+    if (q !== urlState.q) setUrlState({ q });
+  }, [q, urlState.q, setUrlState]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [viewing, setViewing] = useState<AdminDriver | null>(null);
   const [editing, setEditing] = useState<AdminDriver | null>(null);
   const [deleting, setDeleting] = useState<AdminDriver | null>(null);
 
-  const { data, isPending } = useDrivers(page, q);
+  const { data, isPending, isError, refetch } = useDrivers(page, q);
   const { data: settings } = useSettings();
 
   function openCreate() {
@@ -67,14 +88,13 @@ export default function AdminDriversPage() {
           placeholder="Search by name or phone"
           className="pl-9"
           value={search}
-          onChange={(e) => {
-            setSearch(e.target.value);
-            setPage(1);
-          }}
+          onChange={(e) => setSearch(e.target.value)}
         />
       </div>
 
-      {isPending ? (
+      {isError ? (
+        <ListError what="drivers" onRetry={() => void refetch()} />
+      ) : isPending ? (
         <div className="space-y-2">
           {Array.from({ length: 5 }).map((_, i) => (
             <Skeleton key={i} className="h-14 w-full" />

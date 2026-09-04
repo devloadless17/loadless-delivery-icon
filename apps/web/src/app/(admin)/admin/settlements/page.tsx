@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Wallet } from 'lucide-react';
 import type { DriverOutstandingView } from '@loadless/shared';
@@ -18,6 +18,8 @@ import {
 } from '@/components/ui/table';
 import { Pagination } from '@/components/pagination';
 import { useDebouncedValue } from '@/lib/use-debounced-value';
+import { useUrlState } from '@/lib/use-url-state';
+import { ListError } from '@/components/list-error';
 import { displayDateTime, displayMoney } from '@/lib/format';
 import { useOutstanding, useSettlements } from '@/features/admin/settlements/api';
 import { SettleDialog } from '@/features/admin/settlements/settle-dialog';
@@ -26,13 +28,32 @@ import { SettleDialog } from '@/features/admin/settlements/settle-dialog';
  * End of day. Who still has the platform's money on them, and the record of
  * everyone who has already handed theirs over.
  */
+const DEFAULTS = { page: '1', q: '' };
+
 export default function SettlementsPage() {
-  const [page, setPage] = useState(1);
-  const [search, setSearch] = useState('');
+  // useSearchParams needs a Suspense boundary on a statically rendered route.
+  return (
+    <Suspense fallback={<Skeleton className="h-96 w-full" />}>
+      <SettlementsView />
+    </Suspense>
+  );
+}
+
+function SettlementsView() {
+  // Filters and page live in the URL so a refresh keeps them and the view can
+  // be linked. useUrlState also resets the page whenever the search changes.
+  const [urlState, setUrlState] = useUrlState(DEFAULTS);
+  const page = Number(urlState.page) || 1;
+  const setPage = (p: number) => setUrlState({ page: String(p) });
+  // Local so typing stays instant; the URL follows the debounced value.
+  const [search, setSearch] = useState(urlState.q);
   const q = useDebouncedValue(search, 300);
+  useEffect(() => {
+    if (q !== urlState.q) setUrlState({ q });
+  }, [q, urlState.q, setUrlState]);
   const [settling, setSettling] = useState<{ id: string; name: string } | null>(null);
 
-  const { data, isPending } = useOutstanding(page, q);
+  const { data, isPending, isError, refetch } = useOutstanding(page, q);
 
   return (
     <div className="space-y-8">
@@ -47,10 +68,7 @@ export default function SettlementsPage() {
           className="w-full sm:w-64"
           placeholder="Search drivers"
           value={search}
-          onChange={(e) => {
-            setSearch(e.target.value);
-            setPage(1);
-          }}
+          onChange={(e) => setSearch(e.target.value)}
         />
       </div>
 
@@ -63,7 +81,9 @@ export default function SettlementsPage() {
           Open balances
         </h2>
 
-        {isPending ? (
+        {isError ? (
+        <ListError what="open balances" onRetry={() => void refetch()} />
+      ) : isPending ? (
           <div className="space-y-2">
             {Array.from({ length: 4 }).map((_, i) => (
               <Skeleton key={i} className="h-14 w-full" />

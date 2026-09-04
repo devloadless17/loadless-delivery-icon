@@ -154,6 +154,48 @@ async function requestPage<T, M>(path: string, signal?: AbortSignal): Promise<En
   return json as Envelope<T, M>;
 }
 
+/**
+ * A file download that goes through the SAME 401 refresh as everything else.
+ *
+ * The CSV export was the one surface that left this module: a plain
+ * `<a href download>` is a browser navigation, so it skipped the silent
+ * refresh entirely. Sessions here are permanent but the access token lasts 15
+ * minutes, so on any page left open longer than that, Export handed the admin
+ * a file called `orders-2026-09-04.csv` whose contents were
+ * `{"error":{"code":"UNAUTHORIZED"}}` — a broken report with a plausible name,
+ * which is worse than a visible failure.
+ *
+ * Buffers the body rather than streaming it to disk. The export is capped at
+ * MAX_ROWS, so this is a few megabytes at worst, and correctness beats saving
+ * an allocation on a once-a-week admin action.
+ */
+async function download(path: string, filename: string): Promise<void> {
+  const doFetch = () => fetch(`/api/v1${path}`, { headers: { Accept: 'text/csv' } });
+
+  let response = await doFetch();
+  if (response.status === 401) {
+    const refreshed = await tryRefresh();
+    if (refreshed) response = await doFetch();
+    else {
+      endSession();
+      throw new ApiError(401, 'UNAUTHENTICATED', 'Your session ended. Sign in and try again.');
+    }
+  }
+  if (!response.ok) {
+    throw new ApiError(response.status, 'INTERNAL', 'Could not export. Please try again.');
+  }
+
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 export const api = {
   get: <T>(path: string, signal?: AbortSignal) => request<T>(path, { signal }),
   /**
@@ -169,4 +211,6 @@ export const api = {
   patch: <T>(path: string, body?: unknown) => request<T>(path, { method: 'PATCH', body }),
   put: <T>(path: string, body?: unknown) => request<T>(path, { method: 'PUT', body }),
   delete: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
+  /** Save a server-generated file, with the same session handling as every other call. */
+  download,
 };

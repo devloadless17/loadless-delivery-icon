@@ -26,6 +26,16 @@ export function useVendors(page: number, q: string) {
   });
 }
 
+/** One vendor by id — see useDriver: a picker restored from the URL needs a name. */
+export function useVendor(id: string | null) {
+  return useQuery({
+    queryKey: ['admin', 'vendor', id],
+    queryFn: () => api.get<AdminVendor>(`/admin/vendors/${id}`),
+    enabled: Boolean(id),
+    staleTime: 5 * 60_000,
+  });
+}
+
 export function useCreateVendor() {
   const qc = useQueryClient();
   return useMutation({
