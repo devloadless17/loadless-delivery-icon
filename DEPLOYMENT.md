@@ -207,22 +207,80 @@ this box that is a valid restore point for the current production.
 Keep a copy OFF the server. A dump beside the database survives a bad migration but
 not a lost disk, and only one of those is what backups are usually bought for.
 
-## Backups (activate when the app is live with real data — deliberate, playbook §10)
+## Backups — LIVE since 2026-09-04
+
+A cron on the VPS runs `ops/fd-backup.sh` at **01:00 UTC (04:00 Beirut)** every day.
+The script on the server is a copy of the one in this repo; edit it here and copy it
+up, so the thing that protects the data is reviewable rather than only existing on
+the machine it protects.
 
 ```bash
-# nightly cron on the VPS; upload OFFSITE (rclone → R2/B2)
-docker compose -f docker-compose.prod.yml exec -T postgres \
-  pg_dump -U loadless -Fc loadless | gzip > backup-$(date +%F).dump.gz
+crontab -l                       # as deploy@187.77.167.2
+0 1 * * * /home/deploy/fd-backup.sh >> /home/deploy/backups/cron.log 2>&1
 ```
 
-Also back up the **`uploads_data`** volume (the photos) and note that `caddy_data`
-(TLS certs + ACME account) is precious.
+**What it captures** — the three things that are NOT rebuildable from git:
 
-Retention 7 daily + 4 weekly. **A backup that has never been restore-tested does not
-exist** — and verify the dump is non-empty, not just that the command exited 0. The
-retired bbcorp campaign on this same box wrote "successful" 2 KB dumps for five weeks
-because a failing `pg_dump` piped into `gzip` still exits 0. **Before every schema
-migration on live money data: take a backup first.**
+| Artifact | Why it matters |
+|---|---|
+| `db-<stamp>.dump` | every order, customer, driver, settlement (`pg_dump -Fc`) |
+| `uploads-<stamp>.tar.gz` | driver face/bike photos and vendor logos — `STORAGE_DRIVER=local`, so this disk is the only copy |
+| `caddy-<stamp>.tar.gz` | TLS certs + ACME account; losing it means reissue and rate-limit risk |
+
+**Retention**: 7 daily + 4 weekly (Sundays), pruned per artifact type so one large
+kind cannot evict another kind's history. About 200 MB total at current volume,
+against 88 GB free.
+
+**Why more than one copy is kept, deliberately:** the failure that actually destroys a
+business is not the server dying — it is a bad delete or a corruption that nobody
+notices for a few days. With a single rolling backup, that night's run faithfully
+backs up the already-broken data over the last good copy. Depth is what makes a
+backup a recovery rather than a mirror of the mistake.
+
+**Verification is part of the run, not a separate habit.** Each artifact is read back
+immediately after it is written: `pg_restore --list` on the dump, `tar tzf` on the
+archives, plus an assertion that the dump contains at least 5 tables **with data**.
+This is aimed squarely at the bbcorp failure below — a "successful" backup that was
+never actually readable.
+
+> The retired bbcorp campaign on this same box wrote "successful" 2 KB dumps for five
+> weeks because a failing `pg_dump` piped into `gzip` still exits 0. This script never
+> pipes into gzip (`-Fc` compresses internally), checks the file is non-empty, and
+> reads it back. Exit 0 is not evidence.
+
+**Checking on it:**
+
+```bash
+ssh 187.77.167.2 '~/fd-backup-status.sh'   # OK/FAILED, age, what was kept
+ssh 187.77.167.2 'tail -20 ~/backups/backup.log'
+```
+
+The status file records a reason on failure, and `set -Eeuo pipefail` with an ERR trap
+means an *unexpected* failure records itself too rather than dying silently.
+
+**Restoring** (tested 2026-09-04 — all 18 tables came back identical):
+
+```bash
+# ALWAYS restore into a scratch container first and compare, never straight over prod.
+docker run -d --name fd_restore_test -e POSTGRES_PASSWORD=scratch postgres:16-alpine
+docker exec fd_restore_test createdb -U postgres restoretest
+docker cp ~/backups/daily/db-<stamp>.dump fd_restore_test:/tmp/d.dump
+docker exec fd_restore_test pg_restore -U postgres -d restoretest --no-owner --no-acl /tmp/d.dump
+docker exec fd_restore_test psql -U postgres -d restoretest -c 'select count(*) from orders'
+docker rm -f fd_restore_test
+
+# uploads volume
+docker run --rm -v loadless_uploads_data:/dst -v ~/backups/daily:/b:ro \
+  postgres:16-alpine tar xzf /b/uploads-<stamp>.tar.gz -C /dst
+```
+
+**Still missing — the honest gap:** these backups live on the SAME DISK as the
+database. They protect against a bad delete, a broken migration and corruption; they
+do **not** protect against losing the VPS. Playbook §10 wants them offsite (rclone →
+R2/B2). That is the next step, and until it is done "we have backups" means "we have
+backups as long as the server exists".
+
+**Before every schema migration on live money data: take a backup first.**
 
 ## Local development
 
