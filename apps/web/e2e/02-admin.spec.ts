@@ -146,10 +146,17 @@ test.describe('admin management', () => {
     await expect(page.getByText('Enter a percentage between 0 and 100.')).toBeVisible();
   });
 
-  test('customer directory lists and searches', async ({ page }) => {
+  test('customer directory renders before anyone has been added', async ({ page }) => {
     await adminPage(page);
     await page.goto('/admin/customers');
     await expect(page.getByText('shared customer directory', { exact: false })).toBeVisible();
+
+    // 02 runs before any customer exists, which is why this test can only
+    // assert the screen stands up empty — and that is worth asserting, because
+    // "nobody yet" and "the request failed" used to render identically here.
+    // The real listing and searching is covered in 14, once there is data.
+    await expect(page.getByText('No customers yet')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Try again' })).toHaveCount(0);
   });
 
   /**
