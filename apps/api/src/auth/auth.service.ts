@@ -141,12 +141,26 @@ export class AuthService {
     }
 
     const newToken = randomBytes(48).toString('base64url');
-    await this.prisma.$transaction([
-      this.prisma.refreshToken.update({
-        where: { id: row.id },
+    // Claim the presented token with the guard IN THE WHERE, the same rule the
+    // order transitions follow. The read above is a read: two requests carrying
+    // the same refresh token can both pass its `usedAt` check and both rotate,
+    // and the pair that must never both succeed is exactly a thief and the
+    // legitimate holder — the case reuse detection exists to catch, arriving
+    // together. Whoever loses the conditional update is treated as reuse, which
+    // kills the family rather than quietly issuing a second live token.
+    await this.prisma.$transaction(async (tx) => {
+      const claimed = await tx.refreshToken.updateMany({
+        where: { id: row.id, usedAt: null, revokedAt: null },
         data: { usedAt: new Date() },
-      }),
-      this.prisma.refreshToken.create({
+      });
+      if (claimed.count === 0) {
+        await tx.refreshToken.updateMany({
+          where: { familyId: row.familyId, revokedAt: null },
+          data: { revokedAt: new Date() },
+        });
+        throw this.invalidRefresh();
+      }
+      await tx.refreshToken.create({
         data: {
           userId: user.id,
           tokenHash: sha256(newToken),
@@ -155,8 +169,8 @@ export class AuthService {
           userAgent: ctx.userAgent,
           ip: ctx.ip,
         },
-      }),
-    ]);
+      });
+    });
 
     return {
       accessToken: this.signAccess(user.id, user.role, user.tokenVersion, user.vendor?.id, user.driver?.id),

@@ -122,9 +122,14 @@ export function initialsOf(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   const first = parts[0];
   if (!first) return '?';
-  if (parts.length === 1) return first.slice(0, 2).toUpperCase();
+  // Array.from walks CODE POINTS; indexing and slice walk UTF-16 units. On a
+  // name whose first word is an emoji, `first[0]` returned half a surrogate
+  // pair and the avatar rendered a replacement character. Shop names carry
+  // emoji often enough for this to be seen.
+  const codePoints = (value: string) => Array.from(value);
+  if (parts.length === 1) return codePoints(first).slice(0, 2).join('').toUpperCase();
   const last = parts[parts.length - 1] as string;
-  return `${first[0] ?? ''}${last[0] ?? ''}`.toUpperCase();
+  return `${codePoints(first)[0] ?? ''}${codePoints(last)[0] ?? ''}`.toUpperCase();
 }
 
 /**

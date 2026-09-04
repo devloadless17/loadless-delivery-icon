@@ -1,5 +1,6 @@
 import { Test } from '@nestjs/testing';
 import type { INestApplication } from '@nestjs/common';
+import { createHash } from 'node:crypto';
 import cookieParser from 'cookie-parser';
 import request from 'supertest';
 import { AppModule } from '../../src/app.module';
@@ -97,6 +98,54 @@ describe('auth sessions (integration)', () => {
 
     // The new one works…
     await request(server).post('/api/v1/auth/refresh').set('Cookie', second).expect(200);
+  });
+
+  it('THEFT: two requests presenting the SAME token cannot both rotate', async () => {
+    // The thief and the legitimate holder arriving TOGETHER is the case reuse
+    // detection exists for, and the one a sequential test cannot reach. The
+    // presented row used to be read and then updated unconditionally, so both
+    // requests could pass the `usedAt` check and both walk away with a live
+    // token, with no reuse ever detected.
+    //
+    // Firing two requests with Promise.all does not reproduce it — their reads
+    // and writes rarely straddle each other, and such a test passes just as
+    // happily with the guard removed. So the interleaving is forced: a
+    // transaction holds the token's row, both requests get past their read and
+    // park on the write, and only then does the holder let go. Both writes then
+    // land on a row whose state has already been decided by the other.
+    const session = await login();
+    const stolen = refreshCookie(session);
+    const presented = stolen.split('=')[1]?.split(';')[0] ?? '';
+    const tokenHash = createHash('sha256').update(presented).digest('hex');
+    const row = await prisma.refreshToken.findFirstOrThrow({
+      where: { tokenHash },
+      select: { id: true, familyId: true },
+    });
+
+    const holder = prisma.$transaction(
+      async (tx) => {
+        await tx.$queryRaw`SELECT "id" FROM "refresh_tokens" WHERE "id" = ${row.id} FOR UPDATE`;
+        await new Promise((resolve) => setTimeout(resolve, 1200));
+      },
+      { timeout: 20_000, maxWait: 20_000 },
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const [, first, second] = await Promise.all([
+      holder,
+      request(server).post('/api/v1/auth/refresh').set('Cookie', stolen),
+      request(server).post('/api/v1/auth/refresh').set('Cookie', stolen),
+    ]);
+
+    // At most one may succeed — a second live token is exactly what would let a
+    // thief ride along beside the real user.
+    const succeeded = [first, second].filter((r) => r.status === 200);
+    expect(succeeded.length).toBeLessThanOrEqual(1);
+
+    const usable = await prisma.refreshToken.count({
+      where: { familyId: row.familyId, usedAt: null, revokedAt: null },
+    });
+    expect(usable).toBeLessThanOrEqual(1);
   });
 
   it('THEFT: reusing a spent token kills the whole family', async () => {
