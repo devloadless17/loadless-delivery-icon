@@ -237,16 +237,33 @@ export class RealtimeGateway implements OnGatewayConnection {
 
   @OnEvent('auth.sessions_revoked')
   onSessionsRevoked(event: { userId: string; reason: 'DEACTIVATED' | 'LOGGED_OUT' }): void {
-    const room = SOCKET_ROOMS.user(event.userId);
-    this.server.to(room).emit(SOCKET_EVENTS.SESSION_REVOKED, { reason: event.reason });
-    this.server.in(room).disconnectSockets(true);
+    this.revokeRoom(SOCKET_ROOMS.user(event.userId), event.reason);
     this.logger.log(`Disconnected sockets for user ${event.userId} (${event.reason})`);
   }
 
   @OnEvent('auth.token_reuse')
   onTokenReuse(event: { userId: string }): void {
-    const room = SOCKET_ROOMS.user(event.userId);
-    this.server.to(room).emit(SOCKET_EVENTS.SESSION_REVOKED, { reason: 'TOKEN_REUSE' });
-    this.server.in(room).disconnectSockets(true);
+    this.revokeRoom(SOCKET_ROOMS.user(event.userId), 'TOKEN_REUSE');
+  }
+
+  /**
+   * Tell everyone in a user's room their session is over, THEN close on them.
+   *
+   * The order used to be emit-then-disconnectSockets(true), and the second call
+   * kills the underlying transport straight away — before the packet from the
+   * first has necessarily left. On long-polling it is worse than a race: the
+   * event sits in the send buffer waiting for a poll that the close makes sure
+   * never completes. The visible symptom was an admin whose password had just
+   * been reset sitting in a console that still looked signed in.
+   *
+   * `disconnectSockets(false)` sends the DISCONNECT through the same packet
+   * pipeline as the event, so it is ordered AFTER it by construction rather
+   * than by timing. The engine connection can outlive the namespace for a
+   * moment; that costs nothing, because a client that reconnects has to
+   * re-authenticate and its token version is already revoked.
+   */
+  private revokeRoom(room: string, reason: string): void {
+    this.server.to(room).emit(SOCKET_EVENTS.SESSION_REVOKED, { reason });
+    this.server.in(room).disconnectSockets(false);
   }
 }

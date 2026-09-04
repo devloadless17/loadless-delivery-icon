@@ -34,6 +34,42 @@ export interface Envelope<T, M> {
 }
 
 let refreshInFlight: Promise<boolean> | null = null;
+let endingSession = false;
+
+/**
+ * Ending a session — the ONE way to do it.
+ *
+ * Exported because the socket does it too. Two paths that both meant "you are
+ * signed out" but only one of which cleared the cookies is what made this racy:
+ * a bare assign('/login') leaves the cookie live, the middleware reads a role
+ * out of it and bounces you onto the console you were just thrown out of.
+ *
+ * A 401 that survives the silent refresh means the session is over — the
+ * password was reset by another admin, the account was suspended, a refresh
+ * token was reused. Until now nothing acted on that: the caller got an
+ * ApiError and the page sat there, chrome intact, every list empty, looking
+ * like the app was broken rather than like you had been signed out.
+ *
+ * The socket does push SESSION_REVOKED for this, but that is a best-effort
+ * notification over a channel that may be disconnected, degraded, or racing a
+ * force-close. Correctness cannot depend on it, so the HTTP path decides too —
+ * and this one runs wherever the app makes a request.
+ */
+export function endSession(): void {
+  if (typeof window === 'undefined' || endingSession) return;
+  if (window.location.pathname.startsWith('/login')) return;
+  endingSession = true;
+  // Clearing the cookies is not tidiness, it is the whole fix. They are
+  // HttpOnly, so only the server can remove them, and while they are still
+  // there the middleware decodes a role out of them and bounces /login back to
+  // a console whose every request 401s — a loop whose only exit is clearing
+  // site data by hand. POST /auth/logout is @Public exactly so a session the
+  // API has already refused can still end itself.
+  void fetch('/api/v1/auth/logout', { method: 'POST' })
+    .catch(() => {})
+    // ?signedout=1 so the middleware shows the form even if that call failed.
+    .finally(() => window.location.assign('/login?signedout=1'));
+}
 
 async function tryRefresh(): Promise<boolean> {
   refreshInFlight ??= fetch('/api/v1/auth/refresh', { method: 'POST' })
@@ -79,6 +115,10 @@ async function send(
   if (response.status === 401 && !skipRefresh) {
     const refreshed = await tryRefresh();
     if (refreshed) response = await doFetch();
+    // The refresh itself was refused: there is no session left to save. The
+    // caller still gets its ApiError — the redirect is what happens to the
+    // page, not a substitute for handling the failure.
+    else endSession();
   }
 
   if (response.status === 204) return { status: 204, json: null };

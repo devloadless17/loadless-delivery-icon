@@ -57,6 +57,21 @@ export function middleware(req: NextRequest) {
   const home = role ? (ROLE_HOME[role] ?? '/login') : null;
 
   if (pathname === '/login') {
+    // A revoked session — a suspended account, a password another admin reset —
+    // leaves its cookies sitting in the browser, and they still decode to a
+    // role. Without this the person is bounced from /login to a console where
+    // every request 401s, and back again: locked out with no way to sign in
+    // short of clearing site data by hand.
+    //
+    // The client asks for this explicitly once a refresh has been refused. The
+    // cookies are cleared here as well as by /auth/logout, so a failed logout
+    // call cannot leave anybody trapped.
+    if (req.nextUrl.searchParams.has('signedout')) {
+      const res = withLocale(req);
+      res.cookies.delete('access_token');
+      res.cookies.delete({ name: 'refresh_token', path: '/api/v1/auth' });
+      return res;
+    }
     return home ? NextResponse.redirect(new URL(home, req.url)) : withLocale(req);
   }
 

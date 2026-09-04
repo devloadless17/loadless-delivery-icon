@@ -5,6 +5,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { WifiOff } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { io, type Socket } from 'socket.io-client';
+import { endSession } from '@/lib/api-client';
 
 /**
  * One socket per authenticated session. Sockets are NOTIFICATIONS — the REST
@@ -59,8 +60,12 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
     };
     socket.on(SOCKET_EVENTS.SETTLEMENT_RECORDED, invalidateSettlements);
     socket.on(SOCKET_EVENTS.SETTLEMENT_VOIDED, invalidateSettlements);
+    // Through endSession, not a bare assign('/login'): the cookies have to go
+    // first or the middleware reads a role out of them and bounces us onto the
+    // console we were just thrown out of. The socket is the fast path here —
+    // the same exit runs off a refused refresh if this event never arrives.
     socket.on(SOCKET_EVENTS.SESSION_REVOKED, () => {
-      window.location.assign('/login');
+      endSession();
     });
 
     return () => {
