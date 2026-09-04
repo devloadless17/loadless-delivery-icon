@@ -8,6 +8,7 @@ import {
   adjustmentSignedMinor,
   formatMoney,
   fromMinorUnits,
+  describeAmountProblem,
   toMinorUnits,
   type AdjustmentDirection,
   type Currency,
@@ -158,7 +159,7 @@ export function SettleDialog({
       key: a.key,
       amount:
         minor === null
-          ? `Enter a valid ${a.currency} amount`
+          ? (describeAmountProblem(a.amount, a.currency) ?? `Enter a valid ${a.currency} amount`)
           : minor === 0n
             ? 'Enter an amount above zero'
             : null,
@@ -302,8 +303,14 @@ export function SettleDialog({
                     }
                   />
                   {row.collected === null ? (
+                    // Names the actual problem. This box takes cash figures
+                    // from someone counting notes in front of a driver, and
+                    // "12,50" is a plausible thing to type — it used to be read
+                    // as 1,250.00 and is now refused, so the refusal has to say
+                    // what to change.
                     <p className="text-xs text-destructive">
-                      Enter a valid {row.currency} amount
+                      {describeAmountProblem(collections[row.currency] ?? '', row.currency) ??
+                        `Enter a valid ${row.currency} amount`}
                     </p>
                   ) : row.totalDue < 0n ? (
                     // He is ALREADY in credit. Taking nothing from him is not

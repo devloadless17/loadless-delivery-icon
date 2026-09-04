@@ -85,6 +85,44 @@ export function toMinorUnits(input: string, currency: Currency): bigint | null {
   return minor > MAX_MONEY_MINOR ? null : minor;
 }
 
+/**
+ * Why an amount was refused, in words the person can act on.
+ *
+ * The generic "enter a valid positive amount" is no help to a vendor who typed
+ * "12,50" on a call: it used to be silently read as 1,250.00, and now it is
+ * correctly refused — but only a message that names the comma tells them what
+ * to change. Returns null when the input is fine.
+ */
+export function describeAmountProblem(input: string, currency: Currency): string | null {
+  const raw = input.trim();
+  // Deliberately not "enter the delivery charge": the same helper explains the
+  // settlement cash box and the adjustment box, where the person is counting
+  // notes in front of a driver rather than pricing a delivery.
+  if (!raw) return 'Enter an amount';
+
+  const minor = toMinorUnits(raw, currency);
+  if (minor !== null) return minor > 0n ? null : 'Enter an amount greater than zero';
+
+  // Malformed GROUPING, not merely the presence of a comma. Testing for a comma
+  // alone meant "1,500.5" LBP — where the grouping is fine and the DOT is what
+  // must go — was told to use a dot, which is precisely backwards to someone
+  // mid-call. Every other check then runs against the ungrouped value so a
+  // legitimate separator stops hiding the real problem.
+  if (raw.includes(',') && !/^\d{1,3}(,\d{3})+(\.\d+)?$/.test(raw)) {
+    return 'Use a dot for decimals — 12.50, not 12,50. Commas only separate thousands.';
+  }
+  const bare = raw.replace(/,/g, '');
+
+  const dot = bare.indexOf('.');
+  if (dot !== -1 && bare.length - dot - 1 > CURRENCY_EXPONENT[currency]) {
+    return CURRENCY_EXPONENT[currency] === 0
+      ? `${currency} has no decimals — enter a whole amount`
+      : `${currency} allows at most ${CURRENCY_EXPONENT[currency]} decimal places`;
+  }
+  if (/^\d+(\.\d+)?$/.test(bare)) return 'That amount is too large';
+  return 'Enter a valid positive amount';
+}
+
 /** Format minor units for display, e.g. 150000n LBP -> "150,000 LBP", 1250n USD -> "12.50 USD". */
 export function formatMoney(amountMinor: bigint | string, currency: Currency): string {
   const amount = typeof amountMinor === 'string' ? BigInt(amountMinor) : amountMinor;

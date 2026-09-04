@@ -5,6 +5,7 @@ import {
   calcDriverEarnings,
   formatBps,
   formatMoney,
+  describeAmountProblem,
   MAX_MONEY_MINOR,
   toMinorUnits,
 } from './money';
@@ -100,6 +101,37 @@ describe('toMinorUnits', () => {
     ['1,250.50', 'USD', 125_050n],
   ] as const)('still reads %s %s as a grouped number', (input, currency, expected) => {
     expect(toMinorUnits(input, currency)).toBe(expected);
+  });
+});
+
+describe('describeAmountProblem', () => {
+  it.each([
+    // The one that matters: a decimal comma used to be read as a hundredfold
+    // overcharge, is now refused, and the refusal has to say what to change.
+    ['12,50', 'USD', /dot for decimals/],
+    ['1,5', 'USD', /dot for decimals/],
+    ['12.505', 'USD', /at most 2 decimal places/],
+    ['12.5', 'LBP', /no decimals/],
+    ['99999999999999', 'LBP', /too large/],
+    ['0', 'LBP', /greater than zero/],
+    ['', 'LBP', /Enter an amount/],
+    // A comma is only the answer when the GROUPING is what is wrong. Testing
+    // for the mere presence of one told someone who typed "1,500.5" LBP to use
+    // a dot, when the dot was the thing that had to go — backwards advice, to
+    // someone on a call.
+    ['1,500.5', 'LBP', /no decimals/],
+    ['1,250.505', 'USD', /at most 2 decimal places/],
+    ['150,000,000,000,000', 'LBP', /too large/],
+  ] as const)('explains %s %s', (input, currency, expected) => {
+    expect(describeAmountProblem(input, currency)).toMatch(expected);
+  });
+
+  it.each([
+    ['12.50', 'USD'],
+    ['1,250', 'LBP'],
+    ['150000', 'LBP'],
+  ] as const)('says nothing about the valid %s %s', (input, currency) => {
+    expect(describeAmountProblem(input, currency)).toBeNull();
   });
 });
 

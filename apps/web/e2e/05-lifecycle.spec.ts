@@ -52,10 +52,19 @@ test.describe('order lifecycle', () => {
     await expect(vendor.getByText('Enter a valid positive amount').first()).toBeVisible();
     expect(vendor.url()).toContain('/orders/new');
 
-    // zero charge
+    // zero charge — refused, and says which way to go
     await vendor.getByLabel('Amount').fill('0');
     await vendor.getByRole('button', { name: 'Create order' }).click();
-    await expect(vendor.getByText('Enter a valid positive amount').first()).toBeVisible();
+    await expect(vendor.getByText('Enter an amount greater than zero').first()).toBeVisible();
+    expect(vendor.url()).toContain('/orders/new');
+
+    // A decimal comma. This used to be READ AS A HUNDREDFOLD OVERCHARGE — "12,50"
+    // parsed to 1,250.00 — so the vendor got no error at all and the customer
+    // got the bill. Now refused, and the message names the comma rather than
+    // leaving someone on a call to guess what "invalid" means.
+    await vendor.getByLabel('Amount').fill('12,50');
+    await vendor.getByRole('button', { name: 'Create order' }).click();
+    await expect(vendor.getByText(/dot for decimals/).first()).toBeVisible();
     expect(vendor.url()).toContain('/orders/new');
   });
 

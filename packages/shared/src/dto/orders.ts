@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { CURRENCIES, DEFAULT_CURRENCY, toMinorUnits } from '../money';
+import { CURRENCIES, DEFAULT_CURRENCY, describeAmountProblem, toMinorUnits } from '../money';
 import { ADDRESS_LABELS, ORDER_STATUSES } from '../enums';
 import {
   cuidSchema,
@@ -45,7 +45,11 @@ export const createOrderSchema = z.object({
       ctx.addIssue({
         code: 'custom',
         path: ['deliveryCharge'],
-        message: 'Enter a valid positive amount',
+        // Names the actual problem — a comma, too many decimals, too large —
+        // rather than leaving the vendor to guess mid-call.
+        message:
+          describeAmountProblem(order.deliveryCharge, order.currency) ??
+          'Enter a valid positive amount',
       });
     }
     if (!order.deliveryAddressText && !order.deliveryMapsUrl) {
