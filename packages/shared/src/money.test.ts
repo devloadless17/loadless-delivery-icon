@@ -5,6 +5,7 @@ import {
   calcDriverEarnings,
   formatBps,
   formatMoney,
+  MAX_MONEY_MINOR,
   toMinorUnits,
 } from './money';
 
@@ -67,8 +68,38 @@ describe('toMinorUnits', () => {
     ['abc', 'LBP'],
     ['1e5', 'LBP'],
     ['', 'LBP'],
+    // A comma used as a DECIMAL point, which plenty of people in Lebanon write.
+    // These all used to parse, by stripping the comma: "12,50" USD became
+    // 125000 minor — $1,250.00 instead of $12.50, a hundred times the charge,
+    // accepted silently. The same helper reads the cash typed into the
+    // settlement collection box, so the wrong figure got banked too.
+    ['12,50', 'USD'],
+    ['1,5', 'USD'],
+    ['1,25', 'USD'],
+    ['12,3456', 'USD'],
+    ['12.5,0', 'USD'], // a comma anywhere but a thousands slot
+    ['1,2500', 'LBP'], // group of four is not a thousands group
+    [',250', 'LBP'],
+    // Above MAX_MONEY_MINOR. Unbounded, these reached a Postgres BIGINT column
+    // and returned an opaque 500 instead of naming the field.
+    ['9999999999999', 'LBP'],
+    ['99999999999999999999999', 'LBP'],
+    ['99999999999.99', 'USD'],
   ] as const)('rejects %s %s', (input, currency) => {
     expect(toMinorUnits(input, currency)).toBeNull();
+  });
+
+  it('accepts the largest permitted amount, and nothing above it', () => {
+    expect(toMinorUnits('1000000000000', 'LBP')).toBe(MAX_MONEY_MINOR);
+    expect(toMinorUnits('1000000000001', 'LBP')).toBeNull();
+  });
+
+  it.each([
+    ['1,250', 'LBP', 1_250n],
+    ['1,250,000', 'LBP', 1_250_000n],
+    ['1,250.50', 'USD', 125_050n],
+  ] as const)('still reads %s %s as a grouped number', (input, currency, expected) => {
+    expect(toMinorUnits(input, currency)).toBe(expected);
   });
 });
 

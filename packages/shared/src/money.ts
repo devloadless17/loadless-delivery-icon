@@ -39,15 +39,50 @@ export function calcDriverEarnings(chargeMinor: bigint, commissionMinor: bigint)
 }
 
 /** Parse a user-entered major-unit amount ("150000", "12.50") into minor units. */
+/**
+ * The largest amount any single money field may hold, in minor units.
+ *
+ * Nothing enforced an upper bound at all: a 25-digit delivery charge passed
+ * validation (`> 0`), reached a Postgres BIGINT column and came back as an
+ * opaque 500 rather than a message naming the field. The ceiling is set well
+ * below BIGINT's 9.2e18 so that SUMS stay safe too — 400k orders at this cap
+ * still total two orders of magnitude short of overflow, and every settlement
+ * figure is a sum of order rows.
+ *
+ * 1e12 is absurdly generous for both currencies (a trillion LBP, or ten
+ * billion dollars, for ONE delivery), which is the point: it can only ever
+ * catch a typo or an attack, never a real charge.
+ */
+export const MAX_MONEY_MINOR = 1_000_000_000_000n;
+
 export function toMinorUnits(input: string, currency: Currency): bigint | null {
   const exponent = CURRENCY_EXPONENT[currency];
-  const trimmed = input.trim().replace(/,/g, '');
-  if (!/^\d+(\.\d+)?$/.test(trimmed)) return null;
+  const raw = input.trim();
+
+  // A comma is a THOUSANDS separator here and nothing else.
+  //
+  // Stripping every comma before parsing made "1,250,000" LBP work — and also
+  // silently turned "12,50" USD into 125000 minor, which is $1,250.00 rather
+  // than the $12.50 the person meant. A hundred times the charge, accepted
+  // without a murmur. Decimal commas are written by plenty of people in
+  // Lebanon, and this same helper parses the cash an admin types into the
+  // collection box, so the wrong reading gets banked.
+  //
+  // Requiring well-formed groups keeps the convenience and removes the
+  // ambiguity: "1,250" and "1,250.50" parse, "12,50" and "1,5" are refused so
+  // the person can retype what they meant.
+  const grouped = raw.includes(',');
+  if (grouped ? !/^\d{1,3}(,\d{3})+(\.\d+)?$/.test(raw) : !/^\d+(\.\d+)?$/.test(raw)) {
+    return null;
+  }
+  const trimmed = raw.replace(/,/g, '');
   const [wholeRaw, fracRaw = ''] = trimmed.split('.');
   const whole = wholeRaw ?? '0';
   if (fracRaw.length > exponent) return null; // more precision than the currency supports
   const frac = fracRaw.padEnd(exponent, '0');
-  return BigInt(whole + frac);
+  const minor = BigInt(whole + frac);
+  // Refused here rather than at each call site, so no parse path can miss it.
+  return minor > MAX_MONEY_MINOR ? null : minor;
 }
 
 /** Format minor units for display, e.g. 150000n LBP -> "150,000 LBP", 1250n USD -> "12.50 USD". */

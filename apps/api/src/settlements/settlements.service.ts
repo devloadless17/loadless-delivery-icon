@@ -12,6 +12,7 @@ import {
   type DriverOutstandingView,
   type DriverOwedView,
   type OutstandingQuery,
+  phoneSearchPrefix,
   type SettlementListQuery,
   type SettlementPreviewView,
   type SettlementView,
@@ -750,7 +751,24 @@ export class SettlementsService {
     const drivers = await this.prisma.driver.findMany({
       where: {
         id: { in: driverIds },
-        ...(query.q ? { fullName: { contains: query.q, mode: 'insensitive' as const } } : {}),
+        // Name OR phone, the same rule DriversService.list uses. Matching on
+        // the name alone meant an admin who typed the number printed on the row
+        // in front of him got nothing back — silently, while holding the
+        // driver's cash. Numbers are stored E.164, so the typed digits have to
+        // go through phoneSearchPrefix rather than being stripped by hand.
+        ...(query.q
+          ? {
+              OR: [
+                { fullName: { contains: query.q, mode: 'insensitive' as const } },
+                ...(phoneSearchPrefix(query.q)
+                  ? [
+                      { contactPhone: { startsWith: phoneSearchPrefix(query.q) } },
+                      { user: { normalizedPhone: { startsWith: phoneSearchPrefix(query.q) } } },
+                    ]
+                  : []),
+              ],
+            }
+          : {}),
       },
       select: {
         id: true,
