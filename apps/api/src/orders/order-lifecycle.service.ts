@@ -47,6 +47,34 @@ export class OrderLifecycleService {
     const bps = await this.financials.resolveCommissionBps(driver.commissionOverrideBps);
 
     const result = await this.prisma.$transaction(async (tx) => {
+      // Re-check the driver INSIDE the transaction, holding his row.
+      //
+      // The checks above run before the transaction opens, and the guarded
+      // updateMany below only guards the ORDER — status, driverId. So an admin
+      // suspending a driver in the window between the two still ended with the
+      // order assigned to a suspended driver, carrying a real commission
+      // snapshot. FOR UPDATE makes the two operations take turns: the suspend
+      // waits for this commit, or it got there first and we read the new value
+      // and refuse. Only this driver's row is locked, so unrelated accepts are
+      // unaffected.
+      const [current] = await tx.$queryRaw<Array<{ status: string; duty_status: string }>>`
+        SELECT "status", "duty_status" FROM "drivers" WHERE "id" = ${driverId} FOR UPDATE
+      `;
+      if (!current || current.status !== 'ACTIVE') {
+        throw new AppException(
+          ERROR_CODES.DRIVER_NOT_AVAILABLE,
+          'Driver is not active',
+          HttpStatus.FORBIDDEN,
+        );
+      }
+      if (actor.role === 'DRIVER' && current.duty_status !== 'ON_DUTY') {
+        throw new AppException(
+          ERROR_CODES.DRIVER_NOT_AVAILABLE,
+          'Go on duty to accept orders',
+          HttpStatus.FORBIDDEN,
+        );
+      }
+
       const order = await tx.order.findUnique({
         where: { id: orderId },
         select: { deliveryCharge: true, vendorId: true },
@@ -405,6 +433,21 @@ export class OrderLifecycleService {
     const bps = await this.financials.resolveCommissionBps(newDriver.commissionOverrideBps);
 
     const outcome = await this.prisma.$transaction(async (tx) => {
+      // Same reason as accept(): the status check above is outside the
+      // transaction, so without holding the row a suspension landing in the
+      // window hands the order — and a freshly computed snapshot at his rate —
+      // to a driver who is no longer allowed to carry it.
+      const [current] = await tx.$queryRaw<Array<{ status: string }>>`
+        SELECT "status" FROM "drivers" WHERE "id" = ${newDriverId} FOR UPDATE
+      `;
+      if (!current || current.status !== 'ACTIVE') {
+        throw new AppException(
+          ERROR_CODES.DRIVER_NOT_AVAILABLE,
+          'Driver is not active',
+          HttpStatus.FORBIDDEN,
+        );
+      }
+
       const before = await tx.order.findUnique({
         where: { id: orderId },
         select: { status: true, driverId: true, vendorId: true, deliveryCharge: true },

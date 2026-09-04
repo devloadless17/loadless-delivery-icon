@@ -446,4 +446,96 @@ describe('orders (integration)', () => {
       }
     });
   });
+
+  describe('a suspended driver never ends up holding an order', () => {
+    /**
+     * The precondition check and the write have to agree.
+     *
+     * `accept` reads the driver's status before opening its transaction, and
+     * the guarded updateMany only guards the ORDER row. Without a re-check
+     * inside the transaction, a suspension landing in that window leaves the
+     * order DRIVER_ASSIGNED to a SUSPENDED driver, carrying a real commission
+     * snapshot computed at his rate.
+     *
+     * Firing the two with Promise.all does NOT reproduce it — the window is
+     * narrower than the scheduling jitter, and such a test passes just as
+     * happily with the fix removed, which is worth knowing before trusting one.
+     * So the interleaving is forced: a transaction takes the driver's row
+     * lock, the accept is started and parks on that same lock, and only then
+     * does the holder suspend him and commit. The accept therefore does its
+     * OUTSIDE-the-transaction pre-check while he still reads ACTIVE, and
+     * commits after he is suspended — exactly the ordering the bug needs.
+     */
+    afterEach(async () => {
+      await prisma.driver.update({
+        where: { id: driverBId },
+        data: { status: 'ACTIVE', dutyStatus: 'ON_DUTY' },
+      });
+    });
+
+    it('refuses an accept that commits after the driver was suspended', async () => {
+      const orderId = await createOrder();
+
+      const holder = prisma.$transaction(
+        async (tx) => {
+          await tx.$queryRaw`SELECT "status" FROM "drivers" WHERE "id" = ${driverBId} FOR UPDATE`;
+          // Long enough for the accept below to run its pre-check and reach
+          // the lock while this transaction still holds it.
+          await new Promise((resolve) => setTimeout(resolve, 1200));
+          await tx.$executeRaw`UPDATE "drivers" SET "status" = 'SUSPENDED' WHERE "id" = ${driverBId}`;
+        },
+        { timeout: 20_000, maxWait: 20_000 },
+      );
+
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      const acceptPromise = request(server)
+        .post(`/api/v1/driver/orders/${orderId}/accept`)
+        .set(auth(driverBToken));
+
+      const [, acceptRes] = await Promise.all([holder, acceptPromise]);
+
+      expect(acceptRes.status).toBe(403);
+      const order = await prisma.order.findUnique({
+        where: { id: orderId },
+        select: { status: true, driverId: true, platformCommissionAmount: true },
+      });
+      expect(order?.status).toBe('PENDING');
+      expect(order?.driverId).toBeNull();
+      // And no financial snapshot was left behind on the way out.
+      expect(order?.platformCommissionAmount).toBeNull();
+    });
+
+    it('refuses a reassign that commits after the new driver was suspended', async () => {
+      const orderId = await createOrder();
+      await request(server)
+        .post(`/api/v1/driver/orders/${orderId}/accept`)
+        .set(auth(driverAToken))
+        .expect(200);
+
+      const holder = prisma.$transaction(
+        async (tx) => {
+          await tx.$queryRaw`SELECT "status" FROM "drivers" WHERE "id" = ${driverBId} FOR UPDATE`;
+          await new Promise((resolve) => setTimeout(resolve, 1200));
+          await tx.$executeRaw`UPDATE "drivers" SET "status" = 'SUSPENDED' WHERE "id" = ${driverBId}`;
+        },
+        { timeout: 20_000, maxWait: 20_000 },
+      );
+
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      const reassignPromise = request(server)
+        .post(`/api/v1/admin/orders/${orderId}/reassign`)
+        .set(auth(adminToken))
+        .send({ driverId: driverBId, reason: 'racing a suspension' });
+
+      const [, reassignRes] = await Promise.all([holder, reassignPromise]);
+
+      expect(reassignRes.status).toBe(403);
+      // The original driver keeps it; nothing is left half-swapped.
+      const order = await prisma.order.findUnique({
+        where: { id: orderId },
+        select: { driverId: true },
+      });
+      expect(order?.driverId).toBe(driverAId);
+    });
+  });
 });
