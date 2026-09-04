@@ -229,9 +229,17 @@ export class AuthService {
       ]);
     }
 
+    // Clears the lockout too: proving the CURRENT password is a stronger
+    // identity check than the lockout is defending against, so leaving it in
+    // place would lock someone out on the strength of a password they have
+    // just replaced.
     await this.prisma.user.update({
       where: { id: userId },
-      data: { passwordHash: await AuthService.hashPassword(newPassword) },
+      data: {
+        passwordHash: await AuthService.hashPassword(newPassword),
+        failedLogins: 0,
+        lockedUntil: null,
+      },
     });
 
     // Bumps tokenVersion, so every access token minted before now is dead.

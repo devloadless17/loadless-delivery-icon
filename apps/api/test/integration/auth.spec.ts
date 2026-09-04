@@ -316,5 +316,36 @@ describe('auth sessions (integration)', () => {
         .send({ identifier: 'sessions@test.local', password: NEW_PASSWORD })
         .expect(200);
     });
+
+    it('clears a failed-login lockout, so the new password works at once', async () => {
+      const mine = await login();
+
+      // What repeated wrong guesses leave behind. Set directly: driving it
+      // through the login route would trip the per-minute throttler first and
+      // assert against the wrong guard.
+      await prisma.user.update({
+        where: { id: vendorUserId },
+        data: { failedLogins: 9, lockedUntil: new Date(Date.now() + 15 * 60_000) },
+      });
+
+      await request(server)
+        .post('/api/v1/auth/change-password')
+        .set('Cookie', accessCookie(mine))
+        .send({ currentPassword: PASSWORD, newPassword: NEW_PASSWORD })
+        .expect(200);
+
+      // Proving the CURRENT password is a stronger identity check than the
+      // lockout defends against, so the lockout must not outlive it. Without
+      // this the person changes their password and is still refused for up to
+      // fifteen minutes, by a password they no longer have.
+      await request(server)
+        .post('/api/v1/auth/login')
+        .send({ identifier: 'sessions@test.local', password: NEW_PASSWORD })
+        .expect(200);
+
+      const after = await prisma.user.findUniqueOrThrow({ where: { id: vendorUserId } });
+      expect(after.failedLogins).toBe(0);
+      expect(after.lockedUntil).toBeNull();
+    });
   });
 });

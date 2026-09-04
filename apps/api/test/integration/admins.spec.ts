@@ -189,6 +189,46 @@ describe('admins managing admins (integration)', () => {
       .expect(200);
   });
 
+  it('lets a LOCKED-OUT admin straight back in, which is the whole point of a reset', async () => {
+    const target = await makeAdmin();
+
+    // The state repeated failed sign-ins leave behind. Written directly rather
+    // than by looping the login route, because the per-minute throttler would
+    // answer 429 before the fifth failure and we would be asserting against the
+    // wrong guard entirely.
+    await prisma.user.update({
+      where: { id: target.id },
+      data: { failedLogins: 9, lockedUntil: new Date(Date.now() + 15 * 60_000) },
+    });
+
+    // Locked means locked: the CORRECT password is refused too, because the
+    // lockout is checked BEFORE the password is verified.
+    await request(server)
+      .post('/api/v1/auth/login')
+      .send({ identifier: target.email, password: PASSWORD })
+      .expect(423);
+
+    await request(server)
+      .patch(`/api/v1/admin/admins/${target.id}`)
+      .set(auth(adminToken))
+      .send({ password: 'a-brand-new-password' })
+      .expect(200);
+
+    // Back in IMMEDIATELY, not in fifteen minutes. Before the reset cleared the
+    // lockout this returned 423 and the new password looked broken — which is
+    // exactly what happened on production to the owner's own account. The
+    // original test for this feature passed because it reset the password of an
+    // account that had never been locked, so it walked straight past the gap.
+    await request(server)
+      .post('/api/v1/auth/login')
+      .send({ identifier: target.email, password: 'a-brand-new-password' })
+      .expect(200);
+
+    const after = await prisma.user.findUniqueOrThrow({ where: { id: target.id } });
+    expect(after.failedLogins).toBe(0);
+    expect(after.lockedUntil).toBeNull();
+  });
+
   // ------------------------------------------------ suspend / reactivate
 
   it('suspends another admin, then lets them back in', async () => {
