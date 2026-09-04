@@ -170,4 +170,86 @@ test.describe('admin management', () => {
     await expect(dialog.getByText('Nothing outstanding — this driver is square.')).toBeVisible();
     await expect(dialog.getByRole('button', { name: 'All their orders' })).toBeVisible();
   });
+
+  /**
+   * Admins managing admins.
+   *
+   * The platform shipped with one admin and no way to make a second, so a
+   * forgotten admin password had no remedy inside the app. This walks the way
+   * out: a new admin is made, signs in, forgets, and is let back in by someone
+   * else — which must also throw them off every device they were already on.
+   *
+   * It cleans up after itself. The ADMIN this suite depends on is never the
+   * subject, and the second admin is deleted at the end, so nothing downstream
+   * inherits an extra operator.
+   */
+  test('admins can create, reset and remove each other — but never themselves', async ({
+    page,
+    browser,
+    baseURL,
+  }) => {
+    const SECOND = 'admin2@e2e.local';
+    const NEW_PASSWORD = 'reset-by-another-admin';
+
+    await adminPage(page);
+    await page.goto('/admin/admins');
+
+    // The row that is me offers no Delete — the API refuses it too, but the
+    // console should not hold out a button that cannot work.
+    const myRow = page.getByRole('row').filter({ hasText: ADMIN });
+    await expect(myRow.getByText('(you)')).toBeVisible();
+    await expect(
+      myRow.getByRole('button', { name: /cannot delete your own admin account/i }),
+    ).toBeDisabled();
+
+    await page.getByRole('button', { name: 'New admin' }).first().click();
+    await page.getByLabel('Login email').fill(SECOND);
+    await page.getByLabel('Password').fill(PASSWORD);
+    await page.getByRole('button', { name: 'Create admin' }).click();
+    await expect(page.getByText('Admin created')).toBeVisible();
+    await expect(page.getByRole('cell', { name: SECOND })).toBeVisible();
+
+    // They can sign in, and they land in the admin console.
+    // baseURL is NOT inherited by a context made with browser.newContext(),
+    // so it has to be handed over or every relative goto has no base.
+    const theirs = await browser.newContext({ baseURL });
+    const them = await theirs.newPage();
+    await loginAs(them, SECOND, '/admin');
+
+    // Now they forget it. Another admin sets a new one.
+    await page.getByRole('row').filter({ hasText: SECOND }).getByRole('button', { name: 'Edit' }).click();
+    await page.getByLabel('Reset password (optional)').fill(NEW_PASSWORD);
+    await page.getByRole('button', { name: 'Save changes' }).click();
+    await expect(page.getByText(/signed out everywhere/i)).toBeVisible();
+
+    // Two things have to be true, and they are different claims.
+    //
+    // First, the session is dead server-side the moment the reset lands — the
+    // token they hold buys nothing. That is what protects the account.
+    const stillIn = await them.request.get('/api/v1/auth/me');
+    expect(stillIn.status()).toBe(401);
+
+    // Second, they are actually put out of the console rather than left sitting
+    // in one that looks signed in. The socket pushes SESSION_REVOKED, and if
+    // that never lands the first 401 that survives a refresh ends the session
+    // over HTTP instead — belt and braces, because a notification is not a
+    // guarantee.
+    await them.waitForURL(/\/login/, { timeout: 20_000 });
+
+    // The old password no longer works; the new one does.
+    await them.goto('/login');
+    await them.getByLabel('Email or phone number').fill(SECOND);
+    await them.getByLabel('Password').fill(PASSWORD);
+    await them.getByRole('button', { name: 'Sign in' }).click();
+    await expect(them.getByText('Incorrect phone number or password.')).toBeVisible();
+    await loginAs(them, SECOND, '/admin', NEW_PASSWORD);
+    await theirs.close();
+
+    // Clean up: remove the second admin so later specs see one operator.
+    await page.reload();
+    await page.getByRole('row').filter({ hasText: SECOND }).getByRole('button', { name: 'Delete' }).click();
+    await page.getByRole('button', { name: 'Delete admin' }).click();
+    await expect(page.getByText(`${SECOND} deleted.`)).toBeVisible();
+    await expect(page.getByRole('cell', { name: SECOND })).toBeHidden();
+  });
 });

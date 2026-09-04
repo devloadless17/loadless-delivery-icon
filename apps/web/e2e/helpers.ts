@@ -30,6 +30,20 @@ export function uniquePhone(): string {
   return `03${String(phoneCounter).padStart(6, '0')}`;
 }
 
+/**
+ * Pin this context to English.
+ *
+ * Locale comes from the `fd_locale` cookie with English as the fallback, so
+ * every spec that asserts on a visible string is currently relying on the
+ * cookie being absent. That holds until something sets it — 11-i18n-rtl does,
+ * and the production suite replays whole cookie jars from disk. A leaked `ar`
+ * does not fail one assertion, it fails every one of them at once, and it reads
+ * like the product broke rather than the locale moved.
+ */
+export async function forceEnglish(page: Page, baseURL: string): Promise<void> {
+  await page.context().addCookies([{ name: 'fd_locale', value: 'en', url: baseURL }]);
+}
+
 export async function login(page: Page, identifier: string, password = PASSWORD): Promise<void> {
   await page.goto('/login');
   await page.getByLabel('Email or phone number').fill(identifier);
@@ -37,8 +51,13 @@ export async function login(page: Page, identifier: string, password = PASSWORD)
   await page.getByRole('button', { name: 'Sign in' }).click();
 }
 
-export async function loginAs(page: Page, identifier: string, home: string): Promise<void> {
-  await login(page, identifier);
+export async function loginAs(
+  page: Page,
+  identifier: string,
+  home: string,
+  password = PASSWORD,
+): Promise<void> {
+  await login(page, identifier, password);
   await page.waitForURL(`**${home}`);
 }
 

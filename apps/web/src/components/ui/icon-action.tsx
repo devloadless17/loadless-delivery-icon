@@ -19,6 +19,7 @@ export function IconAction({
   icon: Icon,
   onClick,
   tone = 'default',
+  disabled,
   className,
 }: {
   /** What it does, in words: the accessible name AND the hover tooltip. */
@@ -27,6 +28,13 @@ export function IconAction({
   onClick: () => void;
   /** 'destructive' only for actions that remove something. */
   tone?: 'default' | 'destructive';
+  /**
+   * For an action that exists on this row but cannot apply to it — deleting
+   * your own admin account, say. Prefer this over hiding the button: a row
+   * missing an action its neighbours have reads as a rendering bug, and the
+   * `label` (which is also the tooltip) is where the reason goes.
+   */
+  disabled?: boolean;
   className?: string;
 }) {
   return (
@@ -35,6 +43,7 @@ export function IconAction({
       size="icon"
       aria-label={label}
       title={label}
+      disabled={disabled}
       onClick={onClick}
       className={cn(
         'text-muted-foreground transition-colors hover:text-foreground',

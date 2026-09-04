@@ -26,6 +26,30 @@ export const updateVendorSchema = z.object({
 });
 export type UpdateVendorInput = z.infer<typeof updateVendorSchema>;
 
+// ---------- admins (admin-managed, email login) ----------
+//
+// An admin has no row of its own — an ADMIN is a `users` row and nothing else.
+// So there is no name here: the email IS the identity, and it is what the list
+// and the audit trail show. Status maps to `users.is_active`, which login and
+// refresh already refuse on.
+export const createAdminSchema = z.object({
+  email: emailSchema,
+  password: passwordSchema,
+});
+export type CreateAdminInput = z.infer<typeof createAdminSchema>;
+
+/**
+ * No email field on purpose: the login identity is immutable after creation,
+ * exactly as it is for a vendor and a driver. A password here is a RESET — the
+ * admin doing it types the new one and passes it on, and every session the
+ * other admin has is dropped.
+ */
+export const updateAdminSchema = z.object({
+  status: z.enum(ACCOUNT_STATUSES).optional(),
+  password: passwordSchema.optional(),
+});
+export type UpdateAdminInput = z.infer<typeof updateAdminSchema>;
+
 // ---------- drivers (admin-managed) ----------
 export const commissionBpsSchema = z
   .number()

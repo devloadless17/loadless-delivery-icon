@@ -5,6 +5,7 @@ import {
   LayoutDashboard,
   Package,
   Settings,
+  ShieldCheck,
   Store,
   Users,
   Wallet,
@@ -19,6 +20,7 @@ export const ADMIN_NAV_ITEMS = [
   { href: '/admin/vendors', label: 'Vendors', icon: Store },
   { href: '/admin/drivers', label: 'Drivers', icon: Bike },
   { href: '/admin/customers', label: 'Customers', icon: Users },
+  { href: '/admin/admins', label: 'Admins', icon: ShieldCheck },
   { href: '/admin/settlements', label: 'Settlements', icon: Wallet },
   { href: '/admin/settings', label: 'Settings', icon: Settings },
 ];

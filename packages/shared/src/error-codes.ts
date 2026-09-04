@@ -50,6 +50,25 @@ export const ERROR_CODES = {
    */
   CUSTOMER_HAS_ORDERS: 'CUSTOMER_HAS_ORDERS',
 
+  // admins managing admins
+  /**
+   * The platform must keep at least one admin who can still sign in. Deleting
+   * the last one — or suspending them, which is the same thing from the login's
+   * point of view — locks every operator out, and the only way back is running
+   * the bootstrap script against a database that has no admin at all.
+   *
+   * The service refuses so the UI can say why; a database trigger refuses the
+   * same thing for anything that never goes through the service.
+   */
+  LAST_ADMIN: 'LAST_ADMIN',
+  /**
+   * An admin cannot suspend or delete themselves. Not a permission rule — a
+   * guard against the one-click mistake of locking yourself out of a console
+   * you are standing in. Changing your OWN password is a different endpoint
+   * (POST /auth/change-password) and stays allowed.
+   */
+  ADMIN_SELF_ACTION: 'ADMIN_SELF_ACTION',
+
   // driver settlements — collecting the platform's commission in cash
   /**
    * The figures moved between the admin previewing a settlement and confirming
