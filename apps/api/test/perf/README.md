@@ -49,3 +49,39 @@ Two defects this harness found that `EXPLAIN` alone did not:
 
 A regression here means an index stopped being used — check with
 `EXPLAIN (ANALYZE, BUFFERS)` before changing any query.
+
+## Re-measured 2026-09-04, before handing the product to the client
+
+Same database, both modes. Every figure at or below its baseline, and the
+contention harness still returns exactly one winner per race with no 5xx.
+
+| endpoint | p50 @ CONC=1 | p50 @ CONC=25 |
+|---|---|---|
+| customer 360 by phone | 2.1 ms | 9.3 ms |
+| driver feed | 3.6 ms | 19.9 ms |
+| admin orders | 3.7 ms | 22.2 ms |
+| vendor orders | 4.3 ms | 29.5 ms |
+| admin customers | 8.4 ms | 46.8 ms |
+| my customers (page) | 13.3 ms | 51.7 ms |
+| my customers (search) | 24.8 ms | 128.1 ms |
+| settle preview | 9.0 ms | 71.0 ms |
+| **admin settlement worklist** | **39.4 ms** | **288.1 ms** |
+
+### The one outlier, and why it is being left alone
+
+The settlement worklist is an order of magnitude slower than anything else, and
+that is structural rather than a missing index. `SettlementsService.outstanding`
+groups over EVERY unsettled delivered order on the platform, builds the totals
+in memory, sorts them and then slices out a page — so its cost tracks the size
+of the backlog, not the size of the page. It is the only list endpoint that does
+not paginate in SQL.
+
+It is not being changed, because the fix is not free and the problem is not
+real: ordering the worklist by amount owed requires the aggregate before you can
+pick a page, so paginating in SQL means either a materialised balance or
+reordering the screen by something cheaper — and this endpoint is admin-only, on
+a platform with one operator. At the concurrency an admin actually generates it
+answers in 39 ms.
+
+Revisit it if the client ever runs several admins at once, or if settlement is
+allowed to fall far enough behind that the unsettled table dwarfs today's.
