@@ -37,6 +37,12 @@ import {
 const LBP_ORDERS = 210;
 const USD_ORDERS = 4;
 
+// 210 x 100,000 LBP and 4 x $20, both at this driver's negotiated 25%.
+// Written out rather than derived, so the test proves the ARITHMETIC and not
+// merely that two screens agree with each other about a number.
+const OWED_LBP = '5,250,000 LBP';
+const OWED_USD = '20.00 USD';
+
 const STAMP = `VOL${Date.now().toString().slice(-6)}`;
 const DRIVER_PHONE = uniquePhone();
 const DRIVER_NAME = `${STAMP} Volume Driver`;
@@ -129,9 +135,8 @@ test.describe('settlements under volume', () => {
 
     await expect(page.getByRole('region', { name: 'To hand over' })).toBeVisible();
 
-    // 210 x 100,000 LBP at his negotiated 25%, and 4 x $20 at the same rate.
-    await expect(page.getByText('5,250,000 LBP').first()).toBeVisible();
-    await expect(page.getByText('20.00 USD').first()).toBeVisible();
+    await expect(page.getByText(OWED_LBP).first()).toBeVisible();
+    await expect(page.getByText(OWED_USD).first()).toBeVisible();
 
     // Collapsed by default — that is what keeps the page short. One disclosure
     // per currency, so the USD list exists even though LBP dwarfs it.
@@ -148,7 +153,7 @@ test.describe('settlements under volume', () => {
     // The USD currency keeps its OWN itemisation and reconciles in full — it is
     // not starved by the 210 LBP rows sitting in front of it.
     await expect(page.getByText('Commission from these')).toHaveCount(1);
-    await expect(page.getByText('20.00 USD').first()).toBeVisible();
+    await expect(page.getByText(OWED_USD).first()).toBeVisible();
 
     // Opening 204 rows must not turn the page into a mile of scroll: each list
     // is height-capped, so the growth is bounded rather than proportional.
@@ -166,11 +171,22 @@ test.describe('settlements under volume', () => {
 
     const row = owingRow(page);
     await expect(row).toBeVisible();
-    await expect(row.getByText(/[\d,]+ LBP/)).toBeVisible();
-    await expect(row.getByText(/[\d,.]+ USD/)).toBeVisible();
+
+    // THE FIGURE THE DRIVER WAS SHOWN, on the admin's screen, to the digit.
+    // Matching a mere /[\d,]+ LBP/ here would have passed just as happily on a
+    // different number, which is the one thing this row must never show: the
+    // driver is standing there having read his own total, and a handover starts
+    // as an argument if the two screens disagree.
+    await expect(row.getByText(OWED_LBP)).toBeVisible();
+    await expect(row.getByText(OWED_USD)).toBeVisible();
 
     await row.getByRole('button', { name: 'Settle' }).click();
     const dialog = page.getByRole('dialog');
+
+    // And again inside the dialog, which is what the admin actually reads out
+    // while counting the cash.
+    await expect(dialog.getByText(OWED_LBP).first()).toBeVisible();
+    await expect(dialog.getByText(OWED_USD).first()).toBeVisible();
 
     // The reason the breakdown collapses: with 214 deliveries the amount boxes
     // and the confirm button must still be right there.
@@ -202,6 +218,10 @@ test.describe('settlements under volume', () => {
 
     await expect(page.getByText('Deliveries covered')).toBeVisible();
 
+    // The permanent record agrees with both screens that produced it.
+    await expect(page.getByText(OWED_LBP).first()).toBeVisible();
+    await expect(page.getByText(OWED_USD).first()).toBeVisible();
+
     // The cards above report the true count; the table below cannot show them
     // all. Saying so is the whole fix — a number that silently disagrees with
     // the list under it is worse than a shorter list.
@@ -217,9 +237,29 @@ test.describe('settlements under volume', () => {
     await page.waitForURL('**/driver');
     await page.goto('/driver/earnings');
 
+    // He handed over 214 deliveries' commission a moment ago. The thing he
+    // needs to see is that NOTHING is left on him — the reason the balance is
+    // on his own screen at all. Anything less than an explicit "all settled"
+    // leaves a driver wondering whether he still owes, at exactly the moment
+    // he has just paid.
+    await expect(page.getByText("You're all settled")).toBeVisible();
+    await expect(page.getByText(/Nothing is owed to the platform/)).toBeVisible();
+    await expect(page.getByRole('region', { name: 'To hand over' })).toHaveCount(0);
+    // The figure survives in exactly ONE place — the handover he just made,
+    // which is his record of having paid it. Two copies would mean an owed
+    // panel still quoting a balance he has already settled.
+    await expect(page.getByText(OWED_LBP)).toHaveCount(1);
+
     await expect(page.getByRole('heading', { name: 'Handovers' })).toBeVisible();
     const first = await page.getByRole('link', { name: /STL-\d{4}-\d{6}/ }).allInnerTexts();
     expect(first.length).toBeGreaterThan(0);
+
+    // His own copy of the receipt shows what he actually paid, in both
+    // currencies — the record he can point at later.
+    await page.getByRole('link', { name: /STL-\d{4}-\d{6}/ }).first().click();
+    await expect(page.getByText(OWED_LBP).first()).toBeVisible();
+    await expect(page.getByText(OWED_USD).first()).toBeVisible();
+    await page.goBack();
 
     // One handover so far, so there is no second page to reach; the pager only
     // appears once there is. Assert the shape rather than forcing the state —
