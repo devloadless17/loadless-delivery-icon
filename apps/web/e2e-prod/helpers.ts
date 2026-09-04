@@ -114,7 +114,20 @@ function saveSession(identifier: string, cookies: Cookies) {
   writeFileSync(sessionFile(identifier), JSON.stringify(cookies), 'utf8');
 }
 
+const BASE = process.env.PROD_BASE_URL ?? 'https://flashdelivery.ink';
+
+/**
+ * Every assertion in this suite reads English. The app honours an `fd_locale`
+ * cookie, and sessions here are replayed from disk between runs — so a jar that
+ * ever held `ar` would turn the whole suite red against a perfectly healthy
+ * production, in Arabic. Pin it rather than trust the default.
+ */
+async function pinEnglish(page: Page) {
+  await page.context().addCookies([{ name: 'fd_locale', value: 'en', url: BASE }]);
+}
+
 export async function login(page: Page, identifier: string, password: string, home: string) {
+  await pinEnglish(page);
   const cached = loadSession(identifier);
   if (cached) {
     await page.context().addCookies(cached);

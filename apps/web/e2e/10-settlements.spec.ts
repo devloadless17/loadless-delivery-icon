@@ -7,6 +7,7 @@ import {
   apiPost,
   createOrderUI,
   ensureDuty,
+  forceEnglish,
   loginAs,
 } from './helpers';
 
@@ -23,6 +24,10 @@ import {
  * Runs last: it deliberately settles the drivers the other specs created.
  */
 test.describe('driver settlements', () => {
+  test.beforeEach(async ({ page, baseURL }) => {
+    await forceEnglish(page, baseURL!);
+  });
+
   // No retries here, deliberately. These tests are serial and each one moves
   // the drivers' money on to the next state, so a retry does not repeat the
   // failure — it runs the same steps against a world the first attempt already
@@ -54,9 +59,10 @@ test.describe('driver settlements', () => {
    * BOTH currencies at once. That is the case the arithmetic must never merge,
    * and the only way to prove it on real screens is to actually create it.
    */
-  test('setup: the driver also delivers a USD order', async ({ browser }) => {
+  test('setup: the driver also delivers a USD order', async ({ browser, baseURL }) => {
     const vendorCtx = await browser.newContext();
     const vendor = await vendorCtx.newPage();
+    await forceEnglish(vendor, baseURL!);
     await loginAs(vendor, VENDOR, '/vendor');
     const { orderId } = await createOrderUI(vendor, { charge: '20.00', currency: 'USD' });
 
@@ -65,6 +71,7 @@ test.describe('driver settlements', () => {
     // happened to be first and this setup must land on THIS order.
     const driverCtx = await browser.newContext();
     const driver = await driverCtx.newPage();
+    await forceEnglish(driver, baseURL!);
     await loginAs(driver, DRIVER1_PHONE, '/driver');
     await ensureDuty(driver, true);
     await apiPost(driver, `/driver/orders/${orderId}/accept`);
@@ -278,7 +285,7 @@ test.describe('driver settlements', () => {
     await expect(dialog.getByRole('button', { name: /Record/ })).toBeEnabled();
   });
 
-  test('a driver who overpays goes into credit and stays settleable', async ({ browser }) => {
+  test('a driver who overpays goes into credit and stays settleable', async ({ browser, baseURL }) => {
     // The worst bug Ali found. An overpayment leaves a NEGATIVE balance; the
     // cash box defaulted to that negative, "-10000" is not a parseable amount,
     // so the field stayed invalid and the confirm button was dead forever with
@@ -286,11 +293,13 @@ test.describe('driver settlements', () => {
     // above.
     const vendorCtx = await browser.newContext();
     const vendor = await vendorCtx.newPage();
+    await forceEnglish(vendor, baseURL!);
     await loginAs(vendor, VENDOR, '/vendor');
     const { orderId } = await createOrderUI(vendor, { charge: '100000' });
 
     const driverCtx = await browser.newContext();
     const driver = await driverCtx.newPage();
+    await forceEnglish(driver, baseURL!);
     await loginAs(driver, DRIVER2_PHONE, '/driver');
     await ensureDuty(driver, true);
     await apiPost(driver, `/driver/orders/${orderId}/accept`);
@@ -299,6 +308,7 @@ test.describe('driver settlements', () => {
 
     const adminCtx = await browser.newContext();
     const admin = await adminCtx.newPage();
+    await forceEnglish(admin, baseURL!);
     await loginAs(admin, ADMIN, '/admin');
     await admin.goto('/admin/settlements');
 

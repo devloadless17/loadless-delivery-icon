@@ -179,6 +179,27 @@ export default function SettlementDetailPage() {
           <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
             Deliveries covered
           </h2>
+
+          {/* The API caps this list at SETTLEMENT_ORDER_LIST_LIMIT per currency,
+              while the cards above print the TRUE orderCount. Without this the
+              admin reads "312 deliveries" over a table of 200 rows and nothing
+              accounts for the difference — the driver looking at the same
+              handover gets told. A number that quietly disagrees with the list
+              under it is worse than a shorter list. */}
+          {(() => {
+            const covered = data.lines.reduce((sum, line) => sum + line.orderCount, 0);
+            const shown = data.orders?.length ?? 0;
+            return shown < covered ? (
+              <p className="text-xs text-warning">
+                Showing the most recent {shown} of {covered}. The totals above cover all{' '}
+                {covered}.
+              </p>
+            ) : null;
+          })()}
+
+          {/* Scroll-contained, so a settlement covering hundreds of deliveries
+              is still a readable document rather than a mile of table. */}
+          <div className="max-h-96 overflow-y-auto rounded-lg border">
           <Table>
             <TableHeader>
               <TableRow>
@@ -220,6 +241,7 @@ export default function SettlementDetailPage() {
               ))}
             </TableBody>
           </Table>
+          </div>
         </section>
       )}
 

@@ -7,6 +7,7 @@ import { AppModule } from '../../src/app.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { AuthService } from '../../src/auth/auth.service';
 import { TokenService } from '../../src/auth/token.service';
+import { fromMinorUnits } from '@loadless/shared';
 import { seedOrder as seedOrderFixture, type FixtureOrderStatus } from './order-fixtures';
 
 /**
@@ -998,6 +999,198 @@ describe('driver settlements (integration)', () => {
     // And he is still there, with his record.
     expect(await prisma.driver.count({ where: { id: driver.id } })).toBe(1);
   });
+
+  // ------------------------------------------------- the arithmetic, at random
+
+  it('keeps every money invariant through a random sequence of handovers', async () => {
+    // The cases written by hand are the ones somebody thought of. This walks a
+    // random mix of delivering, short-paying, overpaying, fining, crediting and
+    // voiding across BOTH currencies, and re-proves the whole ledger after each
+    // step — so a combination nobody considered still has to hold.
+    //
+    // Seeded so a red run is reproducible instead of a ghost; the seed prints
+    // on failure.
+    const SEED = Number(process.env.SETTLEMENT_FUZZ_SEED ?? 20260904);
+    let state = SEED;
+    const rand = () => {
+      // Mulberry32 — small, deterministic, good enough to shuffle a test.
+      state = (state + 0x6d2b79f5) | 0;
+      let t = Math.imul(state ^ (state >>> 15), 1 | state);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+    const pick = <T,>(xs: readonly T[]) => xs[Math.floor(rand() * xs.length)]!;
+
+    const { driver } = await makeDriver(`Fuzz Driver ${SEED}`);
+    const history: string[] = [];
+
+    /** Everything that must be true after every single step. */
+    async function assertLedgerHolds(step: string) {
+      history.push(step);
+      const trail = `seed=${SEED} after: ${history.join(' -> ')}`;
+
+      const orders = await prisma.order.findMany({ where: { driverId: driver.id } });
+      for (const o of orders) {
+        if (o.platformCommissionAmount === null) continue;
+        expect(
+          `${trail} | order ${o.orderNumber} split`,
+        ).toBe(
+          o.platformCommissionAmount + (o.driverEarnings ?? 0n) === o.deliveryCharge
+            ? `${trail} | order ${o.orderNumber} split`
+            : `MISMATCH ${o.deliveryCharge} != ${o.platformCommissionAmount}+${o.driverEarnings}`,
+        );
+      }
+
+      // An order may belong to at most one settlement, ever.
+      const stamped = orders.filter((o) => o.settlementId !== null);
+      expect(`${trail} | stamped-non-delivered`).toBe(
+        stamped.every((o) => o.status === 'DELIVERED')
+          ? `${trail} | stamped-non-delivered`
+          : 'a non-DELIVERED order carried a settlement id',
+      );
+
+      const settlements = await prisma.driverSettlement.findMany({
+        where: { driverId: driver.id },
+        orderBy: [{ settledAt: 'asc' }, { id: 'asc' }],
+        include: { lines: true },
+      });
+
+      for (const stl of settlements) {
+        for (const line of stl.lines) {
+          expect(`${trail} | ${stl.settlementNumber} ${line.currency} total`).toBe(
+            line.totalDue === line.commissionDue + line.adjustmentsTotal + line.broughtForward
+              ? `${trail} | ${stl.settlementNumber} ${line.currency} total`
+              : `totalDue ${line.totalDue} != ${line.commissionDue}+${line.adjustmentsTotal}+${line.broughtForward}`,
+          );
+          expect(`${trail} | ${stl.settlementNumber} ${line.currency} carry`).toBe(
+            line.carriedForward === line.totalDue - line.amountCollected
+              ? `${trail} | ${stl.settlementNumber} ${line.currency} carry`
+              : `carriedForward ${line.carriedForward} != ${line.totalDue}-${line.amountCollected}`,
+          );
+        }
+      }
+
+      // The materialised balance must equal the latest non-voided settlement
+      // that touched that currency — derived independently, not read back.
+      const balances = await prisma.driverBalance.findMany({ where: { driverId: driver.id } });
+      for (const currency of ['LBP', 'USD'] as const) {
+        const live = settlements.filter(
+          (st) => st.status === 'SETTLED' && st.lines.some((l) => l.currency === currency),
+        );
+        const derived =
+          live.length === 0
+            ? 0n
+            : live[live.length - 1]!.lines.find((l) => l.currency === currency)!.carriedForward;
+        const stored = balances.find((b) => b.currency === currency)?.outstanding ?? 0n;
+        expect(`${trail} | ${currency} balance ${stored}`).toBe(
+          `${trail} | ${currency} balance ${derived}`,
+        );
+      }
+    }
+
+    await assertLedgerHolds('start');
+
+    for (let step = 0; step < 40; step++) {
+      const currency = pick(['LBP', 'USD'] as const);
+      const action = pick([
+        'deliver',
+        'deliver',
+        'deliver',
+        'settle-short',
+        'settle-full',
+        'settle-over',
+        'fine',
+        'credit',
+        'void',
+      ] as const);
+
+      if (action === 'deliver') {
+        await seedOrder({
+          driverId: driver.id,
+          charge: currency === 'LBP' ? BigInt(10_000 + Math.floor(rand() * 90_000)) : BigInt(100 + Math.floor(rand() * 4_900)),
+          currency,
+          bps: pick([2500, 3000, 2750]),
+        });
+        await assertLedgerHolds(`deliver ${currency}`);
+        continue;
+      }
+
+      if (action === 'void') {
+        const latest = await prisma.driverSettlement.findFirst({
+          where: { driverId: driver.id, status: 'SETTLED' },
+          orderBy: [{ settledAt: 'desc' }, { id: 'desc' }],
+        });
+        if (!latest) continue;
+        await request(server)
+          .post(`/api/v1/admin/settlements/${latest.id}/void`)
+          .set(auth(adminToken))
+          .send({ reason: `fuzz step ${step}` })
+          .expect(201);
+        await assertLedgerHolds(`void ${latest.settlementNumber}`);
+        continue;
+      }
+
+      // Every remaining action is a settle, so it needs something to settle.
+      const preview = await previewOf(driver.id).expect(200);
+      const lines: PreviewLine[] = preview.body.data.lines;
+      if (lines.length === 0) continue;
+
+      const collect: Record<string, string> = {};
+      for (const line of lines) {
+        const due = BigInt(line.totalDue);
+        const pay =
+          action === 'settle-full'
+            ? due
+            : action === 'settle-short'
+              ? due / 2n
+              : due + BigInt(currency === 'LBP' ? 5_000 : 100);
+        // Nobody ever hands over a negative amount of cash.
+        collect[line.currency] = fromMinorUnits(pay > 0n ? pay : 0n, line.currency);
+      }
+
+      const body: Record<string, unknown> = settleBody(lines, collect);
+      if (action === 'fine' || action === 'credit') {
+        const target = pick(lines).currency;
+        body.adjustments = [
+          {
+            currency: target,
+            direction: action === 'fine' ? 'DEBIT' : 'CREDIT',
+            amount: target === 'LBP' ? '5000' : '1.00',
+            reason: `fuzz ${action} at step ${step}`,
+          },
+        ];
+      }
+
+      const res = await request(server)
+        .post(`/api/v1/admin/drivers/${driver.id}/settlements`)
+        .set(auth(adminToken))
+        .send(body);
+      // A refusal is a legitimate outcome (nothing to settle, totals moved).
+      // What is NOT allowed is a 500, or a partial write.
+      expect(`seed=${SEED} step ${step} ${action} -> ${res.status}`).toMatch(
+        /-> (201|400|409)$/,
+      );
+      await assertLedgerHolds(`${action} ${currency} (${res.status})`);
+    }
+
+    // Finally: settle everything and confirm the driver lands exactly square.
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const preview = await previewOf(driver.id).expect(200);
+      const lines: PreviewLine[] = preview.body.data.lines;
+      if (lines.length === 0) break;
+      const collect = Object.fromEntries(
+        lines.map((l) => [l.currency, fromMinorUnits(BigInt(l.totalDue), l.currency)]),
+      );
+      const payable = lines.every((l) => BigInt(l.totalDue) >= 0n);
+      if (!payable) break;
+      await request(server)
+        .post(`/api/v1/admin/drivers/${driver.id}/settlements`)
+        .set(auth(adminToken))
+        .send(settleBody(lines, collect))
+        .expect(201);
+      await assertLedgerHolds('final settle');
+    }
+  }, 120_000);
 
   // ------------------------------------------------------------ immutability
 

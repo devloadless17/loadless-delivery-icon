@@ -162,6 +162,39 @@ export class SettlementsService {
     return new Map(users.map((u) => [u.id, u.driver?.fullName ?? u.email ?? 'Unknown']));
   }
 
+  /**
+   * The itemised deliveries behind a figure, capped PER CURRENCY.
+   *
+   * One `take` across all currencies looks equivalent and is not: the rows come
+   * back newest-first and the UI then filters them per currency, so a driver
+   * with 250 LBP and 10 USD deliveries can have all 200 of the newest be LBP.
+   * The USD breakdown then receives nothing, renders nothing, and — because
+   * OrderBreakdown bails on an empty list before it can warn — says nothing
+   * either. He is asked to hand over money for that currency with no way to see
+   * what it is for and no admission that anything was withheld.
+   *
+   * Two currencies means two queries, both hitting
+   * orders_unsettled_by_driver_idx on its leading (driver_id, currency,
+   * delivered_at) columns — the access path that index exists for.
+   */
+  private async itemisedByCurrency(
+    where: Prisma.OrderWhereInput,
+  ): Promise<Array<Awaited<ReturnType<typeof this.oneCurrencyPage>>[number]>> {
+    const perCurrency = await Promise.all(
+      CURRENCIES.map((currency) => this.oneCurrencyPage({ ...where, currency })),
+    );
+    return perCurrency.flat();
+  }
+
+  private oneCurrencyPage(where: Prisma.OrderWhereInput) {
+    return this.prisma.order.findMany({
+      where,
+      select: SETTLEMENT_ORDER_SELECT,
+      orderBy: { deliveredAt: 'desc' },
+      take: SETTLEMENT_ORDER_LIST_LIMIT,
+    });
+  }
+
   // ------------------------------------------------------------- preview
 
   /**
@@ -176,12 +209,7 @@ export class SettlementsService {
       this.sweep(this.prisma, driverId, cutoff),
       this.balances(this.prisma, driverId),
       this.previousSettlement(this.prisma, driverId),
-      this.prisma.order.findMany({
-        where: unsettledWhere(driverId, cutoff),
-        select: SETTLEMENT_ORDER_SELECT,
-        orderBy: { deliveredAt: 'desc' },
-        take: SETTLEMENT_ORDER_LIST_LIMIT,
-      }),
+      this.itemisedByCurrency(unsettledWhere(driverId, cutoff)),
     ]);
 
     const sweptBy = new Map(swept.map((s) => [s.currency, s]));
@@ -603,14 +631,14 @@ export class SettlementsService {
       //
       // Taken newest-first to get the most RECENT slice, then reversed so the
       // receipt still reads in delivery order as it always has.
-      this.prisma.order
-        .findMany({
-          where: { settlementId },
-          select: SETTLEMENT_ORDER_SELECT,
-          orderBy: { deliveredAt: 'desc' },
-          take: SETTLEMENT_ORDER_LIST_LIMIT,
-        })
-        .then((rows) => rows.reverse()),
+      this.itemisedByCurrency({ settlementId }).then((rows) =>
+        // Back into delivery order: the per-currency queries each came back
+        // newest-first, so the concatenation is neither sorted nor reversible
+        // by itself.
+        rows.sort(
+          (a, b) => (a.deliveredAt?.getTime() ?? 0) - (b.deliveredAt?.getTime() ?? 0),
+        ),
+      ),
       this.userLabels([settlement.collectedByUserId]),
     ]);
 
@@ -791,12 +819,7 @@ export class SettlementsService {
       // The itemised deliveries travel WITH the figure. A driver asked to hand
       // over cash should not have to take the number on trust, and the dispute
       // happens before any settlement exists to print.
-      this.prisma.order.findMany({
-        where: unsettledWhere(driverId, cutoff),
-        select: SETTLEMENT_ORDER_SELECT,
-        orderBy: { deliveredAt: 'desc' },
-        take: SETTLEMENT_ORDER_LIST_LIMIT,
-      }),
+      this.itemisedByCurrency(unsettledWhere(driverId, cutoff)),
     ]);
 
     const sweptBy = new Map(swept.map((s) => [s.currency, s]));

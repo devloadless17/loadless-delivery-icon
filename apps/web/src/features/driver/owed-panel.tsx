@@ -120,6 +120,21 @@ export function OwedPanel() {
             {t('inCredit', { amount: displayMoney(-BigInt(line.totalDue), line.currency) })}
           </p>
         ))}
+
+        {/* A currency whose credit exactly cancels its commission is in none of
+            the lists above — not owed, not in credit. It used to be rendered
+            only on the all-settled path, so a driver who owed LBP while his USD
+            credit covered his USD work saw nothing about those deliveries at
+            all: the whole currency disappeared from the screen he checks before
+            walking in to pay. */}
+        {coveredByCredit.map((line) => (
+          <p key={line.currency} className="text-sm text-muted-foreground">
+            {t('creditCovered', {
+              amount: displayMoney(line.unsettledCommission, line.currency),
+              count: line.unsettledOrderCount,
+            })}
+          </p>
+        ))}
       </div>
     </section>
   );
