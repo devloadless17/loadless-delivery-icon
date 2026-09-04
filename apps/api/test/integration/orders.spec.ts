@@ -538,4 +538,96 @@ describe('orders (integration)', () => {
       expect(order?.driverId).toBe(driverAId);
     });
   });
+
+  describe('cursor paging does not lose rows while the list churns', () => {
+    /**
+     * A cursor is an id, and the page after it is resolved against the SAME
+     * where clause. So the interesting question is not whether paging works on
+     * a still list — it is what happens when the row the cursor points at
+     * stops matching the filter, which on this platform happens constantly:
+     * you page a PENDING list and a driver accepts one.
+     *
+     * If that silently returns an empty page, an operator scrolling their
+     * pending work loses every remaining order without a hint that anything
+     * went missing. That is worse than an error.
+     */
+    it('keeps serving the rest after the cursor row leaves the filter', async () => {
+      const ids: string[] = [];
+      for (let i = 0; i < 9; i++) ids.push(await createOrder());
+
+      const first = await request(server)
+        .get('/api/v1/vendor/orders?status=PENDING&limit=3')
+        .set(auth(vendorAToken))
+        .expect(200);
+      const firstIds = (first.body.data as Array<{ id: string }>).map((o) => o.id);
+      const cursor = first.body.meta.nextCursor as string;
+      expect(firstIds).toHaveLength(3);
+      expect(cursor).toBe(firstIds[2]);
+
+      // The cursor row itself stops being PENDING — the ordinary case.
+      await request(server)
+        .post(`/api/v1/driver/orders/${cursor}/accept`)
+        .set(auth(driverAToken))
+        .expect(200);
+
+      const second = await request(server)
+        .get(`/api/v1/vendor/orders?status=PENDING&limit=3&cursor=${cursor}`)
+        .set(auth(vendorAToken))
+        .expect(200);
+      const secondIds = (second.body.data as Array<{ id: string }>).map((o) => o.id);
+
+      // The page after it must still arrive, and must not repeat page one.
+      expect(secondIds.length).toBeGreaterThan(0);
+      expect(secondIds.some((id) => firstIds.includes(id))).toBe(false);
+    });
+
+    it('walks the whole list exactly once, with no gaps or repeats', async () => {
+      const mine = new Set<string>();
+      for (let i = 0; i < 7; i++) mine.add(await createOrder());
+
+      const seen: string[] = [];
+      let cursor: string | null = null;
+      for (let page = 0; page < 20; page++) {
+        const url: string = `/api/v1/vendor/orders?limit=2${cursor ? `&cursor=${cursor}` : ''}`;
+        const res = await request(server).get(url).set(auth(vendorAToken)).expect(200);
+        const rows = res.body.data as Array<{ id: string }>;
+        seen.push(...rows.map((r) => r.id));
+        cursor = res.body.meta.nextCursor as string | null;
+        if (!cursor) break;
+      }
+
+      // No id twice, and every order created here was reached.
+      expect(new Set(seen).size).toBe(seen.length);
+      for (const id of mine) expect(seen).toContain(id);
+    });
+
+    it('offers no next cursor when the last page is exactly full', async () => {
+      // `take: limit + 1` is what decides hasMore, so asking for exactly the
+      // number of rows that exist is the boundary a "Load more that loads
+      // nothing" would come from. (50 is the cursor ceiling; asking for more is
+      // correctly a 400, which is itself worth knowing.)
+      await request(server).get('/api/v1/vendor/orders?limit=100').set(auth(vendorAToken)).expect(400);
+
+      let total = 0;
+      let cursor: string | null = null;
+      for (let page = 0; page < 50; page++) {
+        const url: string = `/api/v1/vendor/orders?limit=50${cursor ? `&cursor=${cursor}` : ''}`;
+        const res = await request(server).get(url).set(auth(vendorAToken)).expect(200);
+        total += (res.body.data as unknown[]).length;
+        cursor = res.body.meta.nextCursor as string | null;
+        if (!cursor) break;
+      }
+      expect(total).toBeGreaterThan(0);
+
+      if (total <= 50) {
+        const exact = await request(server)
+          .get(`/api/v1/vendor/orders?limit=${total}`)
+          .set(auth(vendorAToken))
+          .expect(200);
+        expect((exact.body.data as unknown[]).length).toBe(total);
+        expect(exact.body.meta.nextCursor).toBeNull();
+      }
+    });
+  });
+
 });

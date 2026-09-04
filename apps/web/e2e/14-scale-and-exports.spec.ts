@@ -22,6 +22,19 @@ const OLDEST_DRIVER = `${STAMP} Aaliyah Oldest`;
 // a vendor can type into a customer record, which an admin then opens in Excel.
 const HOSTILE_NAME = '=HYPERLINK("http://evil.test","Invoice")';
 
+
+/** The page itself must never scroll sideways; wide content scrolls its own box. */
+async function expectNoSidewaysScroll(page: import('@playwright/test').Page, where: string) {
+  const overflow = await page.evaluate(() => ({
+    scroll: document.documentElement.scrollWidth,
+    view: document.documentElement.clientWidth,
+  }));
+  expect(
+    overflow.scroll,
+    `${where} scrolls sideways (${overflow.scroll}px of content in ${overflow.view}px)`,
+  ).toBeLessThanOrEqual(overflow.view + 1);
+}
+
 test.describe('scale, filters and exports', () => {
   test.describe.configure({ mode: 'serial', retries: 0 });
 
@@ -211,5 +224,58 @@ test.describe('scale, filters and exports', () => {
     expect(text).not.toMatch(/(^|,)"?=/m);
     // Every stored number is E.164, and a bare leading + is arithmetic to Excel.
     expect(text).not.toMatch(/,\+\d/);
+  });
+
+  test('a hostile name and a huge amount do not break the layout', async ({ page, baseURL }) => {
+    // Real text, not lorem: a long Arabic name in an LTR admin table, a
+    // right-to-left override that can visually reverse the chrome around it,
+    // and an amount at the top of what LBP realistically reaches. 11-i18n-rtl
+    // proves the layout MIRRORS; nothing fed it anything hostile.
+    const LONG_ARABIC = 'محمد عبد الرحمن الحسيني الطرابلسي ابن عبد الله الكبير';
+    const RLO_NAME = `\u202Egnirts desrever\u202C ${STAMP}`;
+    const BIG_LBP = '999999999999';
+
+    const vendorCtx = await page.context().browser()!.newContext();
+    const vendor = await vendorCtx.newPage();
+    await forceEnglish(vendor, baseURL!);
+    await loginAs(vendor, VENDOR, '/vendor');
+
+    for (const [name, charge] of [
+      [LONG_ARABIC, BIG_LBP],
+      [RLO_NAME, '250000'],
+    ] as const) {
+      const res = await vendor.request.post('/api/v1/vendor/orders', {
+        data: {
+          customerPhone: uniquePhone(),
+          customerName: name,
+          deliveryAddressText: `${LONG_ARABIC} — ${STAMP}`,
+          deliveryCharge: charge,
+          currency: 'LBP',
+        },
+      });
+      expect(res.ok(), `creating an order named ${JSON.stringify(name)}`).toBeTruthy();
+    }
+
+    await expectNoSidewaysScroll(vendor, 'vendor orders with a long Arabic customer');
+    await vendorCtx.close();
+
+    await forceEnglish(page, baseURL!);
+    await loginAs(page, ADMIN, '/admin');
+
+    await page.goto('/admin/orders');
+    await expect(page.getByRole('table')).toBeVisible();
+    await expectNoSidewaysScroll(page, 'admin orders');
+    // Rendered, not mangled into replacement characters.
+    await expect(page.getByText(LONG_ARABIC).first()).toBeVisible();
+    // 999,999,999,999 LBP must print in full rather than truncate or wrap the
+    // row — the grouping is what makes a twelve-digit figure readable at all.
+    await expect(page.getByText('999,999,999,999 LBP').first()).toBeVisible();
+
+    await page.goto('/admin/customers');
+    await expect(page.getByRole('table')).toBeVisible();
+    await expectNoSidewaysScroll(page, 'admin customers');
+
+    await page.goto('/admin/settlements');
+    await expectNoSidewaysScroll(page, 'admin settlements');
   });
 });

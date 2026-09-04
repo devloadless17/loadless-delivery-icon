@@ -1324,4 +1324,97 @@ describe('driver settlements (integration)', () => {
     });
     expect(second.body.data.map((s: { id: string }) => s.id)).toContain(oldest!.id);
   });
+
+  describe('a double submit cannot record money twice', () => {
+    /**
+     * The admin is on a phone, in a doorway, with a driver waiting. A slow
+     * response and a second tap is the ordinary case, not the exotic one — and
+     * the thing that must never come out of it is two settlements for the same
+     * cash, or a void that runs twice and unwinds a balance it already unwound.
+     */
+    it('records ONE settlement when the same handover is submitted twice at once', async () => {
+      const { driver } = await makeDriver('Double Tap Driver');
+      await seedOrder({ driverId: driver.id, charge: 150_000n, currency: 'LBP' });
+      await seedOrder({ driverId: driver.id, charge: 100_000n, currency: 'LBP' });
+
+      const preview = await previewOf(driver.id).expect(200);
+      const body = settleBody(preview.body.data.lines, { LBP: '75000' });
+
+      const [a, b] = await Promise.all([
+        request(server)
+          .post(`/api/v1/admin/drivers/${driver.id}/settlements`)
+          .set(auth(adminToken))
+          .send(body),
+        request(server)
+          .post(`/api/v1/admin/drivers/${driver.id}/settlements`)
+          .set(auth(adminToken))
+          .send(body),
+      ]);
+
+      const created = [a, b].filter((r) => r.status === 201);
+      expect(created).toHaveLength(1);
+
+      // And the database agrees — one row, not one response.
+      const rows = await prisma.driverSettlement.findMany({ where: { driverId: driver.id } });
+      expect(rows).toHaveLength(1);
+
+      // The loser must fail for a REASON, not with a 500.
+      const loser = [a, b].find((r) => r.status !== 201)!;
+      expect([409, 422]).toContain(loser.status);
+      expect(loser.body.error.code).toBeDefined();
+
+      // The orders are attached to exactly one settlement.
+      const stamped = await prisma.order.findMany({
+        where: { driverId: driver.id, settlementId: { not: null } },
+        select: { settlementId: true },
+      });
+      expect(new Set(stamped.map((o) => o.settlementId)).size).toBe(1);
+    });
+
+    it('voids ONCE when the void is submitted twice at once', async () => {
+      const { driver } = await makeDriver('Double Void Driver');
+      await seedOrder({ driverId: driver.id, charge: 120_000n, currency: 'LBP' });
+
+      const preview = await previewOf(driver.id).expect(200);
+      const settled = await request(server)
+        .post(`/api/v1/admin/drivers/${driver.id}/settlements`)
+        .set(auth(adminToken))
+        .send(settleBody(preview.body.data.lines, { LBP: '36000' }))
+        .expect(201);
+      const settlementId = settled.body.data.id as string;
+
+      const [a, b] = await Promise.all([
+        request(server)
+          .post(`/api/v1/admin/settlements/${settlementId}/void`)
+          .set(auth(adminToken))
+          .send({ reason: 'counted the cash wrong' }),
+        request(server)
+          .post(`/api/v1/admin/settlements/${settlementId}/void`)
+          .set(auth(adminToken))
+          .send({ reason: 'counted the cash wrong' }),
+      ]);
+
+      // The winner answers 201 — the void route creates nothing, but it is a
+      // plain @Post, so this is the framework default rather than a statement.
+      // Asserted as it is rather than changed: clients switch on the error
+      // CODE, and moving a status code is a breaking change for no gain.
+      const ok = [a, b].filter((r) => r.status === 201);
+      expect(ok).toHaveLength(1);
+      const loser = [a, b].find((r) => r.status !== 201)!;
+      expect(loser.body.error.code).toBe('SETTLEMENT_ALREADY_VOIDED');
+
+      const row = await prisma.driverSettlement.findUniqueOrThrow({
+        where: { id: settlementId },
+      });
+      expect(row.status).toBe('VOIDED');
+
+      // A void that ran twice would have restored the balance twice over.
+      const balances = await prisma.driverBalance.findMany({
+        where: { driverId: driver.id, currency: 'LBP' },
+      });
+      expect(balances).toHaveLength(1);
+      expect(balances[0]!.outstanding).toBe(0n);
+    });
+  });
+
 });
