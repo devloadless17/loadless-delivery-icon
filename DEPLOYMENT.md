@@ -274,11 +274,16 @@ docker run --rm -v loadless_uploads_data:/dst -v ~/backups/daily:/b:ro \
   postgres:16-alpine tar xzf /b/uploads-<stamp>.tar.gz -C /dst
 ```
 
-**Still missing — the honest gap:** these backups live on the SAME DISK as the
-database. They protect against a bad delete, a broken migration and corruption; they
-do **not** protect against losing the VPS. Playbook §10 wants them offsite (rclone →
-R2/B2). That is the next step, and until it is done "we have backups" means "we have
-backups as long as the server exists".
+**On-server only — a decision, not an omission (Ali, 2026-09-04).** These backups
+live on the same disk as the database. They cover the failures that actually happen
+week to week: a bad delete, a broken migration, corruption, a mistake noticed three
+days later. They do NOT survive the loss of the VPS itself, and Ali has explicitly
+accepted that — the risk was put to him in those words and he chose it.
+
+So do not add rclone/R2/B2 sync, and do not re-raise offsite backups on every deploy.
+Playbook §10 prefers offsite in general; this project has answered the question. If
+the day comes that the answer changes, the script is written so an upload step drops
+in after the verification block without touching anything else.
 
 **Before every schema migration on live money data: take a backup first.**
 
